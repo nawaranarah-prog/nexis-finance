@@ -1,0 +1,38 @@
+# Full stack: PostgreSQL + FastAPI + static frontend behind nginx.
+#   docker compose up --build
+#   docker compose exec api python /app/scripts/seed_demo.py     # load the synthetic demo data
+# Then open http://localhost:8080 (API docs: http://localhost:8000/docs).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nexis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexis-local-only}
+      POSTGRES_DB: nexis
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexis"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    environment:
+      NEXIS_DATABASE_URL: postgresql+psycopg://nexis:${POSTGRES_PASSWORD:-nexis-local-only}@db:5432/nexis
+      NEXIS_CORS_ORIGINS: http://localhost:8080
+      NEXIS_REPORTS_DIR: /app/data/reports
+      NEXIS_LOG_JSON: "true"
+      NEXIS_PUBLIC_PROVIDER_ENABLED: ${NEXIS_PUBLIC_PROVIDER_ENABLED:-false}
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8000:8000"]
+    volumes: [reports:/app/data/reports]
+
+  web:
+    build: { context: ., dockerfile: frontend/Dockerfile }
+    depends_on: [api]
+    ports: ["8080:80"]
+
+volumes:
+  pgdata:
+  reports:

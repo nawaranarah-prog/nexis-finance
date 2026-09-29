@@ -1,0 +1,486 @@
+{
+  "generator": "SyntheticMarketDataProvider",
+  "config": {
+    "seed": 42,
+    "start": "2018-01-02",
+    "end": "2026-06-30",
+    "assets_per_sector": 5,
+    "inject_market_events": true,
+    "inject_data_defects": true,
+    "crisis_episode": [
+      0.27,
+      28
+    ],
+    "stressed_episode": [
+      0.52,
+      150
+    ],
+    "late_listing_fraction": 0.3,
+    "delisting_fraction": 0.63
+  },
+  "fingerprint": "85fd108613b58edb",
+  "disclaimer": "All observations are synthetic and do not represent any real security or market.",
+  "calendar": "Business days (Mon-Fri); exchange holidays are not modelled.",
+  "market_events": [
+    {
+      "symbol": "TCH2",
+      "date": "2020-04-06",
+      "type": "price_volume_shock",
+      "return": 0.1714,
+      "volume_multiplier": 12.58,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "DSC4",
+      "date": "2020-07-16",
+      "type": "price_volume_shock",
+      "return": 0.1787,
+      "volume_multiplier": 8.91,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "HLT3",
+      "date": "2021-02-10",
+      "type": "price_volume_shock",
+      "return": -0.1467,
+      "volume_multiplier": 12.54,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "NRG3",
+      "date": "2021-03-08",
+      "type": "price_volume_shock",
+      "return": -0.1822,
+      "volume_multiplier": 11.25,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "NRG2",
+      "date": "2021-03-19",
+      "type": "price_volume_shock",
+      "return": 0.1747,
+      "volume_multiplier": 7.81,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "UTL3",
+      "date": "2021-09-23",
+      "type": "price_volume_shock",
+      "return": 0.1834,
+      "volume_multiplier": 9.26,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "UTL2",
+      "date": "2022-06-17",
+      "type": "price_volume_shock",
+      "return": -0.1862,
+      "volume_multiplier": 10.52,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "FIN5",
+      "date": "2022-08-11",
+      "type": "price_volume_shock",
+      "return": 0.1338,
+      "volume_multiplier": 7.84,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "DSC3",
+      "date": "2023-02-27",
+      "type": "volume_surge",
+      "return": 0.0107,
+      "volume_multiplier": 11.27,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "IND5",
+      "date": "2024-03-15",
+      "type": "volume_surge",
+      "return": 0.013,
+      "volume_multiplier": 13.33,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "NRG3",
+      "date": "2024-09-13",
+      "type": "volume_surge",
+      "return": -0.0107,
+      "volume_multiplier": 10.27,
+      "category": "market_behaviour"
+    },
+    {
+      "symbol": "TCH5",
+      "date": "2025-09-09",
+      "type": "volume_surge",
+      "return": -0.017,
+      "volume_multiplier": 15.89,
+      "category": "market_behaviour"
+    }
+  ],
+  "data_defects": [
+    {
+      "symbol": "TCH4",
+      "date": "2020-01-20",
+      "type": "ohlc_inconsistent",
+      "detail": "high and low swapped",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "TCH1",
+      "date": "2022-02-09",
+      "type": "ohlc_inconsistent",
+      "detail": "high and low swapped",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "HLT2",
+      "date": "2025-11-18",
+      "type": "ohlc_inconsistent",
+      "detail": "high and low swapped",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "NRG3",
+      "date": "2025-10-27",
+      "type": "negative_price",
+      "detail": "close sign flipped",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "NRG2",
+      "date": "2021-10-15",
+      "type": "negative_price",
+      "detail": "close sign flipped",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "HLT2",
+      "date": "2022-01-24",
+      "type": "negative_volume",
+      "detail": "volume sign flipped",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "STP4",
+      "date": "2024-01-04",
+      "type": "negative_volume",
+      "detail": "volume sign flipped",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "NRG1",
+      "date": "2024-02-07",
+      "type": "missing_volume",
+      "detail": "volume set to null",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "DSC2",
+      "date": "2022-02-15",
+      "type": "missing_volume",
+      "detail": "volume set to null",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "DSC5",
+      "date": "2024-01-25",
+      "type": "missing_volume",
+      "detail": "volume set to null",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "STP4",
+      "date": "2024-01-24",
+      "type": "bad_tick",
+      "detail": "entire bar scaled by 1.38 for one day (reverts next day)",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "IND3",
+      "date": "2022-04-22",
+      "type": "bad_tick",
+      "detail": "entire bar scaled by 1.38 for one day (reverts next day)",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "CMD1",
+      "date": "2023-01-18",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "UTL5",
+      "date": "2020-01-23",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "HLT2",
+      "date": "2024-07-05",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "DSC1",
+      "date": "2023-10-05",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "STP1",
+      "date": "2024-10-22",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "DSC5",
+      "date": "2024-06-14",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "CMD1",
+      "date": "2022-02-11",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "DSC5",
+      "date": "2019-07-16",
+      "type": "missing_observation",
+      "detail": "row removed",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "IND4",
+      "date": "2025-01-29",
+      "type": "duplicate",
+      "detail": "near-identical duplicate record appended",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "TCH3",
+      "date": "2020-06-25",
+      "type": "duplicate",
+      "detail": "near-identical duplicate record appended",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "NRG3",
+      "date": "2020-08-18",
+      "type": "duplicate",
+      "detail": "near-identical duplicate record appended",
+      "category": "data_quality"
+    },
+    {
+      "symbol": "UTL4",
+      "date": "2019-06-03",
+      "type": "duplicate",
+      "detail": "near-identical duplicate record appended",
+      "category": "data_quality"
+    }
+  ],
+  "regime_runs": [
+    {
+      "start": "2018-01-02",
+      "end": "2019-02-01",
+      "regime": "normal"
+    },
+    {
+      "start": "2019-02-04",
+      "end": "2019-02-08",
+      "regime": "stressed"
+    },
+    {
+      "start": "2019-02-11",
+      "end": "2019-02-15",
+      "regime": "crisis"
+    },
+    {
+      "start": "2019-02-18",
+      "end": "2019-02-27",
+      "regime": "stressed"
+    },
+    {
+      "start": "2019-02-28",
+      "end": "2019-07-24",
+      "regime": "normal"
+    },
+    {
+      "start": "2019-07-25",
+      "end": "2019-08-02",
+      "regime": "stressed"
+    },
+    {
+      "start": "2019-08-05",
+      "end": "2020-01-07",
+      "regime": "normal"
+    },
+    {
+      "start": "2020-01-08",
+      "end": "2020-02-05",
+      "regime": "calm"
+    },
+    {
+      "start": "2020-02-06",
+      "end": "2020-02-12",
+      "regime": "normal"
+    },
+    {
+      "start": "2020-02-13",
+      "end": "2020-04-06",
+      "regime": "stressed"
+    },
+    {
+      "start": "2020-04-07",
+      "end": "2020-05-26",
+      "regime": "crisis"
+    },
+    {
+      "start": "2020-05-27",
+      "end": "2020-07-21",
+      "regime": "stressed"
+    },
+    {
+      "start": "2020-07-22",
+      "end": "2020-08-26",
+      "regime": "calm"
+    },
+    {
+      "start": "2020-08-27",
+      "end": "2021-05-12",
+      "regime": "normal"
+    },
+    {
+      "start": "2021-05-13",
+      "end": "2021-05-13",
+      "regime": "calm"
+    },
+    {
+      "start": "2021-05-14",
+      "end": "2021-10-14",
+      "regime": "normal"
+    },
+    {
+      "start": "2021-10-15",
+      "end": "2021-11-15",
+      "regime": "stressed"
+    },
+    {
+      "start": "2021-11-16",
+      "end": "2021-12-22",
+      "regime": "crisis"
+    },
+    {
+      "start": "2021-12-23",
+      "end": "2022-03-21",
+      "regime": "normal"
+    },
+    {
+      "start": "2022-03-22",
+      "end": "2022-05-13",
+      "regime": "calm"
+    },
+    {
+      "start": "2022-05-16",
+      "end": "2022-06-01",
+      "regime": "normal"
+    },
+    {
+      "start": "2022-06-02",
+      "end": "2022-12-28",
+      "regime": "stressed"
+    },
+    {
+      "start": "2022-12-29",
+      "end": "2023-03-15",
+      "regime": "normal"
+    },
+    {
+      "start": "2023-03-16",
+      "end": "2023-07-10",
+      "regime": "stressed"
+    },
+    {
+      "start": "2023-07-11",
+      "end": "2023-07-19",
+      "regime": "crisis"
+    },
+    {
+      "start": "2023-07-20",
+      "end": "2023-08-03",
+      "regime": "stressed"
+    },
+    {
+      "start": "2023-08-04",
+      "end": "2023-09-26",
+      "regime": "crisis"
+    },
+    {
+      "start": "2023-09-27",
+      "end": "2023-09-28",
+      "regime": "normal"
+    },
+    {
+      "start": "2023-09-29",
+      "end": "2024-07-30",
+      "regime": "stressed"
+    },
+    {
+      "start": "2024-07-31",
+      "end": "2024-08-26",
+      "regime": "calm"
+    },
+    {
+      "start": "2024-08-27",
+      "end": "2025-10-08",
+      "regime": "normal"
+    },
+    {
+      "start": "2025-10-09",
+      "end": "2026-01-05",
+      "regime": "stressed"
+    },
+    {
+      "start": "2026-01-06",
+      "end": "2026-01-29",
+      "regime": "crisis"
+    },
+    {
+      "start": "2026-01-30",
+      "end": "2026-05-07",
+      "regime": "stressed"
+    },
+    {
+      "start": "2026-05-08",
+      "end": "2026-05-25",
+      "regime": "normal"
+    },
+    {
+      "start": "2026-05-26",
+      "end": "2026-06-30",
+      "regime": "stressed"
+    }
+  ],
+  "listing_events": [
+    {
+      "symbol": "TCH5",
+      "type": "late_listing",
+      "date": "2020-07-20"
+    },
+    {
+      "symbol": "FIN5",
+      "type": "delisting",
+      "date": "2023-05-09"
+    }
+  ]
+}
