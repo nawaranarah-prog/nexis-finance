@@ -26,7 +26,7 @@ from app.services import llm, markets, valuation
 from app.services.notifications import notify
 
 DISCLAIMER = (
-    "This report is generated automatically from public market data (Yahoo Finance public endpoints, which are unofficial and "
+    "This report is generated automatically from public market data (Yahoo Finance and TradingView public endpoints, which are unofficial and "
     "carry no warranty) and news headlines (Google News, Yahoo Finance). It is educational research, not personalised investment "
     "advice or an offer to buy or sell any security; Nexis Finance is not a licensed investment adviser. Past performance does not "
     "predict future returns. Model valuations depend entirely on their assumptions. Verify figures independently and consult a "
@@ -145,7 +145,7 @@ def _news_block(db: Session, symbols: list[str], per: int = 3) -> list[Any]:
             )
     if len(rows) == 1:
         return [para("No recent headlines were returned by the news feeds.", "small")]
-    return [table(rows, [24 * mm, 96 * mm, 32 * mm, 20 * mm], align_right_from=9)]
+    return [table(rows, [32 * mm, 90 * mm, 30 * mm, 20 * mm], align_right_from=9)]
 
 
 # ---------------------------------------------------------------------- comparison
@@ -203,6 +203,40 @@ def rule_based_comparison_view(r: dict[str, Any]) -> dict[str, str]:
     return {"executive_summary": summary, "recommendation": " ".join(rec), "key_risks": "\n".join(risks)}
 
 
+def _uae_context(db: Session, r: dict[str, Any]) -> list[Any]:
+    """Benchmarks every UAE investor looks at: both indices over the same window, rates and the dirham peg."""
+    from app.services import uae
+
+    out: list[Any] = [para("UAE market context", "h2")]
+    try:
+        idx = cmp.compare(
+            db, ["DFMGI.AE", "FADGI.AD"], r["window"]["period"], None, None, r["interval"] if r["interval"] != "1h" else "1d"
+        )
+        rows = [["Benchmark", "Return", "Volatility", "Max drawdown"]]
+        rows += [[idx["snapshots"][s].get("name") or s, _p(m["total_return"]), _p(m["annualized_volatility"], signed=False), _p(m["max_drawdown"])]
+                 for s, m in idx["metrics"].items()]  # fmt: skip
+        out.append(table(rows, [70 * mm, 30 * mm, 30 * mm, 30 * mm]))
+    except NexisError:
+        out.append(para("The UAE index series were unavailable when this report was generated.", "small"))
+    lines = ["The UAE dirham is pegged to the US dollar at 3.6725, so UAE interest rates move with US policy rates and AED and USD returns "
+             "are directly comparable."]  # fmt: skip
+    try:
+        tnx = markets.quotes(db, ["^TNX"])[0]["price"]
+        gov = [
+            b
+            for b in uae.bonds(db)
+            if b["issuer"].startswith("Government of United Arab Emirates") and b.get("yield_to_maturity")
+        ]
+        if gov:
+            g = min(gov, key=lambda b: abs(b["years_to_maturity"] - 10))
+            lines.append(f"The US 10-year Treasury yields {tnx:.2f}%; the UAE government bond maturing {g['maturity'][:4]} yields "
+                         f"{g['yield_to_maturity'] * 100:.2f}% — the benchmark a dividend yield or expected return should beat.")  # fmt: skip
+    except (NexisError, IndexError, KeyError, TypeError):
+        pass
+    out.append(para(" ".join(lines), "small"))
+    return out
+
+
 def generate_comparison(
     db: Session,
     symbols: list[str],
@@ -239,7 +273,7 @@ def generate_comparison(
             + [
                 [
                     s,
-                    (sn[s].get("name") or s)[:38],
+                    para(_esc((sn[s].get("name") or s)[:70]), "small"),
                     sn[s].get("type") or "",
                     (sn[s].get("exchange") or "")[:16],
                     sn[s].get("currency") or "",
@@ -247,7 +281,7 @@ def generate_comparison(
                 ]
                 for s in syms
             ],
-            [22 * mm, 62 * mm, 20 * mm, 30 * mm, 12 * mm, 24 * mm],
+            [32 * mm, 62 * mm, 14 * mm, 28 * mm, 12 * mm, 22 * mm],
             align_right_from=5,
         ),
         Spacer(1, 3 * mm),
@@ -329,6 +363,8 @@ def generate_comparison(
                 "small",
             ),
         ]
+    if any(x.endswith((".AE", ".AD", ".BOND")) for x in syms):
+        story += _uae_context(db, r)
     story += [para("Recent headlines", "h2"), *_news_block(db, syms)]
     story += [
         para("Recommendation", "h1"),

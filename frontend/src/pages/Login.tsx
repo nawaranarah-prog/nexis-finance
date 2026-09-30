@@ -14,54 +14,59 @@ function GoogleIcon() {
   );
 }
 
-function AppleIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden fill="currentColor">
-      <path d="M16.37 12.64c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.28-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.12 2.76-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.39-.92-2.4-3.67zM14.1 5.9c.63-.77 1.06-1.83.94-2.9-.91.04-2.01.61-2.66 1.37-.58.67-1.09 1.76-.96 2.8 1.02.08 2.05-.52 2.68-1.27z" />
-    </svg>
-  );
-}
-
 export default function Login() {
   const [sp] = useSearchParams();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const next = sp.get("next") && sp.get("next")!.startsWith("/") ? sp.get("next")! : "/social";
+  const next = sp.get("next") && sp.get("next")!.startsWith("/") ? sp.get("next")! : "/finstagram";
   const providers = useQuery({ queryKey: ["auth-providers"], queryFn: () => api.get<Record<string, boolean>>("/auth/providers"), staleTime: 600_000 });
   const [mode, setMode] = useState<"signin" | "signup">(sp.get("mode") === "signup" ? "signup" : "signin");
-  const [f, setF] = useState({ email: "", password: "", display_name: "" });
+  const [method, setMethod] = useState<"email" | "phone">("email");
+  const [f, setF] = useState({ email: "", phone: "", password: "", display_name: "", code: "" });
+  const [codeSent, setCodeSent] = useState(false);
   const [err, setErr] = useState<string | null>(sp.get("error"));
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const otp = method === "phone" && !!providers.data?.phone_otp;
 
+  const done = async () => {
+    await qc.invalidateQueries({ queryKey: ["me"] });
+    qc.invalidateQueries({ queryKey: ["social"] });
+    nav(next, { replace: true });
+  };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr(null);
     try {
-      if (mode === "signin") await api.post("/auth/login", { identifier: f.email, password: f.password });
-      else await api.post("/auth/register", { email: f.email, password: f.password, display_name: f.display_name || undefined });
-      await qc.invalidateQueries({ queryKey: ["me"] });
-      qc.invalidateQueries({ queryKey: ["social"] });
-      nav(next, { replace: true });
+      if (otp) {
+        if (!codeSent) {
+          await api.post("/auth/phone/start", { phone: f.phone });
+          setCodeSent(true);
+          return;
+        }
+        await api.post("/auth/phone/verify", { phone: f.phone, code: f.code, display_name: f.display_name || undefined });
+      } else if (mode === "signin") {
+        await api.post("/auth/login", { identifier: method === "phone" ? f.phone : f.email, password: f.password });
+      } else {
+        await api.post("/auth/register", {
+          ...(method === "phone" ? { phone: f.phone } : { email: f.email }),
+          password: f.password, display_name: f.display_name || undefined,
+        });
+      }
+      await done();
     } catch (x) { setErr(errorMessage(x)); } finally { setBusy(false); }
   };
-  const oauth = (p: "google" | "apple") => {
-    if (providers.data && !providers.data[p]) {
-      setNote(`${p === "google" ? "Google" : "Apple"} sign-in is being set up — please use your email for now.`);
-      return;
-    }
-    window.location.assign(`/api/auth/oauth/${p}/start?next=${encodeURIComponent(next)}`);
-  };
+  const google = () => window.location.assign(`/api/auth/oauth/google/start?next=${encodeURIComponent(next)}`);
+  const switchMethod = (m: "email" | "phone") => { setMethod(m); setErr(null); setCodeSent(false); };
 
   return (
     <div className="login">
       <aside className="login-brand">
         <div className="login-logo">NEXIS FINANCE</div>
-        <h1>Markets, research and a community of investors — in one place.</h1>
+        <h1>UAE markets, an AI advisor and a community of investors — in one place.</h1>
         <ul>
-          <li>Live prices, fundamentals and news for global and UAE markets</li>
-          <li>An AI advisor that researches before it answers</li>
-          <li>InstaFin: follow stocks, news pages and people you trust</li>
+          <li>Every ADX and DFM share, UAE bonds and sukuk, plus global markets</li>
+          <li>An AI advisor that researches live data before it answers</li>
+          <li>Finstagram: follow stocks, news pages and people you trust</li>
           <li>Comparisons, valuations and PDF reports</li>
         </ul>
         <div className="xs" style={{ opacity: 0.7 }}>Educational research tools — not personalised financial advice.</div>
@@ -69,28 +74,55 @@ export default function Login() {
       <main className="login-main">
         <div className="login-card">
           <h2>{mode === "signin" ? "Welcome back" : "Create your account"}</h2>
-          <p className="small text2">{mode === "signin" ? "Sign in to post, save, follow and get a feed tuned to you." : "One account for the whole site — the advisor, reports and InstaFin."}</p>
-          {providers.data?.google && <button className="oauth-btn" onClick={() => oauth("google")}><GoogleIcon /> Continue with Google</button>}
-          {providers.data?.apple && <button className="oauth-btn apple" onClick={() => oauth("apple")}><AppleIcon /> Continue with Apple</button>}
-          {note && <div className="banner neutral small" style={{ marginTop: 8 }}>{note}</div>}
-          {(providers.data?.google || providers.data?.apple) && <div className="login-or"><span>or with email</span></div>}
+          <p className="small text2">{mode === "signin" ? "Sign in to post, save, follow and get a feed tuned to you." : "One account for the whole site — the advisor, reports and Finstagram."}</p>
+          {providers.data?.google && (
+            <>
+              <button className="oauth-btn" onClick={google}><GoogleIcon /> Continue with Google</button>
+              <div className="login-or"><span>or</span></div>
+            </>
+          )}
+          <div className="seg-tabs" role="tablist" style={{ marginBottom: 6 }}>
+            <button type="button" role="tab" aria-selected={method === "email"} className={method === "email" ? "on" : ""} onClick={() => switchMethod("email")}>Email</button>
+            <button type="button" role="tab" aria-selected={method === "phone"} className={method === "phone" ? "on" : ""} onClick={() => switchMethod("phone")}>Phone number</button>
+          </div>
           <form onSubmit={submit} className="stack" style={{ gap: 10 }}>
-            {mode === "signup" && (
-              <label className="fld"><span>Your name</span>
+            {(mode === "signup" || (otp && codeSent)) && (
+              <label className="fld"><span>Your name{otp ? " (new accounts)" : ""}</span>
                 <input className="input" autoComplete="name" value={f.display_name} maxLength={60} onChange={(e) => setF({ ...f, display_name: e.target.value })} placeholder="How others see you" /></label>
             )}
-            <label className="fld"><span>{mode === "signin" ? "Email or username" : "Email"}</span>
-              <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoFocus /></label>
-            <label className="fld"><span>Password</span>
-              <input className="input" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} required minLength={mode === "signup" ? 8 : 1} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
-            {mode === "signup" && <div className="xs muted">At least 8 characters. Passwords are stored only as salted scrypt hashes.</div>}
+            {method === "email" ? (
+              <label className="fld"><span>{mode === "signin" ? "Email or username" : "Email"}</span>
+                <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoFocus /></label>
+            ) : (
+              <label className="fld"><span>Mobile number</span>
+                <div className="phone-field">
+                  <span className="phone-cc" aria-hidden>🇦🇪 +971</span>
+                  <input className="input" type="tel" inputMode="tel" autoComplete="tel" required placeholder="50 123 4567" value={f.phone} disabled={otp && codeSent}
+                    onChange={(e) => setF({ ...f, phone: e.target.value })} autoFocus />
+                </div>
+                <span className="xs muted">UAE numbers can be typed as 050 123 4567. For other countries start with + and the country code.</span>
+              </label>
+            )}
+            {otp ? (codeSent && (
+              <label className="fld"><span>Code from the SMS</span>
+                <input className="input" inputMode="numeric" autoComplete="one-time-code" required maxLength={10} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} autoFocus /></label>
+            )) : (
+              <label className="fld"><span>Password</span>
+                <input className="input" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} required minLength={mode === "signup" ? 8 : 1} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
+            )}
+            {mode === "signup" && !otp && <div className="xs muted">At least 8 characters. Passwords are stored only as salted scrypt hashes.</div>}
             {err && <div className="banner error small">{err}</div>}
-            <button className="btn primary block login-submit" disabled={busy}>{busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}</button>
+            <button className="btn primary block login-submit" disabled={busy}>
+              {busy ? "…" : otp ? (codeSent ? "Verify and continue" : "Send me a code") : mode === "signin" ? "Sign in" : "Create account"}
+            </button>
+            {otp && codeSent && <button type="button" className="link-btn small" onClick={() => { setCodeSent(false); setF({ ...f, code: "" }); }}>Use a different number or resend</button>}
           </form>
-          <div className="small text2" style={{ marginTop: 14, textAlign: "center" }}>
-            {mode === "signin" ? <>New here? <button className="link-btn" onClick={() => { setMode("signup"); setErr(null); }}>Create an account</button></>
-              : <>Already have an account? <button className="link-btn" onClick={() => { setMode("signin"); setErr(null); }}>Sign in</button></>}
-          </div>
+          {!otp && (
+            <div className="small text2" style={{ marginTop: 14, textAlign: "center" }}>
+              {mode === "signin" ? <>New here? <button className="link-btn" onClick={() => { setMode("signup"); setErr(null); }}>Create an account</button></>
+                : <>Already have an account? <button className="link-btn" onClick={() => { setMode("signin"); setErr(null); }}>Sign in</button></>}
+            </div>
+          )}
           <div className="xs muted" style={{ marginTop: 18, textAlign: "center" }}><Link to="/">Continue without an account →</Link></div>
         </div>
       </main>

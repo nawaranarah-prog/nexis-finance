@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "./services/api";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "./components/toast";
 import AppLayout from "./layouts/AppLayout";
 import { Empty, ErrorState, Loading } from "./components/ui";
@@ -36,15 +36,16 @@ const AuditLog = lazy(() => import("./pages/AuditLog"));
 const Developer = lazy(() => import("./pages/Developer"));
 const Assistant = lazy(() => import("./pages/Assistant"));
 const Login = lazy(() => import("./pages/Login"));
-const InstaTopic = lazy(() => import("./pages/InstaFin").then((m) => ({ default: m.TopicPage })));
+const Home = lazy(() => import("./pages/Home"));
+const InstaTopic = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.TopicPage })));
 const Markets = lazy(() => import("./pages/Markets"));
 const Instrument = lazy(() => import("./pages/Instrument"));
 const Advisor = lazy(() => import("./pages/Advisor"));
 const Compare = lazy(() => import("./pages/Compare"));
 const Valuation = lazy(() => import("./pages/Valuation"));
-const InstaFin = lazy(() => import("./pages/InstaFin"));
-const InstaPost = lazy(() => import("./pages/InstaFin").then((m) => ({ default: m.PostPage })));
-const InstaProfile = lazy(() => import("./pages/InstaFin").then((m) => ({ default: m.ProfilePage })));
+const Finstagram = lazy(() => import("./pages/Finstagram"));
+const InstaPost = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.PostPage })));
+const InstaProfile = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.ProfilePage })));
 
 function Waking() {
   const qc = useQueryClient();
@@ -76,6 +77,11 @@ function Guard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function LegacySocial() {
+  const loc = useLocation();
+  return <Navigate to={loc.pathname.replace(/^\/social/, "/finstagram") + loc.search} replace />;
+}
+
 export default function App() {
   const location = useLocation();
   if (location.pathname === "/login") {
@@ -85,7 +91,8 @@ export default function App() {
     <AppLayout>
       <Suspense fallback={<Loading />}>
         <Routes>
-          <Route path="/" element={<Guard><Overview /></Guard>} />
+          <Route path="/" element={<Home />} />
+          <Route path="/research" element={<Guard><Overview /></Guard>} />
           <Route path="/market-data" element={<MarketData />} />
           <Route path="/data-quality" element={<Guard><DataQuality /></Guard>} />
           <Route path="/asset-research" element={<Guard><AssetResearch /></Guard>} />
@@ -119,11 +126,12 @@ export default function App() {
           <Route path="/compare" element={<Compare />} />
           <Route path="/valuation" element={<Valuation />} />
           <Route path="/valuation/:symbol" element={<Valuation />} />
-          <Route path="/social" element={<InstaFin />} />
-          <Route path="/social/p/:id" element={<InstaPost />} />
-          <Route path="/social/u/:username" element={<InstaProfile />} />
-          <Route path="/social/s/:symbol" element={<InstaTopic kind="symbol" />} />
-          <Route path="/social/t/:tag" element={<InstaTopic kind="tag" />} />
+          <Route path="/finstagram" element={<Finstagram />} />
+          <Route path="/social/*" element={<LegacySocial />} />
+          <Route path="/finstagram/p/:id" element={<InstaPost />} />
+          <Route path="/finstagram/u/:username" element={<InstaProfile />} />
+          <Route path="/finstagram/s/:symbol" element={<InstaTopic kind="symbol" />} />
+          <Route path="/finstagram/t/:tag" element={<InstaTopic kind="tag" />} />
           <Route path="*" element={<Empty>Page not found.</Empty>} />
         </Routes>
       </Suspense>

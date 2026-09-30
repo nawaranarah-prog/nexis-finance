@@ -15,7 +15,7 @@ from typing import Any
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConfigurationError, ProviderError
+from app.core.errors import ConfigurationError, NexisError, ProviderError
 from app.db.base import utcnow
 from app.markets import news as news_mod
 from app.markets.yahoo import INTERVALS, YahooClient, _raw
@@ -115,22 +115,92 @@ def cached(db: Session, key: str, ttl: timedelta, fetch: Callable[[], Any]) -> t
 
 
 def search(db: Session, q: str) -> list[dict[str, Any]]:
+    """UAE listings (ADX, DFM, bonds) first, then global matches from Yahoo."""
     q = q.strip()
     if not q:
         return []
-    value, _ = cached(db, f"search:{q.lower()[:80]}", timedelta(hours=12), lambda: YahooClient().search(q, quotes=12)["quotes"])
-    return value
+    from app.services import uae
+
+    try:
+        local = uae.search(db, q)
+    except ProviderError:
+        local = []
+    try:
+        value, _ = cached(
+            db, f"search:{q.lower()[:80]}", timedelta(hours=12), lambda: YahooClient().search(q, quotes=12)["quotes"]
+        )
+    except ProviderError:
+        if not local:
+            raise
+        value = []
+    seen = {x["symbol"] for x in local}
+    return local + [x for x in value if x["symbol"] not in seen]
+
+
+def _uae_quote(db: Session, sym: str) -> dict[str, Any] | None:
+    from app.services import uae
+
+    if sym in uae.INDICES:
+        return uae.index_quote(db, sym)
+    if sym.endswith(".BOND"):
+        try:
+            b = uae.bond(db, sym)
+        except NexisError:
+            return None
+        return {"symbol": sym, "name": b["name"], "type": "bond", "exchange": b["exchange"], "currency": b["currency"], "price": b["price"],
+                "change": None, "change_pct": b["change_pct"], "market_cap": None, "volume": None, "market_time": None, "market_state": None,
+                "yield_to_maturity": b["yield_to_maturity"]}  # fmt: skip
+    r = uae.lookup(db, sym)
+    if r is None:
+        return None
+    return {k: r[k] for k in ("symbol", "name", "type", "exchange", "currency", "price", "change", "change_pct", "market_cap", "volume")} | {
+        "market_time": None, "market_state": None, "sector": r["sector"]}  # fmt: skip
 
 
 def quotes(db: Session, symbols: list[str]) -> list[dict[str, Any]]:
-    syms = [clean_symbol(s) for s in symbols][:50]
-    key = "quotes:" + ",".join(sorted(syms))
-    value, _ = cached(db, key[:300], timedelta(seconds=60), lambda: YahooClient().quotes(syms))
+    from app.services import uae
+
+    syms = [clean_symbol(s) for s in symbols][:80]
+    native = [s for s in syms if uae.is_uae_native(s)]
+    yahoo = [s for s in syms if s not in native]
+    out: list[dict[str, Any]] = []
+    if yahoo:
+        key = "quotes:" + ",".join(sorted(yahoo))
+        try:
+            value, _ = cached(db, key[:300], timedelta(seconds=60), lambda: YahooClient().quotes(yahoo))
+        except ProviderError:
+            value = []
+        out += value
+        missing = set(yahoo) - {q["symbol"] for q in value}
+        native += [s for s in missing if s.endswith(".AE")]  # Dubai listing Yahoo didn't return: use the UAE feed
+    for s in native:
+        try:
+            q = _uae_quote(db, s)
+        except ProviderError:
+            q = None
+        if q:
+            out.append(q)
     order = {s: i for i, s in enumerate(syms)}
-    return sorted(value, key=lambda q: order.get(q["symbol"], 99))
+    return sorted(out, key=lambda q: order.get(q["symbol"], 999))
 
 
 def market_list(db: Session, key: str) -> dict[str, Any]:
+    from app.services import uae
+
+    if key == "uae":
+        rows = uae.universe(db)
+        items = [{k: r[k] for k in ("symbol", "name", "type", "exchange", "currency", "price", "change", "change_pct", "market_cap", "volume", "sector")}
+                 for r in rows if r["type"] == "equity"]  # fmt: skip
+        return {"key": key, "label": "UAE · all ADX & DFM shares", "note": f"{len(items)} listed companies on Abu Dhabi (ADX) and Dubai (DFM), prices in AED.",
+                "items": items, "sectors": sorted({i["sector"] for i in items}), "source": uae.SOURCE}  # fmt: skip
+    if key == "uae_bonds":
+        bs = uae.bonds(db)
+        items = [{"symbol": b["symbol"], "name": b["name"], "type": "bond", "exchange": b["exchange"], "currency": b["currency"], "price": b["price"],
+                  "change": None, "change_pct": b["change_pct"], "market_cap": None, "volume": None, "yield_to_maturity": b["yield_to_maturity"],
+                  "coupon": b["coupon"], "maturity": b["maturity"]} for b in bs]  # fmt: skip
+        items += quotes(db, ["SPSK", "SKUK.AS", "HBKU.L", "EMB"])
+        return {"key": key, "label": "UAE bonds & sukuk", "note": "UAE federal government bonds, AED treasury sukuk, Dubai government sukuk and bank bonds "
+                "(price per 100 face value, yield to maturity), plus global sukuk ETFs.", "items": items, "source": uae.SOURCE}  # fmt: skip
     if key not in LISTS:
         raise ConfigurationError(f"unknown list '{key}'")
     spec = LISTS[key]
@@ -279,8 +349,28 @@ def _normalise(symbol: str, qs: dict[str, Any], meta: dict[str, Any]) -> dict[st
     }
 
 
+def _uae_details(db: Session, sym: str) -> dict[str, Any]:
+    from app.services import uae
+
+    if sym.endswith(".BOND"):
+        return uae.bond_details(db, sym)
+    if sym in uae.INDICES:
+        return uae.index_details(db, sym)
+    return uae.details(db, sym)
+
+
 def details(db: Session, symbol: str) -> dict[str, Any]:
+    from app.services import uae
+
     sym = clean_symbol(symbol)
+    if uae.is_uae_native(sym):
+        value, meta = cached(
+            db,
+            f"details:{sym}",
+            timedelta(minutes=5),
+            lambda: _uae_details(db, sym),
+        )
+        return {**value, "cache": meta, "source": uae.SOURCE}
     y = YahooClient()
 
     def fetch() -> dict[str, Any]:
@@ -294,12 +384,29 @@ def details(db: Session, symbol: str) -> dict[str, Any]:
         out["partial"] = partial
         return out
 
-    value, meta = cached(db, f"details:{sym}", timedelta(minutes=10), fetch)
+    try:
+        value, meta = cached(db, f"details:{sym}", timedelta(minutes=10), fetch)
+    except ProviderError:
+        if not sym.endswith(".AE") or uae.lookup(db, sym) is None:
+            raise
+        return {**uae.details(db, sym), "cache": {"fetched_at": None, "cached": False, "stale": False}, "source": uae.SOURCE}
+    if sym.endswith(".AE"):
+        # Yahoo carries no analyst consensus for most Dubai shares; take it from the UAE feed when missing.
+        if not value["analysts"].get("count"):
+            r = uae.lookup(db, sym)
+            if r is not None:
+                value = {**value, "analysts": uae.details(db, sym)["analysts"]}
+        value["profile"]["sector"] = value["profile"].get("sector") or (uae.lookup(db, sym) or {}).get("sector")
     return {**value, "cache": meta, "source": SOURCE}
 
 
 def statements(db: Session, symbol: str) -> dict[str, Any]:
+    from app.services import uae
+
     sym = clean_symbol(symbol)
+    if uae.is_uae_native(sym):
+        return {"years": [], "rows": [], "symbol": sym, "cache": None, "source": uae.SOURCE,
+                "note": "Annual statements are not published by the free UAE data feed; trailing figures are shown instead."}  # fmt: skip
     labels = {
         "annualTotalRevenue": "Revenue", "annualGrossProfit": "Gross profit", "annualEBITDA": "EBITDA",
         "annualOperatingIncome": "Operating income", "annualNetIncome": "Net income", "annualDilutedEPS": "Diluted EPS",
@@ -324,7 +431,16 @@ def statements(db: Session, symbol: str) -> dict[str, Any]:
 
 
 def peers(db: Session, symbol: str) -> list[str]:
+    from app.services import uae
+
     sym = clean_symbol(symbol)
+    if sym.endswith((".AD", ".AE")):
+        try:
+            local = uae.peers(db, sym)
+        except ProviderError:
+            local = []
+        if local:
+            return local
     value, _ = cached(db, f"peers:{sym}", timedelta(days=3), lambda: YahooClient().peers(sym))
     return value
 
@@ -377,10 +493,24 @@ def resolve_window(
 
 
 def history(db: Session, symbol: str, interval: str, start: date | None, end: date | None) -> dict[str, Any]:
+    from app.services import uae
+
     sym = clean_symbol(symbol)
     ttl = timedelta(minutes=5) if interval == "1h" else timedelta(minutes=30)
     key = f"hist:{sym}:{interval}:{start}:{end}"
-    value, meta = cached(db, key, ttl, lambda: YahooClient().chart(sym, interval, start, end))
+    if uae.is_uae_native(sym):
+        fetch = lambda: uae.history(db, sym, interval, start, end)  # noqa: E731
+    else:
+
+        def fetch() -> dict[str, Any]:
+            try:
+                return YahooClient().chart(sym, interval, start, end)
+            except ProviderError:
+                if sym.endswith(".AE"):
+                    return uae.history(db, sym, interval, start, end)
+                raise
+
+    value, meta = cached(db, key, ttl, fetch)
     return {"symbol": sym, "interval": interval, "bars": value["bars"], "meta": value["meta"], "cache": meta}
 
 

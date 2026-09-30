@@ -65,7 +65,7 @@ export default function Instrument() {
             <Link className="btn primary" to={`/advisor?q=${encodeURIComponent(`What's happening with ${i.name} (${sym})? Should I consider buying?`)}`}>Ask the advisor</Link>
             <Link className="btn" to={`/compare?s=${encodeURIComponent(sym)}`}>Compare</Link>
             {i.type === "equity" && <Link className="btn" to={`/valuation/${encodeURIComponent(sym)}`}>Valuation</Link>}
-            <Link className="btn" to={`/social?compose=${encodeURIComponent(`$${sym} `)}`}>Post</Link>
+            <Link className="btn" to={`/finstagram?compose=${encodeURIComponent(`$${sym} `)}`}>Post</Link>
           </div>
         </div>
       </div>
@@ -188,16 +188,16 @@ export default function Instrument() {
               <table className="dt"><tbody>{i.fund.top_holdings.map((t: AnyObj) => <tr key={t.symbol ?? t.name}><td className="mono">{t.symbol}</td><td>{t.name}</td><td className="r num">{pct(t.weight, 2)}</td></tr>)}</tbody></table>
             </Card>
           )}
-          <Card title={`InstaFin · $${sym}`} actions={<Link className="btn sm" to={`/social?symbol=${encodeURIComponent(sym)}`}>Open feed</Link>}>
+          <Card title={`Finstagram · $${sym}`} actions={<Link className="btn sm" to={`/finstagram?symbol=${encodeURIComponent(sym)}`}>Open feed</Link>}>
             <QueryView q={posts} label="Loading posts">
               {(p) => p.items.length ? (
                 <div className="mini-posts">{p.items.slice(0, 4).map((it: AnyObj) => (
-                  <Link key={it.id} to={`/social/p/${it.id}`} className="mini-post">
+                  <Link key={it.id} to={`/finstagram/p/${it.id}`} className="mini-post">
                     <b>@{it.author.username}</b> <span className="text2">{it.body.slice(0, 140)}</span>
                     <span className="xs muted"> · ♥ {it.like_count} · 💬 {it.comment_count}</span>
                   </Link>
                 ))}</div>
-              ) : <div className="small text2">No posts about ${sym} yet. <Link to={`/social?compose=${encodeURIComponent(`$${sym} `)}`}>Be the first.</Link></div>}
+              ) : <div className="small text2">No posts about ${sym} yet. <Link to={`/finstagram?compose=${encodeURIComponent(`$${sym} `)}`}>Be the first.</Link></div>}
             </QueryView>
           </Card>
         </div>

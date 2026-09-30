@@ -1,4 +1,4 @@
-/* Sign-in page, InstaFin v2 (search, article/video/text cards, save, topic pages) and the streaming advisor. */
+/* Sign-in page, Finstagram v2 (search, article/video/text cards, save, topic pages) and the streaming advisor. */
 
 /* ---------------------------------------------------------------- sign in */
 .login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--page); }
@@ -25,7 +25,7 @@
   .login-brand h1 { font-size: 22px; }
 }
 
-/* ---------------------------------------------------------------- InstaFin top & search */
+/* ---------------------------------------------------------------- Finstagram top & search */
 .insta-top { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
 .insta-top .insta-logo { flex: none; }
 .insta-search { position: relative; flex: 1; min-width: 0; }

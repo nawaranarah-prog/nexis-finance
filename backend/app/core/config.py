@@ -70,13 +70,19 @@ class Settings(BaseSettings):
     cron_secret: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_CRON_SECRET", "CRON_SECRET"))
     # Public origin of the web app (used for OAuth redirect URIs), e.g. https://nexis-finance-five.vercel.app
     public_url: str | None = None
-    # Sign in with Google / Apple (each enabled when its credentials are set; see app/services/oauth.py).
+    # Sign in with Google (enabled when both are set; see app/services/oauth.py).
     google_client_id: str | None = None
     google_client_secret: str | None = None
-    apple_client_id: str | None = None
-    apple_team_id: str | None = None
-    apple_key_id: str | None = None
-    apple_private_key: str | None = None
+    # SMS one-time codes for phone sign-up/sign-in via Twilio Verify (optional; without them phone accounts use a password).
+    twilio_account_sid: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_TWILIO_ACCOUNT_SID", "TWILIO_ACCOUNT_SID")
+    )
+    twilio_auth_token: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_TWILIO_AUTH_TOKEN", "TWILIO_AUTH_TOKEN")
+    )
+    twilio_verify_sid: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_TWILIO_VERIFY_SID", "TWILIO_VERIFY_SERVICE_SID")
+    )
 
     # Abuse protection for public endpoints (per client IP, per hour).
     advisor_requests_per_hour: int = 20

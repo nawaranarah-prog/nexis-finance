@@ -24,10 +24,34 @@ COUNTRY_CODE = {"United Arab Emirates": "AE", "United States": "US", "Saudi Arab
 EQUITY_RISK_PREMIUM = 0.05
 # Curated sector peer groups where the provider's "similar" suggestions (co-viewing data) are weakest.
 PEER_GROUPS: dict[str, list[str]] = {
-    "GCC banks": ["EMIRATESNBD.AE", "DIB.AE", "CBD.AE", "MASQ.AE", "1120.SR", "1180.SR", "1010.SR", "1150.SR", "QNBK.QA"],
-    "GCC real estate": ["EMAAR.AE", "EMAARDEV.AE", "UPP.AE", "4300.SR", "4250.SR", "4020.SR", "4322.SR", "4090.SR"],
-    "GCC utilities & infrastructure": ["DEWA.AE", "EMPOWER.AE", "SALIK.AE", "PARKIN.AE", "2082.SR", "5110.SR"],
-    "GCC telecoms": ["DU.AE", "7010.SR", "7020.SR"],
+    "UAE banks": [
+        "FAB.AD",
+        "EMIRATESNBD.AE",
+        "ADCB.AD",
+        "ADIB.AD",
+        "DIB.AE",
+        "MASQ.AE",
+        "CBD.AE",
+        "RAKBANK.AD",
+        "SIB.AD",
+        "NBF.AD",
+    ],
+    "UAE real estate": ["EMAAR.AE", "ALDAR.AD", "EMAARDEV.AE", "TECOM.AE", "DUBAIRESI.AE", "RAKPROP.AD", "DEYAAR.AE", "UPP.AE"],
+    "UAE energy": ["ADNOCGAS.AD", "ADNOCDRILL.AD", "BOROUGE.AD", "ADNOCDIST.AD", "FERTIGLB.AD", "DANA.AD", "2222.SR"],
+    "UAE utilities & infrastructure": ["DEWA.AE", "EMPOWER.AE", "TABREED.AE", "SALIK.AE", "PARKIN.AE", "ADPORTS.AD", "2082.SR"],
+    "UAE telecoms & technology": ["EAND.AD", "DU.AE", "PRESIGHT.AD", "SPACE42.AD", "7010.SR"],
+    "UAE transport & logistics": [
+        "ADPORTS.AD",
+        "ADNOCLS.AD",
+        "AIRARABIA.AE",
+        "SALIK.AE",
+        "ARMX.AE",
+        "DTC.AE",
+        "AGILITY.AD",
+        "TALABAT.AE",
+    ],
+    "UAE consumer": ["AMR.AD", "LULU.AD", "TALABAT.AE", "SPINNEYS.AE", "AGTHIA.AD", "ADNOCDIST.AD", "UNIONCOOP.AE"],
+    "UAE holdings": ["IHC.AD", "ALPHADHABI.AD", "2POINTZERO.AD", "MODON.AD", "WAHA.AD", "DIC.AE"],
     "US mega-cap technology": ["AAPL", "MSFT", "GOOGL", "META", "NVDA", "AMZN", "ORCL", "AVGO"],
 }
 
@@ -75,8 +99,12 @@ def defaults(db: Session, symbol: str) -> dict[str, Any]:
     # Normalise cyclical cash flows: average of up to the last three fiscal years.
     recent = fcf_hist[-3:]
     base_fcf = sum(recent) / len(recent) if recent else d["financials"].get("free_cash_flow")
+    fcf_proxy = None
+    if base_fcf is None and d["financials"].get("net_income"):
+        # Banks and some issuers report no free cash flow; net income is the standard proxy (banks are valued on P/E and P/B anyway).
+        base_fcf, fcf_proxy = d["financials"]["net_income"], "net income (no free-cash-flow data reported)"
     if base_fcf is None:
-        raise InsufficientDataError("no free-cash-flow data reported for this company")
+        raise InsufficientDataError("no free-cash-flow or earnings data reported for this company")
     if len(rev) >= 2 and rev[0] > 0 and rev[-1] > 0:
         growth = (rev[-1] / rev[0]) ** (1 / (len(rev) - 1)) - 1
         growth_src = f"revenue CAGR {years[0]}–{years[-1]}"
@@ -112,7 +140,7 @@ def defaults(db: Session, symbol: str) -> dict[str, Any]:
             "market_cap": d["valuation"].get("market_cap"),
         },
         "sources": {
-            "base_fcf": f"average free cash flow FY{years[-len(recent)]}–FY{years[-1]}" if recent else "trailing twelve months free cash flow",
+            "base_fcf": fcf_proxy or (f"average free cash flow FY{years[-len(recent)]}–FY{years[-1]}" if recent else "trailing twelve months free cash flow"),
             "growth_start": growth_src + " (clipped to −5%…12%), fading linearly to terminal growth",
             "risk_free_rate": rf_src,
             "beta": f"Blume-adjusted (0.67 × raw {raw_beta:.2f} + 0.33)" if raw_beta is not None else "no reported beta — 1.0 assumed",
@@ -222,7 +250,11 @@ def comparables(db: Session, symbol: str, peers: list[str] | None, target: dict[
     elif group:
         peers_auto, source = [m for m in PEER_GROUPS[group] if m != target["symbol"]], f"curated peer group: {group}"
     else:
-        peers_auto, source = markets.peers(db, symbol), "provider suggestions, filtered to the same sector"
+        peers_auto = markets.peers(db, symbol)
+        uae_listing = target["symbol"].endswith((".AD", ".AE"))
+        source = "UAE sector peers (ADX & DFM)" if uae_listing else "provider suggestions, filtered to the same sector"
+        if uae_listing:
+            group = "UAE sector"  # already sector-matched: skip the provider-sector filter below
     peer_syms = [markets.clean_symbol(p) for p in (peers or peers_auto)][:8]
     peer_syms = [p for p in peer_syms if p != target["symbol"]]
     sector = target["details"]["profile"].get("sector")

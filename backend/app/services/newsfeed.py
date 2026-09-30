@@ -1,4 +1,4 @@
-"""Automated news pages for InstaFin.
+"""Automated news pages for Finstagram.
 
 Platform-run accounts (``kind = "page"``) post real articles, videos and charts:
 
@@ -95,7 +95,13 @@ NAME_TO_SYMBOL = {
     "emaar development": "EMAARDEV.AE", "emaar": "EMAAR.AE", "emirates nbd": "EMIRATESNBD.AE", "dubai islamic bank": "DIB.AE",
     "dewa": "DEWA.AE", "salik": "SALIK.AE", "air arabia": "AIRARABIA.AE", "parkin": "PARKIN.AE", "talabat": "TALABAT.AE",
     "tecom": "TECOM.AE", "mashreq": "MASQ.AE", "aramex": "ARMX.AE", "dubai taxi": "DTC.AE", "empower": "EMPOWER.AE",
-    "dubai financial market": "DFM.AE", "aramco": "2222.SR", "al rajhi": "1120.SR", "saudi national bank": "1180.SR",
+    "dubai financial market": "DFM.AE", "aldar": "ALDAR.AD", "first abu dhabi bank": "FAB.AD", "adnoc gas": "ADNOCGAS.AD",
+    "adnoc drilling": "ADNOCDRILL.AD", "adnoc distribution": "ADNOCDIST.AD", "adnoc logistics": "ADNOCLS.AD", "etisalat": "EAND.AD",
+    "abu dhabi commercial bank": "ADCB.AD", "adcb": "ADCB.AD", "abu dhabi islamic bank": "ADIB.AD", "adib": "ADIB.AD",
+    "international holding company": "IHC.AD", "borouge": "BOROUGE.AD", "ad ports": "ADPORTS.AD", "abu dhabi ports": "ADPORTS.AD",
+    "modon": "MODON.AD", "pure health": "PUREHEALTH.AD", "presight": "PRESIGHT.AD", "americana": "AMR.AD", "lulu": "LULU.AD",
+    "alpha dhabi": "ALPHADHABI.AD", "fertiglobe": "FERTIGLB.AD", "agthia": "AGTHIA.AD", "rakbank": "RAKBANK.AD", "dana gas": "DANA.AD",
+    "nmdc": "NMDC.AD", "tabreed": "TABREED.AE", "deyaar": "DEYAAR.AE", "union properties": "UPP.AE", "abu dhabi securities exchange": "FADGI.AD", "aramco": "2222.SR", "al rajhi": "1120.SR", "saudi national bank": "1180.SR",
     "acwa power": "2082.SR", "nvidia": "NVDA", "apple": "AAPL", "microsoft": "MSFT", "alphabet": "GOOGL", "google": "GOOGL",
     "meta": "META", "amazon": "AMZN", "tesla": "TSLA", "broadcom": "AVGO", "netflix": "NFLX", "exxon": "XOM", "chevron": "CVX",
     "bitcoin": "BTC-USD", "ethereum": "ETH-USD", "s&p 500": "^GSPC", "nasdaq": "^IXIC", "dow jones": "^DJI", "gold": "GC=F",

@@ -1,4 +1,4 @@
-/* Markets, advisor, valuation and InstaFin. Motion follows the base system: ease-out, short, interruptible. */
+/* Markets, advisor, valuation and Finstagram. Motion follows the base system: ease-out, short, interruptible. */
 .popover-in { animation: pop-in var(--dur-fast) var(--ease-out); transform-origin: top left; }
 .link-btn { background: none; border: 0; padding: 0 4px; color: var(--accent); font: inherit; cursor: pointer; }
 .link-btn:disabled { color: var(--muted); cursor: default; }
@@ -97,7 +97,7 @@ table.dt.heat td { transition: background var(--dur) var(--ease-out); }
 .seg-tabs button { border: 0; background: none; padding: 7px; border-radius: 7px; font: inherit; color: var(--text-2); cursor: pointer; transition: background var(--dur-fast) var(--ease-out); }
 .seg-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); font-weight: 600; }
 
-/* InstaFin */
+/* Finstagram */
 .insta { display: grid; grid-template-columns: minmax(0, 620px) 300px; gap: 28px; justify-content: center; }
 .insta-main { min-width: 0; }
 .insta-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }

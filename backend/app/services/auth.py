@@ -22,7 +22,7 @@ from app.core.errors import AuthenticationRequired, ConflictError, ValidationFai
 from app.db.base import utcnow
 from app.db.session import get_db
 from app.models import Follow, Post, User, UserSession
-from app.services import ratelimit
+from app.services import phone, ratelimit
 
 COOKIE = "nexis_session"
 SESSION_DAYS = 30
@@ -67,6 +67,7 @@ def serialize_user(db: Session, u: User, viewer: User | None = None, full: bool 
             "is_me": viewer is not None and viewer.id == u.id,
             "kind": u.kind,
             "email": u.email if viewer is not None and viewer.id == u.id else None,
+            "phone": u.phone if viewer is not None and viewer.id == u.id else None,
             "auth_provider": u.auth_provider if viewer is not None and viewer.id == u.id else None,
             "followed_by_me": viewer is not None
             and db.scalar(select(Follow.id).where(Follow.follower_id == viewer.id, Follow.followee_id == u.id)) is not None,
@@ -124,10 +125,14 @@ def register(
     password: str,
     display_name: str | None,
     email: str | None = None,
+    phone_number: str | None = None,
 ) -> User:
-    """Create an account with an email (preferred) and/or a username, then sign in."""
+    """Create an account with an email or a mobile number (and optionally a username), then sign in."""
     ratelimit.hit(db, f"register:{ratelimit.client_ip(request)}", 5)
     mail = (email or "").strip().lower() or None
+    mobile = phone.normalize(phone_number) if phone_number else None
+    if mobile is not None and db.scalar(select(User.id).where(User.phone == mobile)) is not None:
+        raise ConflictError("an account with that mobile number already exists — sign in instead")
     if mail is not None:
         if not EMAIL.match(mail):
             raise ValidationFailed("enter a valid email address")
@@ -143,11 +148,20 @@ def register(
             raise ConflictError("that username is taken")
     elif mail is not None:
         uname = _unique_username(db, mail.split("@")[0])
+    elif mobile is not None:
+        uname = _unique_username(db, (display_name or "investor").strip() or "investor")
     else:
-        raise ValidationFailed("enter an email address")
-    _check_password(password, uname, mail or "")
+        raise ValidationFailed("enter an email address or a mobile number")
+    _check_password(password, uname, mail or "", mobile or "")
     name = (display_name or "").strip()[:60] or uname
-    u = User(username=uname, display_name=name, password_hash=hash_password(password), email=mail, auth_provider="password")
+    u = User(
+        username=uname,
+        display_name=name,
+        password_hash=hash_password(password),
+        email=mail,
+        phone=mobile,
+        auth_provider="password",
+    )
     db.add(u)
     db.commit()
     _start_session(db, u, response)
@@ -155,17 +169,22 @@ def register(
 
 
 def login(db: Session, request: Request, response: Response, identifier: str, password: str) -> User:
-    """Sign in with an email address or a username."""
+    """Sign in with an email address, a mobile number or a username."""
     ratelimit.hit(db, f"login:{ratelimit.client_ip(request)}", 20)
     ident = identifier.strip().lower()
-    col = User.email if "@" in ident else User.username
-    u = db.scalars(select(User).where(func.lower(col) == ident)).first()
-    if u is not None and u.password_hash is None and u.auth_provider in ("google", "apple"):
+    if "@" not in ident and phone.looks_like_phone(ident):
+        u = db.scalars(select(User).where(User.phone == phone.normalize(ident))).first()
+    else:
+        col = User.email if "@" in ident else User.username
+        u = db.scalars(select(User).where(func.lower(col) == ident)).first()
+    if u is not None and u.password_hash is None and u.auth_provider == "phone":
+        raise AuthenticationRequired("this account signs in with an SMS code — use “Continue with phone”")
+    if u is not None and u.password_hash is None and u.auth_provider == "google":
         raise AuthenticationRequired(
             f"this account uses {u.auth_provider.title()} sign-in — use the {u.auth_provider.title()} button"
         )
     if u is None or u.is_disabled or u.kind != "person" or not u.password_hash or not verify_password(password, u.password_hash):
-        raise AuthenticationRequired("wrong email/username or password")
+        raise AuthenticationRequired("wrong email, phone or password")
     _start_session(db, u, response)
     return u
 
@@ -284,3 +303,33 @@ def _recount(db: Session) -> None:
     for post in db.scalars(select(Post).where((Post.like_count > 0) | (Post.comment_count > 0))):
         post.like_count, post.comment_count = likes.get(post.id, 0), comments.get(post.id, 0)
     db.commit()
+
+
+def phone_start(db: Session, request: Request, number: str) -> dict[str, Any]:
+    """Send an SMS code (requires Twilio Verify)."""
+    if not phone.otp_enabled():
+        raise ValidationFailed("SMS codes are not set up on this server — sign up with your mobile number and a password")
+    mobile = phone.normalize(number)
+    ratelimit.hit(db, f"sms:{ratelimit.client_ip(request)}", 5)
+    ratelimit.hit(db, f"sms-number:{mobile}", 3)
+    phone.send_code(mobile)
+    return {"sent": True, "phone": mobile}
+
+
+def phone_verify(db: Session, request: Request, response: Response, number: str, code: str, display_name: str | None) -> User:
+    """Check the SMS code, then sign in (creating the account on first use)."""
+    ratelimit.hit(db, f"sms-check:{ratelimit.client_ip(request)}", 15)
+    mobile = phone.normalize(number)
+    phone.check_code(mobile, code)
+    u = db.scalars(select(User).where(User.phone == mobile)).first()
+    if u is None:
+        seed = (display_name or "investor").strip() or "investor"
+        u = User(
+            username=_unique_username(db, seed), display_name=seed[:60], password_hash=None, phone=mobile, auth_provider="phone"
+        )
+        db.add(u)
+        db.commit()
+    if u.is_disabled:
+        raise AuthenticationRequired("this account is disabled")
+    _start_session(db, u, response)
+    return u

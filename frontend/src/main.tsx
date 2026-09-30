@@ -8,6 +8,7 @@ import { ApiError } from "./services/api";
 import "./styles.css";
 import "./styles-markets.css";
 import "./styles-social.css";
+import "./styles-home.css";
 
 const client = new QueryClient({
   defaultOptions: {

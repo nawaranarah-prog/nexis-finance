@@ -1,4 +1,4 @@
-"""Chart posts for InstaFin, drawn from live market data.
+"""Chart posts for Finstagram, drawn from live market data.
 
 "Nexis Charts" publishes square, Instagram-sized charts: the Dubai market's daily movers, global
 indices and a "chart of the day" for the instrument most mentioned in the news. One post per chart
@@ -128,29 +128,38 @@ def publish(db: Session, page: User, hot_symbol: str | None) -> int:
     today = datetime.now(UTC).date().isoformat()
     made = 0
     try:
-        uae = markets.market_list(db, "uae")["items"]
-        index = next((x for x in uae if x["symbol"] == "DFMGI.AE"), None)
-        stocks = [x for x in uae if x["symbol"] != "DFMGI.AE" and x.get("change_pct") is not None]
-        if stocks:
-            top, bottom = max(stocks, key=lambda x: x["change_pct"]), min(stocks, key=lambda x: x["change_pct"])
+        uae_rows = markets.market_list(db, "uae")["items"]
+        for exch, label, index_sym, tag in (("DFM", "Dubai", "DFMGI.AE", "dubai"), ("ADX", "Abu Dhabi", "FADGI.AD", "abudhabi")):
+            stocks = [x for x in uae_rows if x.get("exchange") == exch and x.get("change_pct") is not None]
+            if len(stocks) < 5:
+                continue
+            ranked = sorted(stocks, key=lambda x: x["change_pct"])
+            shown = ranked[:10] + [x for x in ranked[-10:] if x not in ranked[:10]]  # biggest decliners and gainers
+            top, bottom = ranked[-1], ranked[0]
             adv = sum(1 for x in stocks if x["change_pct"] > 0)
             dec = sum(1 for x in stocks if x["change_pct"] < 0)
-            idx = (
-                f"The DFM General Index is {index['change_pct'] * 100:+.2f}% at {index['price']:,.2f}. "
-                if index and index.get("change_pct") is not None
-                else ""
-            )
-            body = (f"📊 Dubai market pulse — {idx}{adv} stocks up, {dec} down.\n\nTop gainer: {top['name']} (${top['symbol']}) {top['change_pct'] * 100:+.2f}%. "
-                    f"Biggest decliner: {bottom['name']} (${bottom['symbol']}) {bottom['change_pct'] * 100:+.2f}%.\n\n#uae #dubai #dfm #markets")  # fmt: skip
-            img = movers_chart(stocks, "Dubai market pulse", f"DFM-listed shares · daily change · {today}")
+            try:
+                index = markets.quotes(db, [index_sym])[0]
+                idx = f"The {index['name']} is {index['change_pct'] * 100:+.2f}% at {index['price']:,.2f}. "
+            except (NexisError, IndexError, KeyError, TypeError):
+                idx = ""
+            body = "\n\n".join([
+                f"📊 {label} market pulse — {idx}{adv} stocks up, {dec} down.",
+                f"Top gainer: {top['name']} (${top['symbol']}) {top['change_pct'] * 100:+.2f}%. "
+                f"Biggest decliner: {bottom['name']} (${bottom['symbol']}) {bottom['change_pct'] * 100:+.2f}%.",
+                f"#uae #{tag} #{exch.lower()} #markets",
+            ])  # fmt: skip
+            for x in shown:
+                x["label"] = x["symbol"].rsplit(".", 1)[0]
+            img = movers_chart(shown, f"{label} market pulse", f"{exch} · biggest movers · {today}", label_key="label")
             made += _upsert(
                 db,
                 page,
-                f"chart:uae-pulse:{today}",
+                f"chart:{exch.lower()}-pulse:{today}",
                 body,
                 img,
                 [top["symbol"], bottom["symbol"]],
-                ["uae", "dubai", "dfm", "markets"],
+                ["uae", tag, exch.lower(), "markets"],
             )
     except NexisError as exc:
         log.warning("uae pulse chart skipped: %s", exc.message)

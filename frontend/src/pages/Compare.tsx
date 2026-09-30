@@ -15,19 +15,36 @@ const PERIODS = [
 ];
 const INTERVALS = [{ value: "auto", label: "Auto" }, { value: "1h", label: "Hourly" }, { value: "1d", label: "Daily" }, { value: "1wk", label: "Weekly" }, { value: "1mo", label: "Monthly" }];
 const BUCKETS = [{ value: "auto", label: "Auto" }, { value: "hour", label: "Hours" }, { value: "day", label: "Days" }, { value: "week", label: "Weeks" }, { value: "month", label: "Months" }, { value: "quarter", label: "Quarters" }, { value: "year", label: "Years" }];
-const PRESETS: { label: string; s: string[] }[] = [
-  { label: "Dubai property", s: ["EMAAR.AE", "EMAARDEV.AE", "DFMGI.AE"] },
-  { label: "UAE banks", s: ["EMIRATESNBD.AE", "DIB.AE", "CBD.AE", "MASQ.AE"] },
-  { label: "Stocks vs bonds vs gold", s: ["SPY", "AGG", "TLT", "GC=F"] },
-  { label: "Big tech", s: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"] },
-  { label: "Crypto vs Nasdaq", s: ["BTC-USD", "ETH-USD", "QQQ"] },
+const PRESETS: { group: string; items: { label: string; s: string[] }[] }[] = [
+  { group: "UAE sectors", items: [
+    { label: "Banks", s: ["FAB.AD", "EMIRATESNBD.AE", "ADCB.AD", "ADIB.AD", "DIB.AE", "MASQ.AE"] },
+    { label: "Real estate", s: ["EMAAR.AE", "ALDAR.AD", "EMAARDEV.AE", "TECOM.AE", "DUBAIRESI.AE", "RAKPROP.AD"] },
+    { label: "Energy & chemicals", s: ["ADNOCGAS.AD", "ADNOCDRILL.AD", "BOROUGE.AD", "FERTIGLB.AD", "DANA.AD"] },
+    { label: "Telecom & tech", s: ["EAND.AD", "DU.AE", "PRESIGHT.AD", "SPACE42.AD"] },
+    { label: "Transport & logistics", s: ["ADPORTS.AD", "ADNOCLS.AD", "SALIK.AE", "AIRARABIA.AE", "DTC.AE", "PARKIN.AE"] },
+    { label: "Consumer & retail", s: ["AMR.AD", "LULU.AD", "TALABAT.AE", "SPINNEYS.AE", "AGTHIA.AD", "ADNOCDIST.AD"] },
+    { label: "Holdings", s: ["IHC.AD", "ALPHADHABI.AD", "2POINTZERO.AD", "MODON.AD", "WAHA.AD"] },
+    { label: "Utilities", s: ["DEWA.AE", "EMPOWER.AE", "TABREED.AE"] },
+  ] },
+  { group: "UAE bonds & mixes", items: [
+    { label: "UAE government bonds", s: ["UAE0732USD.BOND", "UAE0734USD.BOND", "UAE0752USD.BOND", "UAEGS0233AED.BOND"] },
+    { label: "Sukuk: federal vs Sharjah vs Dubai", s: ["UAEGS0233AED.BOND", "SHRSK0633AED.BOND", "XS222704910.BOND"] },
+    { label: "UAE stocks vs bonds vs gold", s: ["FADGI.AD", "DFMGI.AE", "UAE0734USD.BOND", "GC=F"] },
+    { label: "Abu Dhabi vs Dubai", s: ["FADGI.AD", "DFMGI.AE"] },
+    { label: "Top dividend payers", s: ["EMAAR.AE", "ADNOCGAS.AD", "DEWA.AE", "EAND.AD", "FAB.AD", "SALIK.AE"] },
+  ] },
+  { group: "Global", items: [
+    { label: "UAE vs world", s: ["FADGI.AD", "DFMGI.AE", "^GSPC", "^TASI.SR", "EFA"] },
+    { label: "Big tech", s: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"] },
+    { label: "Crypto vs Nasdaq", s: ["BTC-USD", "ETH-USD", "QQQ"] },
+  ] },
 ];
 const p = (v: number | null | undefined, d = 1, signed = true) => (v === null || v === undefined ? "—" : `${signed && v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
 const n2 = (v: number | null | undefined) => (v === null || v === undefined ? "—" : v.toFixed(2));
 
 export default function Compare() {
   const [params, setParams] = useSearchParams();
-  const [symbols, setSymbols] = useState<string[]>(() => (params.get("s") ?? "EMAAR.AE,EMAARDEV.AE,SPY").split(",").filter(Boolean).slice(0, 8));
+  const [symbols, setSymbols] = useState<string[]>(() => (params.get("s") ?? "FAB.AD,EMIRATESNBD.AE,ADCB.AD,ADIB.AD,DIB.AE").split(",").filter(Boolean).slice(0, 8));
   const [period, setPeriod] = useState(params.get("p") ?? "1y");
   const [start, setStart] = useState(params.get("from") ?? "");
   const [end, setEnd] = useState(params.get("to") ?? "");
@@ -60,7 +77,7 @@ export default function Compare() {
   const r = q.data;
   return (
     <>
-      <PageHead title="Compare & Reports" desc="Compare any stocks, bonds, ETFs, indices, currencies or crypto over any window — hourly, daily, weekly or monthly — then export a PDF report with a recommendation section."
+      <PageHead title="Compare & Reports" desc="Compare UAE shares (ADX and DFM), UAE government bonds and sukuk, indices and global markets over any window — hourly, daily, weekly or monthly — then export a PDF report with a recommendation section."
         actions={<button className="btn primary" disabled={!r || busyReport} onClick={report}>{busyReport ? "Building PDF…" : "Download PDF report"}</button>} />
       <Card>
         <div className="stack" style={{ gap: 12 }}>
@@ -73,10 +90,13 @@ export default function Compare() {
             ))}
             {symbols.length < 8 && <div style={{ minWidth: 260, flex: 1 }}><SymbolSearch compact placeholder="Add an instrument…" onPick={(s) => !symbols.includes(s.symbol) && setSyms([...symbols, s.symbol])} /></div>}
           </div>
-          <div className="row small" style={{ gap: 6, flexWrap: "wrap" }}>
-            <span className="muted">Presets</span>
-            {PRESETS.map((x) => <button key={x.label} className="chip" onClick={() => setSyms(x.s)}>{x.label}</button>)}
-          </div>
+          {PRESETS.map((g) => (
+            <div key={g.group} className="row small" style={{ gap: 6, flexWrap: "wrap" }}>
+              <span className="muted preset-label">{g.group}</span>
+              {g.items.map((x) => <button key={x.label} className="chip" onClick={() => setSyms(x.s)}>{x.label}</button>)}
+            </div>
+          ))}
+          <SectorBuilder onPick={setSyms} />
           <div className="form-grid">
             <Field label="Period"><Seg value={period} onChange={(v) => { setPeriod(v); sync({ p: v }); }} options={PERIODS} /></Field>
             {period === "custom" && (
@@ -171,5 +191,28 @@ export default function Compare() {
         </>
       )}
     </>
+  );
+}
+
+/** One click: the largest listed companies of any UAE sector, optionally with the index and a government bond. */
+function SectorBuilder({ onPick }: { onPick: (s: string[]) => void }) {
+  const q = useQuery({ queryKey: ["mk-list", "uae"], queryFn: () => api.get<AnyObj>("/markets/lists/uae"), staleTime: 300_000 });
+  const [sector, setSector] = useState("");
+  const [withBench, setWithBench] = useState(true);
+  if (!q.data?.sectors) return null;
+  const build = () => {
+    const top = (q.data.items as AnyObj[]).filter((x) => x.sector === sector).sort((a, b) => (b.market_cap ?? 0) - (a.market_cap ?? 0)).slice(0, withBench ? 5 : 7).map((x) => x.symbol);
+    onPick(withBench ? [...top, "FADGI.AD", "UAE0734USD.BOND"].slice(0, 8) : top);
+  };
+  return (
+    <div className="row small" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <span className="muted preset-label">Build from a sector</span>
+      <select className="input" style={{ height: 32, width: 220 }} value={sector} onChange={(e) => setSector(e.target.value)} aria-label="UAE sector">
+        <option value="">Choose a UAE sector…</option>
+        {(q.data.sectors as string[]).map((x) => <option key={x}>{x}</option>)}
+      </select>
+      <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={withBench} onChange={(e) => setWithBench(e.target.checked)} /> add ADX index + UAE 2034 bond</label>
+      <button className="btn sm primary" disabled={!sector} onClick={build}>Compare top names</button>
+    </div>
   );
 }

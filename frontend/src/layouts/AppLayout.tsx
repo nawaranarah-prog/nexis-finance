@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../services/api";
 import { Avatar, useMe } from "../components/market";
@@ -10,17 +10,18 @@ import type { Notification } from "../types/api";
 import { dt } from "../utils/format";
 
 export const NAV: { group: string; items: { to: string; label: string }[] }[] = [
-  { group: "Workspace", items: [{ to: "/", label: "Overview" }] },
   {
-    group: "Markets & Advice",
+    group: "Discover",
     items: [
-      { to: "/markets", label: "Global Markets" },
+      { to: "/", label: "Home" },
+      { to: "/finstagram", label: "Finstagram" },
       { to: "/advisor", label: "AI Advisor" },
+      { to: "/markets", label: "UAE & Global Markets" },
       { to: "/compare", label: "Compare & Reports" },
       { to: "/valuation", label: "Valuation (IB)" },
-      { to: "/social", label: "InstaFin" },
     ],
   },
+  { group: "Research workspace", items: [{ to: "/research", label: "Research Overview" }] },
   {
     group: "Connect & Understand",
     items: [
@@ -94,13 +95,37 @@ function Account() {
       {open && (
         <div className="share-menu popover-in" role="menu" style={{ right: 0, left: "auto", transformOrigin: "top right" }}>
           <div className="small" style={{ padding: "8px 10px" }}><b>{u.display_name}</b><div className="xs muted">@{u.username}{u.email ? ` · ${u.email}` : ""}</div></div>
-          <button role="menuitem" onClick={() => { setOpen(false); nav(`/social/u/${u.username}`); }}>My InstaFin profile</button>
-          <button role="menuitem" onClick={() => { setOpen(false); nav("/social?mode=saved"); }}>Saved posts</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav(`/finstagram/u/${u.username}`); }}>My Finstagram profile</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/finstagram?mode=saved"); }}>Saved posts</button>
           <button role="menuitem" onClick={() => { setOpen(false); nav("/advisor"); }}>AI Advisor</button>
           <button role="menuitem" onClick={logout}>Sign out</button>
         </div>
       )}
     </div>
+  );
+}
+
+/** Instagram-style bottom navigation on phones. */
+function TabBar() {
+  const me = useMe().data?.user;
+  const loc = useLocation();
+  const on = (p: string) => (p === "/" ? loc.pathname === "/" : loc.pathname.startsWith(p));
+  const tabs = [
+    { to: "/", label: "Home", icon: "⌂" },
+    { to: "/markets", label: "Markets", icon: "↗" },
+    { to: "/finstagram", label: "Finstagram", icon: "F", primary: true },
+    { to: "/advisor", label: "Advisor", icon: "✦" },
+    { to: me ? `/finstagram/u/${me.username}` : "/login", label: me ? "Me" : "Sign in", icon: "◉" },
+  ];
+  return (
+    <nav className="tabbar" aria-label="Main">
+      {tabs.map((t) => (
+        <Link key={t.label} to={t.to} className={`tab ${on(t.to) ? "on" : ""} ${t.primary ? "primary" : ""}`}>
+          <span className="tab-icon" aria-hidden>{t.icon}</span>
+          <span className="tab-label">{t.label}</span>
+        </Link>
+      ))}
+    </nav>
   );
 }
 
@@ -158,6 +183,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
   }, []);
+  // The research-dataset picker only matters on the research pages, not on Home, Finstagram, markets or the advisor.
+  const consumer = ["/finstagram", "/advisor", "/markets", "/compare", "/valuation", "/login"];
+  const researchPage = location.pathname !== "/" && !consumer.some((p) => location.pathname.startsWith(p));
   const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })));
   let idx = 0;
   return (
@@ -190,6 +218,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <button className="btn ghost menu-btn" aria-label="Open navigation" onClick={() => setDrawer(true)}>☰</button>
+          {researchPage && (
+            <>
           <span className="xs muted hide-sm">Research dataset</span>
           <select className="input hide-sm" style={{ width: 230 }} value={dataset?.id ?? ""} onChange={(e) => setDatasetId(Number(e.target.value))} aria-label="Research dataset">
             {datasets.map((d) => <option key={d.id} value={d.id}>{d.code} · v{d.version}</option>)}
@@ -197,10 +227,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {dataset && (dataset.is_synthetic
             ? <span className="badge synthetic hide-sm" title="The selected research dataset is artificially generated">DEMO / SYNTHETIC DATA MODE</span>
             : <span className="badge info hide-sm">LIVE PUBLIC DATA · {dataset.source}</span>)}
+            </>
+          )}
           <span className="spacer hide-sm" />
           <button className="search-trigger" onClick={() => setPalette(true)} aria-label="Open command palette">
             <span aria-hidden>⌕</span><span className="grow">Search or jump to…</span><kbd className="hide-sm">Ctrl K</kbd>
           </button>
+          <Link to="/finstagram" className="top-pill finsta hide-sm" aria-label="Open Finstagram"><span className="top-pill-icon">F</span>Finstagram</Link>
+          <Link to="/advisor" className="top-pill ai hide-sm" aria-label="Open the AI advisor"><span className="top-pill-icon">✦</span>AI Advisor</Link>
           <Notifications />
           <Account />
           <button className="btn ghost" aria-label="Toggle theme" title="Toggle theme"
@@ -211,6 +245,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <main className="content"><div key={location.pathname} className="route-enter">{children}</div></main>
       </div>
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={pages} />
+      <TabBar />
       <Toaster />
     </div>
   );

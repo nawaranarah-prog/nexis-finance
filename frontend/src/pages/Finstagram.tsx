@@ -22,9 +22,9 @@ const RICH = /(\$[A-Za-z][A-Za-z0-9]{0,11}(?:[.\-=][A-Za-z0-9]{1,4})?|#[A-Za-z]\
 function Rich({ text }: { text: string }) {
   return (
     <>{text.split(RICH).map((p, i) => {
-      if (/^\$[A-Za-z]/.test(p)) return <Link key={i} className="cashtag" to={`/social/s/${encodeURIComponent(p.slice(1).toUpperCase())}`}>{p.toUpperCase()}</Link>;
-      if (p.startsWith("#") && p.length > 2) return <Link key={i} className="hashtag" to={`/social/t/${encodeURIComponent(p.slice(1).toLowerCase())}`}>{p}</Link>;
-      if (p.startsWith("@") && p.length > 3) return <Link key={i} className="mention" to={`/social/u/${p.slice(1)}`}>{p}</Link>;
+      if (/^\$[A-Za-z]/.test(p)) return <Link key={i} className="cashtag" to={`/finstagram/s/${encodeURIComponent(p.slice(1).toUpperCase())}`}>{p.toUpperCase()}</Link>;
+      if (p.startsWith("#") && p.length > 2) return <Link key={i} className="hashtag" to={`/finstagram/t/${encodeURIComponent(p.slice(1).toLowerCase())}`}>{p}</Link>;
+      if (p.startsWith("@") && p.length > 3) return <Link key={i} className="mention" to={`/finstagram/u/${p.slice(1)}`}>{p}</Link>;
       if (/^https?:\/\//.test(p)) return <a key={i} href={p} target="_blank" rel="noreferrer noopener nofollow">{p.replace(/^https?:\/\//, "").slice(0, 40)}</a>;
       return <Fragment key={i}>{p}</Fragment>;
     })}</>
@@ -101,12 +101,12 @@ function SearchBar() {
     <div className="insta-search" ref={box}>
       <span className="insta-search-icon" aria-hidden>⌕</span>
       <input className="input" value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
-        placeholder="Search stocks, pages, people, #tags" aria-label="Search InstaFin"
+        placeholder="Search stocks, pages, people, #tags" aria-label="Search Finstagram"
         onKeyDown={(e) => {
           if (e.key === "Enter" && res) {
-            if (res.instruments[0]) go(`/social/s/${encodeURIComponent(res.instruments[0].symbol)}`);
-            else if (res.accounts[0]) go(`/social/u/${res.accounts[0].username}`);
-            else if (res.tags[0]) go(`/social/t/${res.tags[0].tag}`);
+            if (res.instruments[0]) go(`/finstagram/s/${encodeURIComponent(res.instruments[0].symbol)}`);
+            else if (res.accounts[0]) go(`/finstagram/u/${res.accounts[0].username}`);
+            else if (res.tags[0]) go(`/finstagram/t/${res.tags[0].tag}`);
           } else if (e.key === "Escape") setOpen(false);
         }} />
       {open && d && (
@@ -115,21 +115,21 @@ function SearchBar() {
           {empty && <div className="sym-empty">No results for “{d}”.</div>}
           {res?.instruments.length > 0 && <div className="isr-head">Stocks & markets</div>}
           {res?.instruments.map((s: AnyObj) => (
-            <button key={s.symbol} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/social/s/${encodeURIComponent(s.symbol)}`); }}>
+            <button key={s.symbol} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/finstagram/s/${encodeURIComponent(s.symbol)}`); }}>
               <span className="isr-ticker">{s.symbol.slice(0, 5)}</span>
               <span className="grow"><b>{s.name}</b><span className="xs muted"> · {s.symbol} · {TYPE_LABEL[s.type] ?? s.type} · {s.exchange}</span></span>
             </button>
           ))}
           {res?.accounts.length > 0 && <div className="isr-head">Accounts</div>}
           {res?.accounts.map((u: AnyObj) => (
-            <button key={u.id} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/social/u/${u.username}`); }}>
+            <button key={u.id} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/finstagram/u/${u.username}`); }}>
               <Avatar user={u} size={30} />
               <span className="grow"><b>{u.username}</b>{u.kind === "page" && <span className="page-badge">News page</span>}<span className="xs muted"> · {u.display_name}</span></span>
             </button>
           ))}
           {res?.tags.length > 0 && <div className="isr-head">Hashtags</div>}
           {res?.tags.map((t: AnyObj) => (
-            <button key={t.tag} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/social/t/${t.tag}`); }}>
+            <button key={t.tag} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/finstagram/t/${t.tag}`); }}>
               <span className="isr-ticker">#</span><span className="grow"><b>#{t.tag}</b><span className="xs muted"> · {t.posts} posts</span></span>
             </button>
           ))}
@@ -188,15 +188,15 @@ function PostMedia({ post, onDoubleTap, pop }: { post: AnyObj; onDoubleTap: () =
 // ------------------------------------------------------------------ share & menu
 
 function ShareMenu({ post, onClose }: { post: AnyObj; onClose: () => void }) {
-  const url = `${window.location.origin}/social/p/${post.id}`;
-  const text = `${post.link?.title ?? post.body.slice(0, 160)} — via InstaFin`;
+  const url = `${window.location.origin}/finstagram/p/${post.id}`;
+  const text = `${post.link?.title ?? post.body.slice(0, 160)} — via Finstagram`;
   const e = encodeURIComponent;
   const copy = async (then?: string) => {
     try { await navigator.clipboard.writeText(url); toast("success", "Link copied", then); } catch { toast("warning", "Copy failed", url); }
   };
   const native = async () => {
     try {
-      const data: ShareData = { title: "InstaFin", text, url };
+      const data: ShareData = { title: "Finstagram", text, url };
       if (post.image_url && navigator.canShare) {
         const blob = await fetch(post.image_url).then((r) => r.blob());
         const f = new File([blob], `instafin-${post.id}.jpg`, { type: blob.type });
@@ -212,7 +212,7 @@ function ShareMenu({ post, onClose }: { post: AnyObj; onClose: () => void }) {
     { label: "LinkedIn", href: `https://www.linkedin.com/sharing/share-offsite/?url=${e(url)}` },
     { label: "Telegram", href: `https://t.me/share/url?url=${e(url)}&text=${e(text)}` },
     { label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${e(url)}` },
-    { label: "Email", href: `mailto:?subject=${e("From InstaFin")}&body=${e(`${text}\n\n${url}`)}` },
+    { label: "Email", href: `mailto:?subject=${e("From Finstagram")}&body=${e(`${text}\n\n${url}`)}` },
   ];
   return (
     <div className="share-menu popover-in" role="menu">
@@ -240,7 +240,7 @@ function Comments({ post, me, gate }: { post: AnyObj; me: AnyObj | null; gate: G
       {q.data?.length === 0 && <div className="xs muted">No comments yet — start the conversation.</div>}
       {q.data?.map((c) => (
         <div key={c.id} className="comment">
-          <Link to={`/social/u/${c.author.username}`}><b>{c.author.username}</b></Link> <span dir="auto"><Rich text={c.body} /></span>
+          <Link to={`/finstagram/u/${c.author.username}`}><b>{c.author.username}</b></Link> <span dir="auto"><Rich text={c.body} /></span>
           <span className="xs muted"> · {ago(c.created_at)}</span>
           {(c.is_mine || post.is_mine) && <button className="link-btn xs" onClick={async () => { await api.del(`/social/comments/${c.id}`); qc.invalidateQueries({ queryKey: ["social"] }); }}>delete</button>}
         </div>
@@ -298,7 +298,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
     setMore(false);
     try { const r = await api.post<AnyObj>(`/social/posts/${post.id}/report`, { reason: "reported from feed" }); toast("info", "Thanks — reported", r.hidden ? "The post has been hidden." : undefined); } catch (e) { toast("error", "Report failed", errorMessage(e)); }
   });
-  const copyLink = async () => { setMore(false); try { await navigator.clipboard.writeText(`${window.location.origin}/social/p/${post.id}`); toast("success", "Link copied"); } catch { /* ignore */ } };
+  const copyLink = async () => { setMore(false); try { await navigator.clipboard.writeText(`${window.location.origin}/finstagram/p/${post.id}`); toast("success", "Link copied"); } catch { /* ignore */ } };
 
   if (hidden) return (
     <div className="post hidden-note small text2">Post hidden. We'll show you fewer like this. <button className="link-btn" onClick={() => setHidden(false)}>Undo</button></div>
@@ -312,7 +312,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
   return (
     <article className="post">
       <header className="post-head">
-        <Link to={`/social/u/${post.author.username}`} className="row" style={{ gap: 10, minWidth: 0 }}>
+        <Link to={`/finstagram/u/${post.author.username}`} className="row" style={{ gap: 10, minWidth: 0 }}>
           <Avatar user={post.author} size={34} />
           <span style={{ minWidth: 0 }}>
             <b>{post.author.username}</b>{isPage && <span className="page-badge" title="Automated news page">✓ News page</span>}
@@ -331,7 +331,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
                 <button role="menuitem" onClick={() => feedback("less")}>Suggest less like this</button>
                 {!post.is_mine && <button role="menuitem" onClick={() => { setMore(false); follow(); }}>{following ? `Unfollow ${post.author.username}` : `Follow ${post.author.username}`}</button>}
                 {link && <a role="menuitem" href={link.url} target="_blank" rel="noreferrer noopener" onClick={() => setMore(false)}>Open original ↗</a>}
-                <Link role="menuitem" to={`/social/p/${post.id}`}>Go to post</Link>
+                <Link role="menuitem" to={`/finstagram/p/${post.id}`}>Go to post</Link>
                 <button role="menuitem" onClick={copyLink}>Copy link</button>
                 {post.is_mine ? <button role="menuitem" className="neg" onClick={remove}>Delete</button> : <button role="menuitem" className="neg" onClick={report}>Report</button>}
               </div>
@@ -352,13 +352,13 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
       <div className="post-likes">{likes.toLocaleString()} {likes === 1 ? "like" : "likes"}</div>
       <div className="post-body" dir="auto">
         {headline && <div className="post-headline">{link ? <a href={link.url} target="_blank" rel="noreferrer noopener">{headline.replace(/^▶ /, "")}</a> : headline}</div>}
-        {rest && <div className={long ? "clamp" : ""}>{!link && <Link to={`/social/u/${post.author.username}`}><b>{post.author.username}</b></Link>} <Rich text={rest} /></div>}
+        {rest && <div className={long ? "clamp" : ""}>{!link && <Link to={`/finstagram/u/${post.author.username}`}><b>{post.author.username}</b></Link>} <Rich text={rest} /></div>}
         {long && <button className="link-btn xs" onClick={() => setExpanded(true)}>more</button>}
       </div>
       {post.symbols?.length > 0 && (
         <div className="ticker-cards">
           {post.symbols.map((s: AnyObj) => (
-            <Link key={s.symbol} className="ticker-card" to={`/social/s/${encodeURIComponent(s.symbol)}`}>
+            <Link key={s.symbol} className="ticker-card" to={`/finstagram/s/${encodeURIComponent(s.symbol)}`}>
               <span className="mono">{s.symbol}</span>
               {s.price !== undefined && s.price !== null && <span className="num">{fmtPrice(s.price, s.currency)}</span>}
               <Change pct={s.change_pct} />
@@ -435,7 +435,7 @@ function Rail() {
       <div className="rail-card"><div className="rail-title">News pages to follow</div>
         {t.data.pages.map((u: AnyObj) => (
           <div key={u.id} className="rail-row">
-            <Link to={`/social/u/${u.username}`} className="row" style={{ gap: 8, minWidth: 0, flex: 1 }}><Avatar user={u} size={30} />
+            <Link to={`/finstagram/u/${u.username}`} className="row" style={{ gap: 8, minWidth: 0, flex: 1 }}><Avatar user={u} size={30} />
               <span style={{ minWidth: 0 }}><b className="small">{u.username}</b><div className="xs muted ellipsis">{u.display_name}</div></span></Link>
             <button className={`link-btn xs ${u.followed_by_me ? "muted" : ""}`} onClick={() => follow(u)}>{u.followed_by_me ? "Following" : "Follow"}</button>
           </div>
@@ -444,7 +444,7 @@ function Rail() {
       {t.data.symbols.length > 0 && (
         <div className="rail-card"><div className="rail-title">Trending tickers · 7d</div>
           {t.data.symbols.map((s: AnyObj) => (
-            <Link key={s.symbol} to={`/social/s/${encodeURIComponent(s.symbol)}`} className="rail-row">
+            <Link key={s.symbol} to={`/finstagram/s/${encodeURIComponent(s.symbol)}`} className="rail-row">
               <span className="mono">${s.symbol}</span><Change pct={s.change_pct} /><span className="xs muted">{s.posts} posts</span>
             </Link>
           ))}
@@ -452,7 +452,7 @@ function Rail() {
       )}
       {t.data.tags.length > 0 && (
         <div className="rail-card"><div className="rail-title">Hashtags</div>
-          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{t.data.tags.map((x: AnyObj) => <Link key={x.tag} className="chip" to={`/social/t/${encodeURIComponent(x.tag)}`}>#{x.tag}</Link>)}</div>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{t.data.tags.map((x: AnyObj) => <Link key={x.tag} className="chip" to={`/finstagram/t/${encodeURIComponent(x.tag)}`}>#{x.tag}</Link>)}</div>
         </div>
       )}
       <div className="xs muted" style={{ padding: "0 4px" }}>News pages are automated and link to the original publishers. Posts are opinions, not investment advice.</div>
@@ -496,14 +496,14 @@ function TopBar() {
   const { me } = useGate();
   return (
     <div className="insta-top">
-      <Link to="/social" className="insta-logo">InstaFin</Link>
+      <Link to="/finstagram" className="insta-logo">Finstagram</Link>
       <SearchBar />
-      {me && <Link to={`/social/u/${me.username}`} aria-label="My profile"><Avatar user={me} size={30} /></Link>}
+      {me && <Link to={`/finstagram/u/${me.username}`} aria-label="My profile"><Avatar user={me} size={30} /></Link>}
     </div>
   );
 }
 
-export default function InstaFin() {
+export default function Finstagram() {
   const [sp, setSp] = useSearchParams();
   const qc = useQueryClient();
   const { me, gate } = useGate();
@@ -512,8 +512,8 @@ export default function InstaFin() {
   const compose = sp.get("compose") ?? undefined;
   const legacySymbol = sp.get("symbol"), legacyTag = sp.get("tag");
   useEffect(() => {
-    if (legacySymbol) nav(`/social/s/${encodeURIComponent(legacySymbol)}`, { replace: true });
-    else if (legacyTag) nav(`/social/t/${encodeURIComponent(legacyTag)}`, { replace: true });
+    if (legacySymbol) nav(`/finstagram/s/${encodeURIComponent(legacySymbol)}`, { replace: true });
+    else if (legacyTag) nav(`/finstagram/t/${encodeURIComponent(legacyTag)}`, { replace: true });
   }, [legacySymbol, legacyTag, nav]);
   const tabs = [["latest", "For you"], ["following", "Following"], ["trending", "Trending"], ["saved", "Saved"]] as const;
   return (
@@ -526,7 +526,7 @@ export default function InstaFin() {
           ))}
         </div>
         {me ? <Composer me={me} initial={compose} onPosted={() => qc.invalidateQueries({ queryKey: ["social"] })} />
-          : <button className="composer ghost" onClick={() => nav("/login?mode=signup&next=/social")}><span className="text2">Join InstaFin to post ideas and charts, save posts, follow stocks and news pages, and tune your feed.</span></button>}
+          : <button className="composer ghost" onClick={() => nav("/login?mode=signup&next=/finstagram")}><span className="text2">Join Finstagram to post ideas and charts, save posts, follow stocks and news pages, and tune your feed.</span></button>}
         <FeedList params={{ mode }} gate={gate} me={me} />
       </div>
       <Rail />
@@ -628,7 +628,7 @@ function EditProfile({ me, onClose }: { me: AnyObj; onClose: () => void }) {
       await api.post("/auth/me/delete", { password: pw });
       qc.invalidateQueries({ queryKey: ["me"] });
       toast("success", "Account deleted");
-      window.location.assign("/social");
+      window.location.assign("/finstagram");
     } catch (e) { toast("error", "Could not delete the account", errorMessage(e)); }
   };
   return (
@@ -668,7 +668,7 @@ export function ProfilePage() {
   const follow = () => gate("Sign in to follow pages and people", async () => {
     try { await api.post(`/social/users/${username}/follow`); qc.invalidateQueries({ queryKey: ["social"] }); } catch (e) { toast("error", "Follow failed", errorMessage(e)); }
   });
-  const logout = async () => { await api.post("/auth/logout"); qc.invalidateQueries({ queryKey: ["me"] }); qc.invalidateQueries({ queryKey: ["social"] }); nav("/social"); };
+  const logout = async () => { await api.post("/auth/logout"); qc.invalidateQueries({ queryKey: ["me"] }); qc.invalidateQueries({ queryKey: ["social"] }); nav("/finstagram"); };
   if (prof.isLoading) return <Loading />;
   if (prof.error) return <ErrorState error={prof.error} />;
   const u = prof.data!;
@@ -709,7 +709,7 @@ export function ProfilePage() {
               const vid = ytId(p.link?.url);
               const img = p.image_url ?? (vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : p.link?.image);
               return (
-                <Link key={p.id} to={`/social/p/${p.id}`} className="grid-cell">
+                <Link key={p.id} to={`/finstagram/p/${p.id}`} className="grid-cell">
                   {img ? <img src={img} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <div className="grid-text" dir="auto" style={p.link ? { background: gradientFor(p.link.source ?? ""), color: "#fff" } : undefined}>{(p.link?.title ?? p.body).slice(0, 120)}</div>}
                   {vid && <span className="grid-video" aria-hidden>▶</span>}
                   <span className="grid-hover">♥ {p.like_count} · 💬 {p.comment_count}</span>

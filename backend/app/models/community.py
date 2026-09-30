@@ -1,4 +1,4 @@
-"""Market-data cache, rate limiting, user accounts and the InstaFin social feed."""
+"""Market-data cache, rate limiting, user accounts and the Finstagram social feed."""
 
 from __future__ import annotations
 
@@ -38,6 +38,8 @@ class User(Base, TimestampMixin):
     # Null for accounts that only sign in with Google/Apple.
     password_hash: Mapped[str | None] = mapped_column(String(200))
     email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    # E.164 mobile number (e.g. +971501234567).
+    phone: Mapped[str | None] = mapped_column(String(20), unique=True)
     auth_provider: Mapped[str] = mapped_column(String(20), default="password", nullable=False)
     provider_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
     # "person" or "page" (automated news pages run by the platform).

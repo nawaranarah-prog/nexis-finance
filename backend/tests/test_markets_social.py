@@ -1,4 +1,4 @@
-"""Global markets, comparisons, valuation, the advisor, accounts and InstaFin — external HTTP mocked."""
+"""Global markets, comparisons, valuation, the advisor, accounts and Finstagram — external HTTP mocked."""
 
 from __future__ import annotations
 
@@ -227,7 +227,7 @@ def test_llm_not_configured_without_credentials(monkeypatch):
         llm.chat([{"role": "user", "content": "hi"}])
 
 
-# ------------------------------------------------------------------ accounts & InstaFin
+# ------------------------------------------------------------------ accounts & Finstagram
 
 
 def _png_with_exif() -> bytes:

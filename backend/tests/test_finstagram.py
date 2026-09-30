@@ -1,4 +1,4 @@
-"""InstaFin news pages, engagement (save, suggest more/less, topic follows, search), email and OAuth
+"""Finstagram news pages, engagement (save, suggest more/less, topic follows, search), email and OAuth
 sign-in, and the streaming advisor — all external HTTP mocked."""
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ def test_google_sign_in_flow(client, monkeypatch):
 
 
 def test_oauth_unconfigured_redirects_with_message(client):
-    r = client.get("/api/auth/oauth/apple/start", follow_redirects=False)
+    r = client.get("/api/auth/oauth/google/start", follow_redirects=False)
     assert r.status_code == 302 and "not%20set%20up" in r.headers["location"]
 
 
@@ -211,3 +211,60 @@ def test_follow_up_questions_keep_the_instrument(monkeypatch):
 def test_glossary_questions(q):
     out = advisor.briefing(None, q)  # type: ignore[arg-type]
     assert out["mode"] == "data" and "**" in out["answer"] and out["symbols"] == []
+
+
+def test_phone_normalisation():
+    from app.services import phone
+
+    for raw in ("050 123 4567", "0501234567", "501234567", "+971 50 123 4567", "00971501234567", "971501234567"):
+        assert phone.normalize(raw) == "+971501234567", raw
+    assert phone.normalize("+44 7700 900123") == "+447700900123"
+    with pytest.raises(Exception, match="valid mobile"):
+        phone.normalize("12")
+
+
+def test_phone_signup_and_login_with_password(client):
+    client.cookies.clear()
+    r = client.post("/api/auth/register", json={"phone": "050 765 4321", "password": "phone-pass-77", "display_name": "Mona"})
+    assert r.status_code == 201, r.text
+    assert r.json()["phone"] == "+971507654321" and r.json()["display_name"] == "Mona"
+    assert client.post("/api/auth/register", json={"phone": "+971507654321", "password": "other-pass-88"}).status_code == 409
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"identifier": "0507654321", "password": "phone-pass-77"}).status_code == 200
+    assert client.get("/api/auth/me").json()["user"]["phone"] == "+971507654321"
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+
+
+def test_phone_otp_flow_with_mocked_twilio(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import phone
+
+    s = get_settings()
+    monkeypatch.setattr(s, "twilio_account_sid", "AC1")
+    monkeypatch.setattr(s, "twilio_auth_token", "tok")
+    monkeypatch.setattr(s, "twilio_verify_sid", "VA1")
+    sent = {}
+
+    def fake_post(url, data=None, auth=None, timeout=None):  # type: ignore[no-untyped-def]
+        if url.endswith("/Verifications"):
+            sent["to"] = data["To"]
+            return httpx.Response(201, json={"status": "pending"})
+        return httpx.Response(200, json={"status": "approved" if data["Code"] == "123456" else "pending"})
+
+    monkeypatch.setattr(phone.httpx, "post", fake_post)
+    client.cookies.clear()
+    assert client.get("/api/auth/providers").json()["phone_otp"] is True
+    assert client.post("/api/auth/phone/start", json={"phone": "055 111 2222"}).json() == {"sent": True, "phone": "+971551112222"}
+    assert sent["to"] == "+971551112222"
+    assert client.post("/api/auth/phone/verify", json={"phone": "0551112222", "code": "000000"}).status_code == 401
+    ok = client.post("/api/auth/phone/verify", json={"phone": "0551112222", "code": "123456", "display_name": "Sara"})
+    assert ok.status_code == 200 and ok.json()["display_name"] == "Sara" and ok.json()["auth_provider"] == "phone"
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+    # Second sign-in with a code reuses the same account.
+    again = client.post("/api/auth/phone/verify", json={"phone": "+971551112222", "code": "123456"})
+    assert again.json()["id"] == ok.json()["id"]
+    client.post("/api/auth/logout")
+    client.cookies.clear()

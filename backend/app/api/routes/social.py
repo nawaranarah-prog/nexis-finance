@@ -1,4 +1,4 @@
-"""Accounts and the InstaFin social feed."""
+"""Accounts and the Finstagram social feed."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.errors import NexisError, ValidationFailed
 from app.db.session import get_db
 from app.models import User
-from app.services import auth, newsfeed, oauth, social
+from app.services import auth, newsfeed, oauth, phone, social
 
 router = APIRouter(tags=["social"])
 MAX_UPLOAD = 8 * 1024 * 1024
@@ -26,6 +26,7 @@ class _Base(BaseModel):
 
 class RegisterIn(_Base):
     email: str | None = Field(default=None, max_length=254)
+    phone: str | None = Field(default=None, max_length=30)
     username: str | None = Field(default=None, max_length=30)
     password: str = Field(min_length=1, max_length=200)
     display_name: str | None = Field(default=None, max_length=60)
@@ -74,7 +75,7 @@ async def _read_image(f: UploadFile | None) -> bytes | None:
 
 @router.post("/auth/register", status_code=201)
 def register(req: RegisterIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
-    u = auth.register(db, request, response, req.username, req.password, req.display_name, req.email)
+    u = auth.register(db, request, response, req.username, req.password, req.display_name, req.email, req.phone)
     return auth.serialize_user(db, u, u, full=True)
 
 
@@ -87,9 +88,30 @@ def login(req: LoginIn, request: Request, response: Response, db: Session = Depe
     return auth.serialize_user(db, u, u, full=True)
 
 
+class PhoneStart(_Base):
+    phone: str = Field(min_length=6, max_length=30)
+
+
+class PhoneVerify(_Base):
+    phone: str = Field(min_length=6, max_length=30)
+    code: str = Field(min_length=4, max_length=10)
+    display_name: str | None = Field(default=None, max_length=60)
+
+
 @router.get("/auth/providers")
 def providers() -> dict[str, bool]:
-    return {"email": True, **oauth.configured()}
+    return {"email": True, "phone": True, "phone_otp": phone.otp_enabled(), **oauth.configured()}
+
+
+@router.post("/auth/phone/start")
+def phone_start(req: PhoneStart, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    return auth.phone_start(db, request, req.phone)
+
+
+@router.post("/auth/phone/verify")
+def phone_verify(req: PhoneVerify, request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
+    u = auth.phone_verify(db, request, response, req.phone, req.code, req.display_name)
+    return auth.serialize_user(db, u, u, full=True)
 
 
 @router.get("/auth/oauth/{provider}/start")
@@ -121,18 +143,6 @@ def oauth_callback_get(
     provider: str, request: Request, code: str | None = None, state: str | None = None, db: Session = Depends(get_db)
 ) -> Response:
     return _oauth_finish(provider, request, db, code, state, None)
-
-
-@router.post("/auth/oauth/{provider}/callback")
-def oauth_callback_post(
-    provider: str,
-    request: Request,
-    code: str | None = Form(default=None),
-    state: str | None = Form(default=None),
-    user: str | None = Form(default=None),
-    db: Session = Depends(get_db),
-) -> Response:
-    return _oauth_finish(provider, request, db, code, state, user)
 
 
 @router.post("/auth/logout", status_code=204)

@@ -157,7 +157,7 @@ export default function Advisor() {
                         <span key={sym} className="row" style={{ gap: 6 }}>
                           <Link className="chip" to={`/markets/${encodeURIComponent(sym)}`}>{sym} chart & details</Link>
                           <Link className="chip" to={`/compare?s=${encodeURIComponent(sym)}`}>compare</Link>
-                          <Link className="chip" to={`/social/s/${encodeURIComponent(sym)}`}>InstaFin</Link>
+                          <Link className="chip" to={`/finstagram/s/${encodeURIComponent(sym)}`}>Finstagram</Link>
                         </span>
                       ))}
                     </div>

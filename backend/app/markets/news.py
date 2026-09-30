@@ -67,16 +67,20 @@ def instrument_news(symbol: str, name: str | None, limit: int = 15) -> dict[str,
     """Merged, de-duplicated headlines, newest first, with a note of which feeds answered."""
     items: list[dict[str, Any]] = []
     feeds: dict[str, str] = {}
-    try:
-        for n in YahooClient().search(symbol, quotes=0, news=10)["news"]:
-            items.append({**n, "source": "Yahoo Finance"})
-        feeds["Yahoo Finance"] = "ok"
-    except ProviderError as exc:
-        feeds["Yahoo Finance"] = exc.message
+    # Yahoo does not know Abu Dhabi listings or bonds (its search would match unrelated tickers): use name search only.
+    if not symbol.endswith((".AD", ".BOND")):
+        try:
+            for n in YahooClient().search(symbol, quotes=0, news=10)["news"]:
+                items.append({**n, "source": "Yahoo Finance"})
+            feeds["Yahoo Finance"] = "ok"
+        except ProviderError as exc:
+            feeds["Yahoo Finance"] = exc.message
+    if name and symbol.endswith(".BOND"):
+        name = re.split(r"\s+\d", name)[0].replace(" Programme Ltd.", "").replace(" Limited", "")
     if name:
         q = f'"{clean_company_name(name)}"'
         try:
-            items += google_news(q, limit=limit, region="AE" if symbol.upper().endswith(".AE") else "US")
+            items += google_news(q, limit=limit, region="AE" if symbol.upper().endswith((".AE", ".AD", ".BOND")) else "US")
             feeds["Google News"] = "ok"
         except ProviderError as exc:
             feeds["Google News"] = exc.message

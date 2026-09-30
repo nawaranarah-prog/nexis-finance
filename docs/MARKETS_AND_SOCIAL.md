@@ -1,4 +1,4 @@
-# Markets, AI advisor, valuation and InstaFin
+# Markets, AI advisor, valuation and Finstagram
 
 These features work on any instrument the market-data provider covers, fetched live on demand and
 cached in the database (`market_cache`), so they need no seeding.
@@ -21,7 +21,7 @@ Not available: **Abu Dhabi Securities Exchange (ADX)** listings (the free provid
 `/markets` lists live quotes by region/asset class; the search box resolves names and misspellings ("emmar" → `EMAAR.AE`).
 `/markets/:symbol` shows the price chart (line or candles; 1D … Max with hourly/daily/weekly/monthly bars), key
 statistics, TTM financials, annual statements, analyst consensus with the buy/hold/sell distribution, profile, news and
-InstaFin posts that mention the ticker.
+Finstagram posts that mention the ticker.
 
 ## Compare & Reports
 
@@ -70,7 +70,7 @@ reports whether the model actually answers (a one-token probe, cached for 30 min
 Comparison and valuation PDFs use the model only to write prose from the computed figures; without it they include a
 transparent rule-based recommendation instead.
 
-## InstaFin (social)
+## Finstagram (social)
 
 Accounts (`/api/auth/*`): scrypt password hashes, opaque session tokens (only their SHA-256 is stored) in an HTTP-only,
 `SameSite=Lax`, `Secure` cookie; sign-up and login are rate-limited.
@@ -84,9 +84,9 @@ reporting (a post reported by three people is hidden).
 Images are downscaled in the browser (≤1440 px) to fit the hosting request limit, then decoded and re-encoded as JPEG
 on the server, which also strips EXIF metadata such as GPS location.
 
-## InstaFin news pages, video and charts
+## Finstagram news pages, video and charts
 
-InstaFin is pre-filled by platform-run **news pages** (`uae.markets`, `gulf.business`, `global.markets`, `tech.stocks`,
+Finstagram is pre-filled by platform-run **news pages** (`uae.markets`, `gulf.business`, `global.markets`, `tech.stocks`,
 `energy.desk`, `crypto.desk`, `macro.watch`, `market.tv`, `nexis.charts`), each labelled as automated:
 
 * **Articles** from publisher RSS feeds (Khaleej Times, Gulf News, The National, Arabian Business, Yahoo Finance,
@@ -110,11 +110,17 @@ bar finds stocks, accounts and hashtags; stock and hashtag pages can be followed
 
 ## Accounts
 
-One account covers the whole site (`/login`): email and password, **Continue with Google** (`NEXIS_GOOGLE_CLIENT_ID`,
-`NEXIS_GOOGLE_CLIENT_SECRET`) and **Continue with Apple** (`NEXIS_APPLE_CLIENT_ID`, `NEXIS_APPLE_TEAM_ID`,
-`NEXIS_APPLE_KEY_ID`, `NEXIS_APPLE_PRIVATE_KEY`), with redirect URIs `{NEXIS_PUBLIC_URL}/api/auth/oauth/{google|apple}/callback`.
-The OAuth flow uses state, nonce and PKCE (Google) in a signed cookie and checks the ID token's issuer, audience, expiry
-and nonce. An existing email account is linked when the provider reports a verified email.
+One account covers the whole site (`/login`), with three ways in:
+
+* **Email** and password;
+* **Mobile number** — UAE numbers can be typed locally (`050 123 4567` → `+971501234567`). Without an SMS provider the
+  number is a login identifier with a password. With Twilio Verify configured (`NEXIS_TWILIO_ACCOUNT_SID`,
+  `NEXIS_TWILIO_AUTH_TOKEN`, `NEXIS_TWILIO_VERIFY_SID`) the page switches to passwordless sign-in: a 6-digit code is sent by
+  SMS and checked by Twilio (rate-limited per IP and per number);
+* **Continue with Google** (`NEXIS_GOOGLE_CLIENT_ID`, `NEXIS_GOOGLE_CLIENT_SECRET`, redirect URI
+  `{NEXIS_PUBLIC_URL}/api/auth/oauth/google/callback`) — the button appears only once configured. The flow uses state,
+  nonce and PKCE in a signed cookie and checks the ID token's issuer, audience, expiry and nonce; an existing email
+  account is linked when Google reports a verified email.
 
 ## AI advisor (streaming)
 

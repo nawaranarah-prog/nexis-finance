@@ -1,4 +1,4 @@
-"""InstaFin: a finance-focused social feed — posts with photos, $CASHTAGS, likes, comments, follows.
+"""Finstagram: a finance-focused social feed — posts with photos, $CASHTAGS, likes, comments, follows.
 
 Images are decoded and re-encoded server-side (which also strips EXIF metadata such as GPS
 location) and capped in size. Posts reported by three different people are hidden automatically.
