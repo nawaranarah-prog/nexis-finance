@@ -34,6 +34,14 @@ const Economic = lazy(() => import("./pages/Economic"));
 const AuditLog = lazy(() => import("./pages/AuditLog"));
 const Developer = lazy(() => import("./pages/Developer"));
 const Assistant = lazy(() => import("./pages/Assistant"));
+const Markets = lazy(() => import("./pages/Markets"));
+const Instrument = lazy(() => import("./pages/Instrument"));
+const Advisor = lazy(() => import("./pages/Advisor"));
+const Compare = lazy(() => import("./pages/Compare"));
+const Valuation = lazy(() => import("./pages/Valuation"));
+const InstaFin = lazy(() => import("./pages/InstaFin"));
+const InstaPost = lazy(() => import("./pages/InstaFin").then((m) => ({ default: m.PostPage })));
+const InstaProfile = lazy(() => import("./pages/InstaFin").then((m) => ({ default: m.ProfilePage })));
 
 function Waking() {
   const qc = useQueryClient();
@@ -98,6 +106,15 @@ export default function App() {
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/developer" element={<Developer />} />
           <Route path="/assistant" element={<Assistant />} />
+          <Route path="/markets" element={<Markets />} />
+          <Route path="/markets/:symbol" element={<Instrument />} />
+          <Route path="/advisor" element={<Advisor />} />
+          <Route path="/compare" element={<Compare />} />
+          <Route path="/valuation" element={<Valuation />} />
+          <Route path="/valuation/:symbol" element={<Valuation />} />
+          <Route path="/social" element={<InstaFin />} />
+          <Route path="/social/p/:id" element={<InstaPost />} />
+          <Route path="/social/u/:username" element={<InstaProfile />} />
           <Route path="*" element={<Empty>Page not found.</Empty>} />
         </Routes>
       </Suspense>

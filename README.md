@@ -53,11 +53,16 @@ Locally it can run fully offline in **DEMO / SYNTHETIC DATA MODE** on a seeded, 
 | **Connectivity layer** | Integration marketplace (market, brokerage, economic, regulatory, file sources) with honest status: live Yahoo prices, US Treasury yield curve, World Bank indicators, SEC EDGAR profiles & XBRL facts; FRED and Alpaca via your own API keys (encrypted at rest); others marked *Coming soon*. Sync engine with per-run added/updated/removed logs. |
 | **Universal import** | CSV / JSON / XLSX holdings, transactions and market data with automatic column detection, confidence scores and manual mapping; every source row kept verbatim for lineage; duplicate-file and duplicate-transaction detection. |
 | **Portfolio intelligence** | Automatic reconstruction of *My Portfolio* across accounts (no double counting), FX conversion, time-weighted history from transactions (or a labelled backcast), X-Ray (asset class, SEC SIC industry, HQ country, currency, concentration), *Why is my portfolio moving?* attribution, risk drill-down (Euler, correlation effect, CVaR and drawdown contributors), transparent diagnostics, FIFO / average-cost P&L, cross-source reconciliation, Financial Intelligence Graph, data lineage, research audit log. |
+| **Global markets** | Live quotes, charts at hourly/daily/weekly/monthly resolution, fundamentals, four years of statements, analyst consensus and news for stocks, ETFs, indices, bond ETFs and yields, commodities, FX and crypto on most exchanges — including the **Dubai Financial Market**. |
+| **AI Financial Advisor** | Ask "what's up with Emaar? I want to buy 500 shares" — the model answers only through data tools (live quote, fundamentals, analyst consensus, news, price statistics, comparisons, valuation, position calculator) and shows its sources; without a model it returns a labelled live data briefing. |
+| **Compare & Reports** | Compare up to 8 instruments over any window with periodic returns by hour/day/week/month/quarter/year, correlation, fundamentals and a transparent scorecard; export a PDF with a **Recommendation** section. |
+| **Valuation (investment banking)** | DCF with CAPM WACC and sensitivity grid, reverse DCF, trading comparables (curated GCC sector groups), football field, blended fair value with confidence flags; PDF export. |
+| **InstaFin** | Instagram-style finance community: accounts, photo posts with $CASHTAG price cards, likes, comments, follows, trending, profiles linking to people's Instagram/X/LinkedIn, share shortcuts, reporting. Details: [docs/MARKETS_AND_SOCIAL.md](docs/MARKETS_AND_SOCIAL.md). |
 | **Research Assistant** | Answers questions such as "what contributed most to my volatility?" by retrieving stored metrics and showing the evidence — deterministic, no generative model; unverifiable questions are declined. |
 | **Developer platform** | Read-only public API (`/api/v1`, bearer keys stored as SHA-256 hashes), HMAC-signed webhooks with retries and a delivery log, OpenAPI docs. |
 | **Platform** | Background jobs with progress, toast notifications, ⌘K command palette, a System Health page (DB latency, freshness, record counts, request p50/p95, job failures), structured logging, structured error responses. |
 
-The UI has 28 pages across research (Overview, Market Data, Data Quality, Asset Research, Portfolio Lab, Risk, Stress, Factors, Strategies, Backtesting, ML, Regimes, Anomalies, Experiments, Assistant, Reports) and the connectivity layer (Connections, Financial Intelligence, Portfolio X-Ray, Transactions, Intelligence Graph, Reconciliation, Economic & Filings, Data Lineage, Audit Log, Developer API, System Health, Settings). Details: [docs/CONNECTIVITY.md](docs/CONNECTIVITY.md).
+The UI has 36 pages: markets & advice (Global Markets, instrument pages, AI Advisor, Compare & Reports, Valuation, InstaFin feed, posts and profiles), research (Overview, Market Data, Data Quality, Asset Research, Portfolio Lab, Risk, Stress, Factors, Strategies, Backtesting, ML, Regimes, Anomalies, Experiments, Assistant, Reports) and the connectivity layer (Connections, Financial Intelligence, Portfolio X-Ray, Transactions, Intelligence Graph, Reconciliation, Economic & Filings, Data Lineage, Audit Log, Developer API, System Health, Settings). Details: [docs/CONNECTIVITY.md](docs/CONNECTIVITY.md).
 
 **Design:** Geist type, dense tables and hairline surfaces; motion is short and purposeful (ease-out on enter,
 press feedback, popovers that grow from their trigger, a ⌘K palette, stacked toasts) and disabled under
@@ -249,7 +254,7 @@ The conventions below are applied everywhere and are also served to the UI as to
 
 ```bash
 cd backend
-pytest                  # 154 tests, about 1 minute
+pytest                  # 173 tests, about 1 minute
 ruff check app tests ../scripts && ruff format --check app tests ../scripts
 cd ../frontend && npm run typecheck && npm run build
 # optional browser workflow check (API + Vite dev server running; needs `pip install playwright` and Edge/Chromium)
@@ -336,7 +341,10 @@ the HTTP requests the web UI makes, so it works even when the database port is n
 * Factor analytics use price- and volume-derived **proxies**. No accounting fundamentals are available, and none are fabricated.
 * Regime labels and anomaly flags are unsupervised model outputs with no guaranteed economic meaning.
 * The job runner is an in-process thread pool (inline on serverless): jobs survive page reloads but not API restarts. On the hosted instance a single job is limited to 300 seconds.
-* The hosted instance is one shared workspace with no accounts: anything imported there is visible to every visitor. Run your own instance for private data.
+* The research workspace on the hosted instance is shared (InstaFin has accounts, the research pages do not): anything imported there is visible to every visitor. Run your own instance for private data.
+* Market data, fundamentals and news come from unofficial public endpoints without an SLA; Abu Dhabi (ADX) listings and individual bond prices are not available from them.
+* The AI advisor needs a language model: on Vercel, activate the account's AI Gateway (adding a card unlocks the free monthly credits) — no key or redeploy needed — or set `ANTHROPIC_API_KEY` / `NEXIS_LLM_API_KEY`. Until then it answers with data briefings.
+* Automated recommendations are rule-based or model-written summaries of public data, not personalised advice; InstaFin moderation is report-based.
 * No user accounts or multi-tenant separation: it is a single-owner research tool (the public API uses owner-issued keys). A fake login screen would add nothing.
 * The Research Assistant is deliberately not an LLM: it answers a fixed set of question types from stored metrics and declines everything else.
 * FRED and Alpaca integrations are verified only against documented response shapes (mocked tests) until you connect your own key/account; OAuth aggregators (Plaid, SnapTrade, IBKR, Schwab) are listed as *Coming soon*.

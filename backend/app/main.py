@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
-from app.api.routes import connectivity, data, portfolios, public_v1, reports, research, system
+from app.api.routes import connectivity, data, markets, portfolios, public_v1, reports, research, social, system
 from app.core.config import APP_VERSION, get_settings
 from app.core.errors import NexisError
 from app.core.logging import configure_logging, get_logger, log_event, request_metrics
@@ -69,6 +69,10 @@ app.add_middleware(
 @app.middleware("http")
 async def timing_middleware(request: Request, call_next: Any) -> Any:
     start = time.perf_counter()
+    # Vercel passes a short-lived OIDC token with each function request; the AI Gateway accepts it.
+    from app.services import llm
+
+    llm.set_request_token(request.headers.get("x-vercel-oidc-token"))
     response = await call_next(request)
     dur = (time.perf_counter() - start) * 1000
     route = request.scope.get("route")
@@ -114,5 +118,15 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     return _error(500, "internal_error", "an unexpected error occurred; details were logged on the server")
 
 
-for r in (system.router, data.router, portfolios.router, research.router, reports.router, connectivity.router, public_v1.router):
+for r in (
+    system.router,
+    data.router,
+    portfolios.router,
+    research.router,
+    reports.router,
+    connectivity.router,
+    public_v1.router,
+    markets.router,
+    social.router,
+):
     app.include_router(r, prefix="/api")

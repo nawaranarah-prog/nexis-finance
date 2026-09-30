@@ -55,3 +55,13 @@ class ConflictError(NexisError):
 class ModelError(NexisError):
     status_code = 500
     code = "model_failure"
+
+
+class AuthenticationRequired(NexisError):
+    status_code = 401
+    code = "authentication_required"
+
+
+class Forbidden(NexisError):
+    status_code = 403
+    code = "forbidden"

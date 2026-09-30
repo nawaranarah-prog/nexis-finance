@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     jobs_inline: bool = ON_SERVERLESS
     # Public shared deployment: every visitor sees the same workspace, so stored credentials are refused.
     public_instance: bool = False
+
+    # Language model for the AI advisor and report narratives (see app/services/llm.py for credential order).
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
+    llm_model: str = "anthropic/claude-sonnet-5.5"
+    # Abuse protection for public endpoints (per client IP, per hour).
+    advisor_requests_per_hour: int = 20
+    posts_per_hour: int = 12
     # Seed the demo database in the background when it is empty (hosted demo deployments).
     auto_seed: bool = False
 

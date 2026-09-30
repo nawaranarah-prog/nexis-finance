@@ -6,6 +6,7 @@ import App from "./App";
 import { WorkspaceProvider } from "./hooks/workspace";
 import { ApiError } from "./services/api";
 import "./styles.css";
+import "./styles-markets.css";
 
 const client = new QueryClient({
   defaultOptions: {

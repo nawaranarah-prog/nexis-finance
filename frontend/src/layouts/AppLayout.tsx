@@ -11,6 +11,16 @@ import { dt } from "../utils/format";
 export const NAV: { group: string; items: { to: string; label: string }[] }[] = [
   { group: "Workspace", items: [{ to: "/", label: "Overview" }] },
   {
+    group: "Markets & Advice",
+    items: [
+      { to: "/markets", label: "Global Markets" },
+      { to: "/advisor", label: "AI Advisor" },
+      { to: "/compare", label: "Compare & Reports" },
+      { to: "/valuation", label: "Valuation (IB)" },
+      { to: "/social", label: "InstaFin" },
+    ],
+  },
+  {
     group: "Connect & Understand",
     items: [
       { to: "/connections", label: "Connections" },

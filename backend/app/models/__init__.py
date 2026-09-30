@@ -1,5 +1,6 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
+from app.models.community import Comment, Follow, Like, MarketCache, Media, Post, PostReport, RateEvent, User, UserSession
 from app.models.connectivity import (
     Account,
     ApiKey,
@@ -38,6 +39,7 @@ __all__ = [
     "AuditLog",
     "Backtest",
     "BacktestTrade",
+    "Comment",
     "CompanyProfile",
     "Connection",
     "DataQualityIssue",
@@ -47,17 +49,24 @@ __all__ = [
     "EconomicSeries",
     "Experiment",
     "ExperimentMetric",
+    "Follow",
     "Fundamental",
     "Holding",
     "ImportBatch",
     "IngestionRun",
     "Job",
+    "Like",
     "MLPrediction",
+    "MarketCache",
     "MarketData",
+    "Media",
     "Notification",
     "Portfolio",
     "PortfolioPosition",
     "PortfolioReturn",
+    "Post",
+    "PostReport",
+    "RateEvent",
     "Report",
     "RiskMetric",
     "SourceRecord",
@@ -65,6 +74,8 @@ __all__ = [
     "StressTest",
     "SyncRun",
     "Transaction",
+    "User",
+    "UserSession",
     "WebhookDelivery",
     "WebhookEndpoint",
 ]

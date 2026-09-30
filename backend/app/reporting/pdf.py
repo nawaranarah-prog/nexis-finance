@@ -148,11 +148,16 @@ def _compact(v: float, _pos: int | None = None) -> str:
 
 
 def line_chart(
-    dates: list[str], series: dict[str, list[float | None]], title: str, percent: bool = False, fill_negative: bool = False
+    dates: list[str],
+    series: dict[str, list[float | None]],
+    title: str,
+    percent: bool = False,
+    fill_negative: bool = False,
+    date_fmt: str | None = None,
 ) -> Image:
     fig, ax = _base_ax(title)
     x = pd.to_datetime(dates)
-    palette = [ACCENT, BENCH, "#0f766e", "#b45309"]
+    palette = [ACCENT, BENCH, "#0f766e", "#b45309", "#7c3aed", "#be123c", "#0891b2", "#4d7c0f"]
     for i, (name, ys) in enumerate(series.items()):
         y = pd.Series(ys, dtype=float)
         ax.plot(x, y, lw=1.1, color=palette[i % len(palette)], label=name)
@@ -162,7 +167,11 @@ def line_chart(
         ax.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0, decimals=0))
     else:
         ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(_compact))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    if date_fmt is None and len(x) > 1:
+        span = (x.max() - x.min()).days
+        date_fmt = "%d %b %H:%M" if span <= 7 else "%d %b" if span <= 120 else "%b %Y" if span <= 800 else "%Y"
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(date_fmt or "%Y"))
+    fig.autofmt_xdate(rotation=0, ha="center")
     if len(series) > 1:
         ax.legend(fontsize=7, frameon=False, loc="upper left")
     return _fig_to_image(fig)
