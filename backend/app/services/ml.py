@@ -160,7 +160,10 @@ def run_regime(db: Session, cfg: dict[str, Any], progress: Progress = None, pare
     def work() -> dict[str, Any]:
         if progress:
             progress(0.2, "building regime features")
-        uni = panel.returns(panel.tradable)
+        # Align the universe to the benchmark's trading calendar first: assets listed on other exchanges
+        # (or FX pairs) trade on different days, and returns on the union calendar would be mostly gaps.
+        cal = panel.adj_close[bench].dropna().index
+        uni = panel.adj_close[panel.tradable].reindex(cal).pct_change(fill_method=None)
         res = run_regime_experiment(panel.adj_close[bench].dropna(), uni, cfg, _true_regimes(ds, panel.close.index))
         mrows = [("full", None, "n_regimes", res["n_regimes"])]
         for s in res["regime_stats"]:

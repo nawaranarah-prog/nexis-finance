@@ -68,7 +68,7 @@ class PeakMemory:
         self._t.start()
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self._stop.set()
         self._t.join()
         self.peak = max(self.peak, self.proc.memory_info().rss)
@@ -139,7 +139,11 @@ def generate(n_records: int, n_symbols: int, seed: int, out: Path) -> int:
         dup = df.sample(n=k, random_state=seed + b)
         df = pd.concat([df, dup], ignore_index=True)
         df["bucket"] = b
-        pq.write_to_dataset(pa.Table.from_pandas(df, preserve_index=False), out, partition_cols=["bucket"])
+        pq.write_to_dataset(
+            pa.Table.from_pandas(df, preserve_index=False),
+            out,
+            partition_cols=["bucket"],
+        )
         written += len(df)
     return written
 
@@ -172,7 +176,12 @@ def validate_batch(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--records", type=int, default=1_000_000)
-    ap.add_argument("--symbols", type=int, default=None, help="default: records / 2500 (≈10 years per symbol)")
+    ap.add_argument(
+        "--symbols",
+        type=int,
+        default=None,
+        help="default: records / 2500 (≈10 years per symbol)",
+    )
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--keep", action="store_true", help="keep generated files after the run")
     args = ap.parse_args()
@@ -199,7 +208,11 @@ def main() -> None:
             for k, v in c.items():
                 rejected[k] = rejected.get(k, 0) + v
             good = good.assign(year=pd.to_datetime(good["date"]).dt.year).drop(columns=["bucket"], errors="ignore")
-            pq.write_to_dataset(pa.Table.from_pandas(good, preserve_index=False), clean, partition_cols=["year"])
+            pq.write_to_dataset(
+                pa.Table.from_pandas(good, preserve_index=False),
+                clean,
+                partition_cols=["year"],
+            )
             accepted += len(good)
         info.update(accepted=accepted, **rejected)
 
@@ -212,7 +225,10 @@ def main() -> None:
         rows = 0
         for i in range(0, len(symbols), chunk):
             part = symbols[i : i + chunk]
-            df = cdset.to_table(filter=ds.field("symbol").isin(part), columns=["symbol", "date", "close"]).to_pandas()
+            df = cdset.to_table(
+                filter=ds.field("symbol").isin(part),
+                columns=["symbol", "date", "close"],
+            ).to_pandas()
             df = df.sort_values(["symbol", "date"])
             g = df.groupby("symbol", sort=False)["close"]
             df["ret"] = g.pct_change(fill_method=None)
@@ -220,7 +236,9 @@ def main() -> None:
             df["vol_20"] = lr.groupby(df["symbol"]).rolling(20).std().reset_index(level=0, drop=True) * np.sqrt(252)
             df["mom_60"] = df["close"] / g.shift(60) - 1
             pq.write_to_dataset(
-                pa.Table.from_pandas(df.assign(part=i // chunk), preserve_index=False), feats, partition_cols=["part"]
+                pa.Table.from_pandas(df.assign(part=i // chunk), preserve_index=False),
+                feats,
+                partition_cols=["part"],
             )
             rows += len(df)
         info["rows"] = rows
@@ -234,7 +252,11 @@ def main() -> None:
         f["month"] = pd.to_datetime(f["date"]).dt.to_period("M")
         # Vectorised compounding: expm1 of summed log returns per (symbol, month) — no Python-level apply.
         monthly = np.expm1(np.log1p(f["ret"]).groupby([f["symbol"], f["month"]]).sum())
-        xs = f.groupby("date").agg(mean_ret=("ret", "mean"), dispersion=("ret", "std"), median_vol=("vol_20", "median"))
+        xs = f.groupby("date").agg(
+            mean_ret=("ret", "mean"),
+            dispersion=("ret", "std"),
+            median_vol=("vol_20", "median"),
+        )
         info.update(monthly_rows=len(monthly), cross_section_rows=len(xs))
         del f
 
@@ -251,7 +273,12 @@ def main() -> None:
             b = batch.to_pandas()
             con.executemany(
                 "INSERT INTO bars VALUES (?,?,?)",
-                zip(b["symbol"], pd.to_datetime(b["date"]).dt.strftime("%Y-%m-%d"), b["ret"].astype(float), strict=True),
+                zip(
+                    b["symbol"],
+                    pd.to_datetime(b["date"]).dt.strftime("%Y-%m-%d"),
+                    b["ret"].astype(float),
+                    strict=True,
+                ),
             )
         con.execute("CREATE INDEX ix_bars ON bars(symbol, date)")
         con.commit()
@@ -261,7 +288,11 @@ def main() -> None:
         con.create_function("ln1p", 1, lambda x: None if x is None or x <= -1 else float(np.log1p(x)))
         n = con.execute("""SELECT COUNT(*) FROM (SELECT symbol, substr(date,1,7) AS m, exp(SUM(ln1p(ret))) - 1 AS r
                            FROM bars WHERE ret IS NOT NULL GROUP BY symbol, m)""").fetchone()[0]
-        info.update(load_seconds=round(load_s, 2), query_seconds=round(time.perf_counter() - t_q, 2), monthly_rows=n)
+        info.update(
+            load_seconds=round(load_s, 2),
+            query_seconds=round(time.perf_counter() - t_q, 2),
+            monthly_rows=n,
+        )
         con.close()
 
     with stage("5_incremental_append", n_sym) as info:
@@ -270,7 +301,8 @@ def main() -> None:
         new_day = pd.bdate_range(pd.Timestamp(last) + pd.Timedelta(days=1), periods=1)[0]
         rng = np.random.default_rng(args.seed + 1)
         last_close = cdset.to_table(
-            filter=ds.field("date") == pa.scalar(pd.Timestamp(last)), columns=["symbol", "close"]
+            filter=ds.field("date") == pa.scalar(pd.Timestamp(last)),
+            columns=["symbol", "close"],
         ).to_pandas()
         c = last_close["close"].to_numpy() * np.exp(rng.normal(0, 0.01, len(last_close)))
         new = pd.DataFrame(
@@ -286,7 +318,9 @@ def main() -> None:
         )
         good, _ = validate_batch(new)
         pq.write_to_dataset(
-            pa.Table.from_pandas(good.assign(year=new_day.year), preserve_index=False), clean, partition_cols=["year"]
+            pa.Table.from_pandas(good.assign(year=new_day.year), preserve_index=False),
+            clean,
+            partition_cols=["year"],
         )
         info.update(appended=len(good), partition_touched=f"year={new_day.year}")
 
@@ -301,7 +335,11 @@ def main() -> None:
             "cpu_count": os.cpu_count(),
             "ram_gb": round(psutil.virtual_memory().total / 2**30, 1),
         },
-        "library_versions": {"pandas": pd.__version__, "numpy": np.__version__, "pyarrow": pa.__version__},
+        "library_versions": {
+            "pandas": pd.__version__,
+            "numpy": np.__version__,
+            "pyarrow": pa.__version__,
+        },
         "stages": RESULTS,
     }
     out = BASE / f"benchmark-{args.records}.json"

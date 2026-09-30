@@ -194,6 +194,11 @@ def generate(
     db.add(rep)
     notify(db, "success", "report", "Research report generated", f"“{title}” ({len(content) / 1024:.0f} KB).", link="/reports")
     db.commit()
+    from app.services import audit
+    from app.services.webhooks import safe_emit
+
+    audit.record(db, "report.generated", "report", rep.id, {"title": title, "sections": sections, "sha256": rep.sha256})
+    safe_emit("report.generated", {"report_id": rep.id, "title": title})
     return rep
 
 

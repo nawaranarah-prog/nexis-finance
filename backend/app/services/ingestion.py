@@ -223,6 +223,21 @@ def ingest(
             )
         db.commit()
         market_data.invalidate(ds.id)
+        from app.services import audit
+
+        audit.record(
+            db,
+            "dataset.imported",
+            "dataset",
+            ds.code,
+            {
+                "provider": provider.name,
+                "mode": mode,
+                "inserted": run.records_inserted,
+                "rejected": run.records_rejected,
+                "version": ds.version_label,
+            },
+        )
         log_event(
             log,
             "ingestion finished",

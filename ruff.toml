@@ -1,0 +1,11 @@
+# Shared lint/format settings for scripts/ (backend/ has the same settings in pyproject.toml).
+line-length = 130
+target-version = "py311"
+extend-exclude = ["backend/alembic/versions", "frontend"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["B008", "RUF001", "RUF002", "RUF003", "SIM108", "E501"]
+
+[lint.per-file-ignores]
+"scripts/*.py" = ["E402"]  # scripts add backend/ to sys.path before importing the app

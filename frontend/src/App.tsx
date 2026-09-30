@@ -1,4 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "./services/api";
 import { Route, Routes } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
 import { Empty, ErrorState, Loading } from "./components/ui";
@@ -21,11 +23,39 @@ const Experiments = lazy(() => import("./pages/Experiments"));
 const Reports = lazy(() => import("./pages/Reports"));
 const SystemHealth = lazy(() => import("./pages/SystemHealth"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Connections = lazy(() => import("./pages/Connections"));
+const Intelligence = lazy(() => import("./pages/Intelligence"));
+const XRay = lazy(() => import("./pages/XRay"));
+const Transactions = lazy(() => import("./pages/Transactions"));
+const Graph = lazy(() => import("./pages/Graph"));
+const Reconciliation = lazy(() => import("./pages/Reconciliation"));
+const Lineage = lazy(() => import("./pages/Lineage"));
+const Economic = lazy(() => import("./pages/Economic"));
+const AuditLog = lazy(() => import("./pages/AuditLog"));
+const Developer = lazy(() => import("./pages/Developer"));
+const Assistant = lazy(() => import("./pages/Assistant"));
+
+function Waking() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const t = window.setInterval(() => qc.invalidateQueries({ queryKey: ["datasets"] }), 6000);
+    return () => window.clearInterval(t);
+  }, [qc]);
+  return (
+    <div className="state">
+      <span className="spinner" />
+      <div style={{ marginTop: 10, fontWeight: 600, color: "var(--text)" }}>Waking up the research API…</div>
+      <div style={{ marginTop: 4 }}>The hosted demo runs on a free server that sleeps when idle and re-seeds its data on boot. This usually takes under a minute — retrying automatically.</div>
+    </div>
+  );
+}
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { loading, error, dataset } = useWorkspace();
   if (loading) return <Loading label="Connecting to the research API" />;
+  if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) return <Waking />;
   if (error) return <ErrorState error={error} />;
+  if (!dataset && import.meta.env.PROD) return <Waking />;
   if (!dataset)
     return (
       <Empty>
@@ -58,6 +88,17 @@ export default function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/system" element={<SystemHealth />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/connections" element={<Connections />} />
+          <Route path="/intelligence" element={<Intelligence />} />
+          <Route path="/xray" element={<XRay />} />
+          <Route path="/transactions" element={<Transactions />} />
+          <Route path="/graph" element={<Graph />} />
+          <Route path="/reconciliation" element={<Reconciliation />} />
+          <Route path="/lineage" element={<Lineage />} />
+          <Route path="/economic" element={<Economic />} />
+          <Route path="/audit" element={<AuditLog />} />
+          <Route path="/developer" element={<Developer />} />
+          <Route path="/assistant" element={<Assistant />} />
           <Route path="*" element={<Empty>Page not found.</Empty>} />
         </Routes>
       </Suspense>

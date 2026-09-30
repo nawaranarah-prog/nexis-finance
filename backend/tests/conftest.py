@@ -15,6 +15,10 @@ _TMP = Path(tempfile.mkdtemp(prefix="nexis-test-"))
 os.environ["NEXIS_DATABASE_URL"] = f"sqlite:///{(_TMP / 'test.db').as_posix()}"
 os.environ["NEXIS_REPORTS_DIR"] = str(_TMP / "reports")
 os.environ["NEXIS_LOG_LEVEL"] = "WARNING"
+# No network in tests: external providers are exercised through mocked HTTP transports instead.
+os.environ["NEXIS_PUBLIC_PROVIDER_ENABLED"] = "false"
+os.environ["NEXIS_EXTERNAL_DATA_ENABLED"] = "false"
+os.environ["NEXIS_SECRET_KEY"] = "test-only-secret-key"
 
 from app.core.config import get_settings  # noqa: E402
 

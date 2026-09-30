@@ -73,6 +73,9 @@ def run_quality_check(db: Session, dataset_id: int) -> DataQualityRun:
             link="/data-quality",
         )
     db.commit()
+    from app.services import audit
+
+    audit.record(db, "data_quality.assessed", "dataset", ds.code, {"score": run.overall_score, "status": run.status})
     return run
 
 

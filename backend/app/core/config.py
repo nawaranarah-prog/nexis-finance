@@ -33,14 +33,24 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     reports_dir: Path = PROJECT_DIR / "data" / "reports"
 
-    public_provider_enabled: bool = False
+    public_provider_enabled: bool = True
     public_provider_timeout_seconds: float = 15.0
+    # Keyless public sources (US Treasury, World Bank, SEC EDGAR) and keyed ones (FRED, Alpaca).
+    external_data_enabled: bool = True
+    # SEC fair-access policy requires a descriptive User-Agent with contact details.
+    sec_user_agent: str = "NexisFinance research contact@example.com"
+
+    # Fernet key (urlsafe base64, 32 bytes) used to encrypt connection credentials at rest.
+    # Development falls back to a generated key in backend/.nexis_secret (git-ignored).
+    secret_key: str | None = None
 
     max_upload_mb: int = 20
     risk_free_rate: float = 0.02
     trading_days: int = 252
 
     job_workers: int = 2
+    # Seed the demo database in the background when it is empty (hosted demo deployments).
+    auto_seed: bool = False
 
     @field_validator("database_url")
     @classmethod

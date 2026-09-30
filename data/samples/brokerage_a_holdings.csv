@@ -1,0 +1,10 @@
+Positions for account Individual ...1001 as of 09/25/2026 (SAMPLE FILE - fictional quantities)
+Symbol,Description,Quantity,Price,Market Value,Average Cost,Security Type,Account
+AAPL,APPLE INC,40,,,146.10,Equity,BRK-A-1001
+MSFT,MICROSOFT CORP,100,,,300.40,Equity,BRK-A-1001
+NVDA,NVIDIA CORP,60,,,125.05,Equity,BRK-A-1001
+SPY,SPDR S&P 500 ETF,30,,,420.03,ETF,BRK-A-1001
+TLT,ISHARES 20+ YEAR TREASURY BOND ETF,50,,,95.02,ETF,BRK-A-1001
+JNJ,JOHNSON & JOHNSON,35,,,160.03,Equity,BRK-A-1001
+CASH & CASH INVESTMENTS,Cash sweep,,,"$4,210.55",,Cash and Money Market,BRK-A-1001
+Account Total,,,,,,,BRK-A-1001

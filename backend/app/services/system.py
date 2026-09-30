@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import APP_VERSION, get_settings
 from app.core.logging import request_metrics
+from app.db import autoseed
 from app.models import (
     Anomaly,
     Asset,
@@ -132,6 +133,7 @@ def health(db: Session) -> dict[str, Any]:
             "engine": "sqlite" if settings.is_sqlite else "postgresql",
         },
         "requests": request_metrics.summary(),
+        "seeding": autoseed.status(),
     }
     if not db_ok:
         return out

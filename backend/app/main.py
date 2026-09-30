@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
-from app.api.routes import data, portfolios, reports, research, system
+from app.api.routes import connectivity, data, portfolios, public_v1, reports, research, system
 from app.core.config import APP_VERSION, get_settings
 from app.core.errors import NexisError
 from app.core.logging import configure_logging, get_logger, log_event, request_metrics
@@ -33,6 +33,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     from app.db.init_db import init_db
 
     init_db()
+    from app.db import autoseed
+
+    autoseed.maybe_start()
     log_event(
         log,
         "Nexis Finance API started",
@@ -59,7 +62,7 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -111,5 +114,5 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     return _error(500, "internal_error", "an unexpected error occurred; details were logged on the server")
 
 
-for r in (system.router, data.router, portfolios.router, research.router, reports.router):
+for r in (system.router, data.router, portfolios.router, research.router, reports.router, connectivity.router, public_v1.router):
     app.include_router(r, prefix="/api")

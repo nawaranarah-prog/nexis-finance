@@ -16,5 +16,7 @@ reportlab==5.0.1
 matplotlib==3.11.2
 psutil==7.2.2
 httpx==0.28.1
+cryptography==50.0.1
+openpyxl==3.1.5
 # PostgreSQL driver (only needed when NEXIS_DATABASE_URL points at PostgreSQL)
 psycopg[binary]>=3.2

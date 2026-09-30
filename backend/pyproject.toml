@@ -17,6 +17,7 @@ ignore = [
     "RUF002",
     "RUF003",
     "SIM108",
+    "E501",    # line length is enforced by `ruff format`; remaining cases are long prose strings
 ]
 
 [tool.pytest.ini_options]

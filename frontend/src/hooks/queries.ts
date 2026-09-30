@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../services/api";
+import { toast } from "../components/toast";
 import type { Asset, Experiment, GlossaryEntry, Job, Portfolio, StrategyInfo } from "../types/api";
 
 export function useAssets(datasetId: number | null) {
@@ -48,6 +49,22 @@ export function useExperiment(id: number | null) {
   });
 }
 
+const JOB_LABEL: Record<string, string> = {
+  backtest: "Backtest", walk_forward: "Walk-forward analysis", volatility_forecast: "Volatility experiment", regime: "Regime model",
+  anomaly: "Anomaly scan", report: "Research report", reproduce: "Reproduction", sync: "Sync",
+};
+
+function announce(j: Job) {
+  const label = JOB_LABEL[j.job_type] ?? "Job";
+  if (j.status === "succeeded") {
+    const r = j.result ?? {};
+    const detail = r.experiment_code ?? r.file_name ?? (r.records_added != null ? `${r.records_added} added, ${r.records_updated ?? 0} updated` : undefined);
+    toast(r.status === "failed" ? "error" : r.status === "warning" ? "warning" : "success", `${label} ${r.status === "failed" ? "failed" : "completed"}`, detail);
+  } else if (j.status === "failed") {
+    toast("error", `${label} failed`, j.error ?? undefined, 7000);
+  }
+}
+
 /**
  * Submit a long-running operation that returns a Job (HTTP 202) and poll it to completion.
  * On success the given query keys are invalidated so lists refresh.
@@ -69,6 +86,7 @@ export function useJobRunner(invalidate: string[][] = []) {
         (j) => {
           setJob(j);
           if (j.status === "succeeded" || j.status === "failed") {
+            announce(j);
             if (j.status === "failed") setError(j.error ?? "Job failed");
             invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
             qc.invalidateQueries({ queryKey: ["notifications"] });
@@ -95,6 +113,7 @@ export function useJobRunner(invalidate: string[][] = []) {
         const j = await api.post<Job>(path, body);
         setJob(j);
         if (j.status === "succeeded" || j.status === "failed") {
+          announce(j);
           if (j.status === "failed") setError(j.error ?? "Job failed");
           invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
           return j;
@@ -102,6 +121,7 @@ export function useJobRunner(invalidate: string[][] = []) {
         return await new Promise<Job>((resolve) => poll(j.id, resolve));
       } catch (e) {
         setError(errorMessage(e));
+        toast("error", "Request rejected", errorMessage(e), 7000);
         return null;
       } finally {
         setSubmitting(false);

@@ -45,6 +45,10 @@ async function request<T>(method: string, path: string, body?: unknown, params?:
   } catch {
     data = null;
   }
+  if (!res.ok && data === null && [404, 502, 503, 504].includes(res.status)) {
+    // A non-JSON error body means the API itself is not reachable (sleeping, deploying or not deployed).
+    throw new ApiError(503, "api_unavailable", "The research API is not reachable yet.");
+  }
   if (!res.ok) {
     const err = (data as { error?: { code: string; message: string; details?: unknown } } | null)?.error;
     throw new ApiError(res.status, err?.code ?? "http_error", err?.message ?? `Request failed (HTTP ${res.status})`, err?.details);

@@ -1,13 +1,27 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../services/api";
+import CommandPalette from "../components/CommandPalette";
+import { Toaster } from "../components/toast";
 import { useWorkspace } from "../hooks/workspace";
-import type { AnyObj, Notification } from "../types/api";
+import type { Notification } from "../types/api";
 import { dt } from "../utils/format";
 
 export const NAV: { group: string; items: { to: string; label: string }[] }[] = [
   { group: "Workspace", items: [{ to: "/", label: "Overview" }] },
+  {
+    group: "Connect & Understand",
+    items: [
+      { to: "/connections", label: "Connections" },
+      { to: "/intelligence", label: "Financial Intelligence" },
+      { to: "/xray", label: "Portfolio X-Ray" },
+      { to: "/transactions", label: "Transactions" },
+      { to: "/graph", label: "Intelligence Graph" },
+      { to: "/reconciliation", label: "Reconciliation" },
+      { to: "/economic", label: "Economic & Filings" },
+    ],
+  },
   { group: "Data", items: [{ to: "/market-data", label: "Market Data" }, { to: "/data-quality", label: "Data Quality" }] },
   {
     group: "Portfolio & Risk",
@@ -28,64 +42,21 @@ export const NAV: { group: string; items: { to: string; label: string }[] }[] = 
       { to: "/regimes", label: "Regime Analysis" },
       { to: "/anomalies", label: "Anomaly Detection" },
       { to: "/experiments", label: "Research Experiments" },
+      { to: "/assistant", label: "Research Assistant" },
     ],
   },
   { group: "Output", items: [{ to: "/reports", label: "Reports" }] },
-  { group: "Platform", items: [{ to: "/system", label: "System Health" }, { to: "/settings", label: "Settings" }] },
+  {
+    group: "Platform",
+    items: [
+      { to: "/lineage", label: "Data Lineage" },
+      { to: "/audit", label: "Audit Log" },
+      { to: "/developer", label: "Developer API" },
+      { to: "/system", label: "System Health" },
+      { to: "/settings", label: "Settings" },
+    ],
+  },
 ];
-
-function GlobalSearch() {
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const [debounced, setDebounced] = useState("");
-  const nav = useNavigate();
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebounced(q.trim()), 200);
-    return () => window.clearTimeout(t);
-  }, [q]);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const k = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); ref.current?.querySelector("input")?.focus(); }
-    };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("keydown", k);
-    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); };
-  }, []);
-  const r = useQuery({ queryKey: ["search", debounced], queryFn: () => api.get<AnyObj>("/search", { q: debounced }), enabled: debounced.length > 0 });
-  const groups: [string, AnyObj[], (x: AnyObj) => ReactNode][] = r.data
-    ? [
-        ["Assets", r.data.assets, (x) => <><span><b className="mono">{x.symbol}</b> <span className="text2">{x.name}</span></span><span className="xs muted">{x.dataset}</span></>],
-        ["Portfolios", r.data.portfolios, (x) => <span>{x.name}</span>],
-        ["Experiments", r.data.experiments, (x) => <><span><b className="mono">{x.code}</b> <span className="text2">{x.name}</span></span><span className="xs muted">{x.status}</span></>],
-        ["Backtests", r.data.backtests, (x) => <><span>{x.name}</span><span className="xs muted">{x.strategy}</span></>],
-      ]
-    : [];
-  const total = groups.reduce((n, g) => n + g[1].length, 0);
-  const go = (link: string) => { setOpen(false); setQ(""); nav(link); };
-  return (
-    <div className="search" ref={ref}>
-      <span className="icon" aria-hidden>⌕</span>
-      <input className="input" placeholder="Search assets, portfolios, experiments, backtests  (Ctrl+K)" value={q}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
-        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); if (e.key === "Enter" && total) { const first = groups.find((g) => g[1].length); if (first) go(first[1][0].link); } }}
-        aria-label="Global search" />
-      {open && debounced && (
-        <div className="popover">
-          {r.isLoading && <div className="state">Searching…</div>}
-          {r.data && total === 0 && <div className="state">No results for “{debounced}”.</div>}
-          {groups.filter((g) => g[1].length).map(([name, items, render]) => (
-            <div key={name}>
-              <div className="pop-group">{name}</div>
-              {items.map((x, i) => <div key={i} className="pop-item" onClick={() => go(x.link)}>{render(x)}</div>)}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function Notifications() {
   const [open, setOpen] = useState(false);
@@ -128,10 +99,25 @@ function Notifications() {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { datasets, dataset, setDatasetId, settings, updateSettings } = useWorkspace();
+  const [drawer, setDrawer] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const location = useLocation();
+  useEffect(() => {
+    setDrawer(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); }
+    };
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, []);
+  const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })));
   let idx = 0;
   return (
     <div className="app">
-      <aside className="sidebar">
+      <div className={`scrim ${drawer ? "open" : ""}`} onClick={() => setDrawer(false)} aria-hidden />
+      <aside className={`sidebar ${drawer ? "open" : ""}`} aria-label="Navigation">
         <div className="brand">
           <div className="brand-name"><img src="/favicon.svg" alt="" width={20} height={20} /> NEXIS FINANCE</div>
           <div className="brand-sub">Quantitative Research · Portfolio Risk · Financial ML · Big Data</div>
@@ -157,23 +143,28 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </aside>
       <div className="main">
         <header className="topbar">
-          <select className="input" style={{ width: 250 }} value={dataset?.id ?? ""} onChange={(e) => setDatasetId(Number(e.target.value))} aria-label="Dataset">
+          <button className="btn ghost menu-btn" aria-label="Open navigation" onClick={() => setDrawer(true)}>☰</button>
+          <span className="xs muted hide-sm">Research dataset</span>
+          <select className="input hide-sm" style={{ width: 230 }} value={dataset?.id ?? ""} onChange={(e) => setDatasetId(Number(e.target.value))} aria-label="Research dataset">
             {datasets.map((d) => <option key={d.id} value={d.id}>{d.code} · v{d.version}</option>)}
           </select>
           {dataset && (dataset.is_synthetic
-            ? <span className="badge synthetic" title="All observations are artificially generated">DEMO / SYNTHETIC DATA MODE</span>
-            : <span className="badge info">LIVE PUBLIC DATA · {dataset.source}</span>)}
-          {dataset && <span className="xs muted">through {dataset.end_date}</span>}
-          <span className="spacer" />
-          <GlobalSearch />
+            ? <span className="badge synthetic hide-sm" title="The selected research dataset is artificially generated">DEMO / SYNTHETIC DATA MODE</span>
+            : <span className="badge info hide-sm">LIVE PUBLIC DATA · {dataset.source}</span>)}
+          <span className="spacer hide-sm" />
+          <button className="search-trigger" onClick={() => setPalette(true)} aria-label="Open command palette">
+            <span aria-hidden>⌕</span><span className="grow">Search or jump to…</span><kbd className="hide-sm">Ctrl K</kbd>
+          </button>
           <Notifications />
           <button className="btn ghost" aria-label="Toggle theme" title="Toggle theme"
             onClick={() => updateSettings({ theme: settings.theme === "dark" ? "light" : settings.theme === "light" ? "system" : "dark" })}>
             {settings.theme === "dark" ? "☾" : settings.theme === "light" ? "☀" : "◐"}
           </button>
         </header>
-        <main className="content">{children}</main>
+        <main className="content"><div key={location.pathname} className="route-enter">{children}</div></main>
       </div>
+      <CommandPalette open={palette} onClose={() => setPalette(false)} pages={pages} />
+      <Toaster />
     </div>
   );
 }

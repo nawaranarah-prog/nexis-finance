@@ -21,12 +21,24 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.core.logging import configure_logging  # noqa: E402
-from app.data.providers import SyntheticMarketDataProvider  # noqa: E402
-from app.data.synthetic import SyntheticConfig  # noqa: E402
-from app.db import session as db_session  # noqa: E402
-from app.db.init_db import init_db  # noqa: E402
-from app.services import backtests, ingestion, ml, portfolios, quality, reports, stress  # noqa: E402
+from app.core.logging import configure_logging
+from app.data.providers import SyntheticMarketDataProvider
+from app.data.synthetic import SyntheticConfig
+from app.db import session as db_session
+from app.db.init_db import init_db
+from app.models import Dataset
+from app.services import (
+    backtests,
+    connections,
+    imports,
+    ingestion,
+    ml,
+    portfolios,
+    quality,
+    reports,
+    stress,
+)
+from sqlalchemy import select
 
 DATASET_CODE = "SYN-MULTI-DEMO"
 
@@ -42,8 +54,13 @@ def done(t0: float, extra: str = "") -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--minimal", action="store_true", help="only load data, run data quality and create portfolios")
+    ap.add_argument(
+        "--minimal",
+        action="store_true",
+        help="only load data, run data quality and create portfolios",
+    )
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--offline", action="store_true", help="skip real external data (Yahoo, SEC, Treasury, World Bank)")
     args = ap.parse_args()
     configure_logging("WARNING")
 
@@ -72,7 +89,10 @@ def main() -> None:
             "Synthetic multi-sector universe (DEMO / SYNTHETIC DATA MODE). See manifest for generation details.",
             ds_config,
         )
-        done(t, f"inserted={run.records_inserted:,} rejected={run.records_rejected} duplicates={run.duplicates}")
+        done(
+            t,
+            f"inserted={run.records_inserted:,} rejected={run.records_rejected} duplicates={run.duplicates}",
+        )
 
         t = step("Incremental update to 2026-06-30 (only new bars are requested)")
         run = ingestion.ingest(
@@ -87,7 +107,10 @@ def main() -> None:
             None,
             ds_config,
         )
-        done(t, f"received={run.records_received:,} inserted={run.records_inserted:,} version={run.dataset_version}")
+        done(
+            t,
+            f"received={run.records_received:,} inserted={run.records_inserted:,} version={run.dataset_version}",
+        )
         ds_id = run.dataset_id
 
         t = step("Data-quality assessment")
@@ -145,7 +168,14 @@ def main() -> None:
                 "name": "Growth Tilt (custom)",
                 "symbols": ["TCH1", "TCH2", "TCH3", "DSC1", "DSC3", "FIN2"],
                 "allocation_method": "custom",
-                "weights": {"TCH1": 0.25, "TCH2": 0.2, "TCH3": 0.15, "DSC1": 0.15, "DSC3": 0.15, "FIN2": 0.10},
+                "weights": {
+                    "TCH1": 0.25,
+                    "TCH2": 0.2,
+                    "TCH3": 0.15,
+                    "DSC1": 0.15,
+                    "DSC3": 0.15,
+                    "FIN2": 0.10,
+                },
                 "notes": "Concentrated custom-weight portfolio for concentration and stress analysis.",
             },
         ]
@@ -166,9 +196,21 @@ def main() -> None:
         portfolios.risk_analysis(db, created[0].id, [0.95, 0.99], 756, 1)
         st_ids = []
         for preset in stress.PRESETS:
-            r = stress.run(db, created[3].id, preset["name"], preset["scenario_type"], preset["parameters"])
+            r = stress.run(
+                db,
+                created[3].id,
+                preset["name"],
+                preset["scenario_type"],
+                preset["parameters"],
+            )
             st_ids.append(r["id"])
-        stress.run(db, created[3].id, "Technology sector shock −15%", "sector_shock", {"sector": "Technology", "shock": -0.15})
+        stress.run(
+            db,
+            created[3].id,
+            "Technology sector shock −15%",
+            "sector_shock",
+            {"sector": "Technology", "shock": -0.15},
+        )
         done(t)
 
         base_bt = {
@@ -205,7 +247,12 @@ def main() -> None:
                 **base_bt,
                 "name": "Mean reversion z=2.0/0.25, 20d",
                 "strategy": "mean_reversion",
-                "params": {"window": 20, "entry_z": 2.0, "exit_z": 0.25, "max_positions": 10},
+                "params": {
+                    "window": 20,
+                    "entry_z": 2.0,
+                    "exit_z": 0.25,
+                    "max_positions": 10,
+                },
                 "train_end": "2022-12-30",
                 "validation_end": "2024-06-28",
             },
@@ -215,7 +262,12 @@ def main() -> None:
         t = step("Backtest: equal-weight baseline")
         r_eq = backtests.execute_backtest(
             db,
-            {**base_bt, "name": "Equal-weight monthly baseline", "strategy": "equal_weight", "params": {"rebalance": "monthly"}},
+            {
+                **base_bt,
+                "name": "Equal-weight monthly baseline",
+                "strategy": "equal_weight",
+                "params": {"rebalance": "monthly"},
+            },
         )
         done(t, r_eq["experiment_code"])
 
@@ -267,7 +319,14 @@ def main() -> None:
 
         t = step("ML: anomaly detection")
         r_an = ml.run_anomaly(
-            db, {"dataset_id": ds_id, "contamination": 0.002, "z_threshold": 6.0, "seed": 42, "name": "Universe anomaly scan"}
+            db,
+            {
+                "dataset_id": ds_id,
+                "contamination": 0.002,
+                "z_threshold": 6.0,
+                "seed": 42,
+                "name": "Universe anomaly scan",
+            },
         )
         done(t, r_an["experiment_code"])
 
@@ -277,11 +336,61 @@ def main() -> None:
             "Nexis Demo Research Report",
             created[0].id,
             r_mom["backtest_id"],
-            [r_vol["experiment_id"], r_reg["experiment_id"], r_an["experiment_id"], r_wf["experiment_id"]],
+            [
+                r_vol["experiment_id"],
+                r_reg["experiment_id"],
+                r_an["experiment_id"],
+                r_wf["experiment_id"],
+            ],
             st_ids[:3],
             "Generated by scripts/seed_demo.py on the synthetic demo dataset.",
         )
         done(t, rep.file_name)
+
+        t = step("Connectivity: synthetic source + sample brokerage statements (fictional quantities)")
+        connections.connect(db, "synthetic_market", None, None, None)
+        samples = ROOT / "data" / "samples"
+        for f, label, kind, opts in [
+            ("brokerage_a_holdings.csv", "Sample Brokerage A", "holdings", {"as_of": "2026-09-25"}),
+            ("brokerage_a_transactions.csv", "Sample Brokerage A", "transactions", {}),
+            ("brokerage_b_positions.xlsx", "Sample Brokerage B", "holdings", {"as_of": "2026-09-26"}),
+            (
+                "retirement_account.json",
+                "Sample Retirement Plan",
+                "holdings",
+                {"account": "IRA-001", "account_name": "Retirement (IRA)", "as_of": "2026-09-24"},
+            ),
+        ]:
+            content = (samples / f).read_bytes()
+            prop = imports.preview(content, f, kind)["proposal"]
+            b = imports.import_file(db, content, f, label, kind, prop["mapping"], {"institution": label, **opts}, is_sample=True)
+            print(f"    {f}: {b['rows_imported']} imported, {b['rows_rejected']} rejected")
+        done(t)
+
+        if not args.offline:
+            t = step("Real external data: Yahoo prices, SEC EDGAR, US Treasury, World Bank")
+            for key in ("yahoo_market", "sec_edgar", "us_treasury", "world_bank"):
+                c = connections.connect(db, key, None, None, None)
+                if c.status != "connected":
+                    print(f"    {key}: {c.status} ({c.last_error})")
+                    continue
+                r = connections.sync(db, c.id)
+                print(f"    {key}: sync {r['status']}, {r['records_added']} added")
+            live = db.scalars(select(Dataset).where(Dataset.code == "LIVE-MARKET")).first()
+            if live:
+                ml.run_regime(
+                    db,
+                    {
+                        "dataset_id": live.id,
+                        "benchmark_symbol": "SPY",
+                        "n_regimes": 3,
+                        "method": "gmm",
+                        "train_end": "2025-06-30",
+                        "seed": 42,
+                        "name": "Regime model on live SPY",
+                    },
+                )
+            done(t)
     finally:
         db.close()
     print("\nDemo database ready.")

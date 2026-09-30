@@ -4,6 +4,9 @@
 
 > Nexis Finance — quantitative research platform for portfolio analytics, risk modelling, strategy backtesting, financial machine learning, and scalable market-data processing.
 
+**Live demo:** https://nexis-finance-five.vercel.app (frontend on Vercel; API on Render's free tier — the first
+request after idle wakes the server and re-seeds the demo data, which takes about a minute).
+
 Nexis Finance is a full-stack research application: a FastAPI/SQLAlchemy backend with a tested quantitative library, and a React/TypeScript front end with interactive Plotly charts. Every number on screen comes from a calculation over stored data. There are no hardcoded results, no invented market data, and no "AI insights".
 
 It runs fully offline in **DEMO / SYNTHETIC DATA MODE** on a seeded, documented synthetic universe. A public market-data provider and CSV upload are available for real data.
@@ -45,9 +48,18 @@ It runs fully offline in **DEMO / SYNTHETIC DATA MODE** on a seeded, documented 
 | **Machine learning** | Volatility forecasting (naive and EWMA baselines vs Ridge / RandomForest / HistGradientBoosting) with purged chronological splits, permutation importance and partial dependence. GMM/K-means regime classification fitted on the training window only. Isolation Forest vs rolling z-score anomaly detection, split into data-quality vs market-behaviour anomalies. |
 | **Research registry** | Every run is stored with a code (`VOL-2026-001`), dataset version and hash, config, seed, metrics (normalised SQL rows), notes and duration. **Reproduce** re-runs a stored config and records a metric-level comparison. Experiments can be compared side by side. |
 | **Reports & exports** | PDF research reports (dataset, methodology, portfolio, risk, backtest, ML, limitations, reproducibility IDs). CSV/JSON exports for trades, daily results, metrics, predictions, anomalies, risk snapshots and the registry. |
-| **Platform** | Background jobs with progress, notifications, global search, a System Health page (DB latency, freshness, record counts, request p50/p95, job failures), structured logging, structured error responses. |
+| **Connectivity layer** | Integration marketplace (market, brokerage, economic, regulatory, file sources) with honest status: live Yahoo prices, US Treasury yield curve, World Bank indicators, SEC EDGAR profiles & XBRL facts; FRED and Alpaca via your own API keys (encrypted at rest); others marked *Coming soon*. Sync engine with per-run added/updated/removed logs. |
+| **Universal import** | CSV / JSON / XLSX holdings, transactions and market data with automatic column detection, confidence scores and manual mapping; every source row kept verbatim for lineage; duplicate-file and duplicate-transaction detection. |
+| **Portfolio intelligence** | Automatic reconstruction of *My Portfolio* across accounts (no double counting), FX conversion, time-weighted history from transactions (or a labelled backcast), X-Ray (asset class, SEC SIC industry, HQ country, currency, concentration), *Why is my portfolio moving?* attribution, risk drill-down (Euler, correlation effect, CVaR and drawdown contributors), transparent diagnostics, FIFO / average-cost P&L, cross-source reconciliation, Financial Intelligence Graph, data lineage, research audit log. |
+| **Research Assistant** | Answers questions such as "what contributed most to my volatility?" by retrieving stored metrics and showing the evidence — deterministic, no generative model; unverifiable questions are declined. |
+| **Developer platform** | Read-only public API (`/api/v1`, bearer keys stored as SHA-256 hashes), HMAC-signed webhooks with retries and a delivery log, OpenAPI docs. |
+| **Platform** | Background jobs with progress, toast notifications, ⌘K command palette, a System Health page (DB latency, freshness, record counts, request p50/p95, job failures), structured logging, structured error responses. |
 
-The UI has 17 pages: Overview, Market Data, Data Quality, Asset Research, Portfolio Lab, Risk Analytics, Stress Testing, Factor Analytics, Quant Strategies, Backtesting, Machine Learning, Regime Analysis, Anomaly Detection, Research Experiments, Reports, System Health and Settings.
+The UI has 28 pages across research (Overview, Market Data, Data Quality, Asset Research, Portfolio Lab, Risk, Stress, Factors, Strategies, Backtesting, ML, Regimes, Anomalies, Experiments, Assistant, Reports) and the connectivity layer (Connections, Financial Intelligence, Portfolio X-Ray, Transactions, Intelligence Graph, Reconciliation, Economic & Filings, Data Lineage, Audit Log, Developer API, System Health, Settings). Details: [docs/CONNECTIVITY.md](docs/CONNECTIVITY.md).
+
+**Design:** Geist type, dense tables and hairline surfaces; motion is short and purposeful (ease-out on enter,
+press feedback, popovers that grow from their trigger, a ⌘K palette, stacked toasts) and disabled under
+`prefers-reduced-motion`; the layout collapses to a slide-over navigation drawer on phones.
 
 ### Screenshots (synthetic demo dataset)
 
@@ -58,6 +70,12 @@ The UI has 17 pages: Overview, Market Data, Data Quality, Asset Research, Portfo
 | ![Portfolio Lab](docs/screenshots/light_portfolio-lab.jpg) | ![Machine Learning](docs/screenshots/light_machine-learning.jpg) |
 | **Regime analysis** | **Anomaly detection vs injected events** |
 | ![Regimes](docs/screenshots/light_regimes.jpg) | ![Anomalies](docs/screenshots/light_anomalies.jpg) |
+| **Financial Intelligence (imported accounts, live prices)** | **Intelligence Graph** |
+| ![Financial Intelligence](docs/screenshots/intelligence.jpg) | ![Graph](docs/screenshots/intelligence_graph.jpg) |
+| **Risk drill-down** | **Research Assistant** |
+| ![Risk drill-down](docs/screenshots/xray_risk.jpg) | ![Assistant](docs/screenshots/assistant.jpg) |
+| **Connections marketplace** | **⌘K command palette** |
+| ![Connections](docs/screenshots/connections.jpg) | ![Palette](docs/screenshots/command_palette.jpg) |
 | **Data quality** | **Dark theme** |
 | ![Data quality](docs/screenshots/light_data-quality.jpg) | ![Dark overview](docs/screenshots/dark_overview.jpg) |
 
@@ -227,7 +245,7 @@ The conventions below are applied everywhere and are also served to the UI as to
 
 ```bash
 cd backend
-pytest                  # 114 tests, about 1 minute
+pytest                  # 151 tests, about 1 minute
 ruff check app tests ../scripts && ruff format --check app tests ../scripts
 cd ../frontend && npm run typecheck && npm run build
 # optional browser workflow check (API + Vite dev server running; needs `pip install playwright` and Edge/Chromium)
@@ -241,6 +259,7 @@ python ../scripts/e2e_ui_check.py
 | `test_backtest.py` | Strategies never see future bars; perturbing future prices leaves past signals identical; exact cost accounting; a known tiny-dataset result; next-open vs next-close fills; monthly rebalancing; invalid weights rejected; missing bars neither create nor destroy performance; delisting; segments; grid search ignoring post-training data; non-overlapping walk-forward folds; determinism. |
 | `test_ml.py` | Point-in-time features; the forward-target definition; purged splits with exact purge counts; shuffled data refused; metric values; prediction shapes; seed reproducibility; train metrics unchanged when post-validation prices change; regime labels frozen in the training window; anomaly recall and bad-tick classification; serialisation. |
 | `test_data.py` | Generator reproducibility; every injected defect caught; each validation rule; large moves flagged not deleted; quality score components; CSV aliases; public provider parsing and network failures via a mocked transport. |
+| `test_connectivity.py` | Normalisation and mapping on real sample formats, FIFO vs average-cost P&L, splits/oversells, encryption and redaction, every provider against mocked HTTP (Treasury, World Bank, FRED, SEC, Alpaca), import → reconstruction values equal Σ qty × stored close, attribution identity, risk contributions summing to 1 and CVaR, reconciliation, lineage, honest connection status, public-API auth, signed webhook delivery, grounded assistant. |
 | `test_api.py` | The full workflow through HTTP, including structured 404/409/422 errors, reproduction matching bit-for-bit, PDF download and exports. |
 
 ## API
@@ -268,13 +287,22 @@ Errors always have the shape `{"error": {"code", "message", "details"}}`, with a
 
 ## Deployment
 
-```bash
-docker compose up --build                                  # PostgreSQL 16 + API + nginx frontend
-docker compose exec api python /app/scripts/seed_demo.py   # load demo data
-# UI http://localhost:8080 · API docs http://localhost:8000/docs
-```
+The frontend is a static Vite build on **Vercel**; the Python API runs as a Docker service on **Render** (its
+scientific stack — scipy, pandas, scikit-learn — is ~350 MB, above Vercel's serverless function limit, and the
+app needs a database and background jobs). Vercel rewrites `/api/*`, `/docs` and `/openapi.json` to the API, so
+the browser talks to a single origin.
 
-The same Alembic migrations run against PostgreSQL. Their DDL was rendered and checked with `alembic upgrade head --sql` against the PostgreSQL dialect. The Compose stack itself was **not executed** in the development environment, which had no Docker, so treat it as a starting point. For production you would also want real secrets management, authentication (none is implemented; see below), a proper job queue (Celery/RQ) instead of the in-process thread pool, and HTTPS termination.
+1. **API on Render** — [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/nawaranarah-prog/nexis-finance)
+   uses [`render.yaml`](render.yaml): Docker image from `backend/Dockerfile`, free plan, generated
+   `NEXIS_SECRET_KEY`, and `NEXIS_AUTO_SEED=true` so an empty database seeds itself in a background process on boot.
+2. **Frontend on Vercel** — `cd frontend && npx vercel deploy --prod` (config in [`frontend/vercel.json`](frontend/vercel.json)).
+   If Render assigns a different hostname, update the three rewrite destinations.
+3. **Self-hosted full stack** — `docker compose up --build` (PostgreSQL 16 + API + nginx frontend), then
+   `docker compose exec api python /app/scripts/seed_demo.py`.
+
+The free Render plan has an ephemeral disk and sleeps after inactivity: data you import there is a demo and resets
+on restart. For persistence, attach a Render disk or point `NEXIS_DATABASE_URL` at PostgreSQL. The same Alembic
+migrations run on SQLite and PostgreSQL.
 
 ## Limitations
 
@@ -284,8 +312,10 @@ The same Alembic migrations run against PostgreSQL. Their DDL was rendered and c
 * Factor analytics use price- and volume-derived **proxies**. No accounting fundamentals are available, and none are fabricated.
 * Regime labels and anomaly flags are unsupervised model outputs with no guaranteed economic meaning.
 * The job runner is an in-process thread pool: jobs survive page reloads but not API restarts.
-* No authentication or multi-user separation. It's a single-user research tool; a fake login screen would add nothing.
-* No LLM "research assistant" is included, by design. All analytical output comes from deterministic backend calculations.
+* No user accounts or multi-tenant separation: it is a single-owner research tool (the public API uses owner-issued keys). A fake login screen would add nothing.
+* The Research Assistant is deliberately not an LLM: it answers a fixed set of question types from stored metrics and declines everything else.
+* FRED and Alpaca integrations are verified only against documented response shapes (mocked tests) until you connect your own key/account; OAuth aggregators (Plaid, SnapTrade, IBKR, Schwab) are listed as *Coming soon*.
+* Industry and country come from SEC filings (SIC code, business address) — not GICS sectors or revenue geography; ETFs and non-SEC issuers stay unclassified.
 
 ## Disclaimer
 

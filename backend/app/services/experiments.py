@@ -97,6 +97,19 @@ def complete_experiment(
     if model:
         exp.model = model
     db.commit()
+    from app.services import audit
+    from app.services.webhooks import safe_emit
+
+    action = "backtest.executed" if exp.experiment_type in ("backtest", "walk_forward") else "ml_experiment.executed"
+    audit.record(
+        db,
+        action,
+        "experiment",
+        exp.code,
+        {"type": exp.experiment_type, "name": exp.name, "dataset_version": exp.dataset_version, "seed": exp.seed},
+    )
+    event = "backtest.completed" if exp.experiment_type == "backtest" else "experiment.completed"
+    safe_emit(event, {"experiment_id": exp.id, "code": exp.code, "type": exp.experiment_type, "summary": exp.summary})
 
 
 def fail_experiment(db: Session, exp_id: int, message: str) -> None:
@@ -282,6 +295,9 @@ def reproduce(db: Session, exp_id: int, progress: Callable[..., None] | None = N
     if not new.notes:
         new.notes = f"Reproduction of {original.code}"
     db.commit()
+    from app.services import audit
+
+    audit.record(db, "experiment.reproduced", "experiment", new.code, {"original": original.code, "matches": check["matches"]})
     return {**result, "reproducibility": check}
 
 

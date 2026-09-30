@@ -31,13 +31,19 @@ def main() -> int:
     with sync_playwright() as p:
         try:
             browser = p.chromium.launch(channel="msedge", headless=not args.headed)
-        except Exception:  # fall back to a Playwright-managed Chromium
+        except Exception:
             browser = p.chromium.launch(headless=not args.headed)
         ctx = browser.new_context(viewport={"width": 1500, "height": 1000}, accept_downloads=True)
         page: Page = ctx.new_page()
-        page.on("console", lambda m: problems.append(f"console.{m.type}: {m.text}") if m.type == "error" else None)
+        page.on(
+            "console",
+            lambda m: problems.append(f"console.{m.type}: {m.text}") if m.type == "error" else None,
+        )
         page.on("pageerror", lambda e: problems.append(f"pageerror: {e}"))
-        page.on("response", lambda r: problems.append(f"HTTP {r.status} {r.url}") if r.status >= 500 else None)
+        page.on(
+            "response",
+            lambda r: problems.append(f"HTTP {r.status} {r.url}") if r.status >= 500 else None,
+        )
         expect.set_options(timeout=120_000)
 
         def step(msg: str) -> None:

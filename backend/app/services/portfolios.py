@@ -23,8 +23,10 @@ from app.core.errors import ConfigurationError, ConflictError, InsufficientDataE
 from app.models import Portfolio, PortfolioPosition, PortfolioReturn, RiskMetric
 from app.risk.contribution import concentration, correlation_exposure, risk_contributions
 from app.risk.var import ALLOWED_CONFIDENCE, horizon_returns, rolling_var_backtest, var_summary
+from app.services import audit
 from app.services.market_data import Panel, load_panel
 from app.services.notifications import notify
+from app.services.webhooks import safe_emit
 
 _cache: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
 _cache_lock = Lock()
@@ -116,6 +118,10 @@ def create_portfolio(db: Session, payload: dict[str, Any]) -> Portfolio:
     db.add(p)
     db.commit()
     db.refresh(p)
+    audit.record(
+        db, "portfolio.created", "portfolio", p.id, {"name": p.name, "method": p.allocation_method, "assets": len(p.positions)}
+    )
+    safe_emit("portfolio.updated", {"portfolio_id": p.id, "action": "created"})
     return p
 
 
@@ -127,6 +133,8 @@ def update_portfolio(db: Session, pid: int, payload: dict[str, Any]) -> Portfoli
     _apply(db, p, payload)
     db.commit()
     db.refresh(p)
+    audit.record(db, "portfolio.modified", "portfolio", p.id, {"name": p.name, "method": p.allocation_method})
+    safe_emit("portfolio.updated", {"portfolio_id": p.id, "action": "modified"})
     return p
 
 
@@ -166,8 +174,11 @@ def _apply(db: Session, p: Portfolio, payload: dict[str, Any]) -> None:
 
 
 def delete_portfolio(db: Session, pid: int) -> None:
-    db.delete(get_portfolio(db, pid))
+    p = get_portfolio(db, pid)
+    name = p.name
+    db.delete(p)
     db.commit()
+    audit.record(db, "portfolio.deleted", "portfolio", pid, {"name": name})
 
 
 def serialize(p: Portfolio) -> dict[str, Any]:

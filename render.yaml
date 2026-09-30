@@ -1,0 +1,32 @@
+# Render Blueprint — backend API (Docker, free plan).
+# One-click: https://render.com/deploy?repo=https://github.com/<you>/nexis-finance
+# The free plan has an ephemeral disk and sleeps when idle; the API re-seeds the demo database on boot
+# (synthetic research universe + sample statements + live public data), which takes about a minute.
+services:
+  - type: web
+    name: nexis-finance-api-nawar
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NEXIS_ENV
+        value: production
+      - key: NEXIS_SECRET_KEY
+        generateValue: true
+      - key: NEXIS_AUTO_SEED
+        value: "true"
+      - key: NEXIS_PUBLIC_PROVIDER_ENABLED
+        value: "true"
+      - key: NEXIS_EXTERNAL_DATA_ENABLED
+        value: "true"
+      - key: NEXIS_SEC_USER_AGENT
+        value: "NexisFinance open-source research demo (github.com/nexis-finance)"
+      - key: NEXIS_CORS_ORIGINS
+        value: "https://nexis-finance-five.vercel.app"
+      - key: NEXIS_LOG_JSON
+        value: "true"
+      - key: NEXIS_JOB_WORKERS
+        value: "1"

@@ -1,5 +1,22 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
+from app.models.connectivity import (
+    Account,
+    ApiKey,
+    AuditLog,
+    CompanyProfile,
+    Connection,
+    EconomicObservation,
+    EconomicSeries,
+    Fundamental,
+    Holding,
+    ImportBatch,
+    SourceRecord,
+    SyncRun,
+    Transaction,
+    WebhookDelivery,
+    WebhookEndpoint,
+)
 from app.models.market import Asset, DataQualityIssue, DataQualityRun, Dataset, IngestionRun, MarketData
 from app.models.ops import Job, Notification, Report
 from app.models.portfolio import Portfolio, PortfolioPosition, PortfolioReturn, RiskMetric, StressTest
@@ -14,15 +31,25 @@ from app.models.research import (
 )
 
 __all__ = [
+    "Account",
     "Anomaly",
+    "ApiKey",
     "Asset",
+    "AuditLog",
     "Backtest",
     "BacktestTrade",
+    "CompanyProfile",
+    "Connection",
     "DataQualityIssue",
     "DataQualityRun",
     "Dataset",
+    "EconomicObservation",
+    "EconomicSeries",
     "Experiment",
     "ExperimentMetric",
+    "Fundamental",
+    "Holding",
+    "ImportBatch",
     "IngestionRun",
     "Job",
     "MLPrediction",
@@ -33,6 +60,11 @@ __all__ = [
     "PortfolioReturn",
     "Report",
     "RiskMetric",
+    "SourceRecord",
     "Strategy",
     "StressTest",
+    "SyncRun",
+    "Transaction",
+    "WebhookDelivery",
+    "WebhookEndpoint",
 ]
