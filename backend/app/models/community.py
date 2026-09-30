@@ -40,6 +40,8 @@ class User(Base, TimestampMixin):
     email: Mapped[str | None] = mapped_column(String(254), unique=True)
     # E.164 mobile number (e.g. +971501234567).
     phone: Mapped[str | None] = mapped_column(String(20), unique=True)
+    # Interface and advisor language: "en" or "ar".
+    language: Mapped[str] = mapped_column(String(5), default="en", nullable=False)
     auth_provider: Mapped[str] = mapped_column(String(20), default="password", nullable=False)
     provider_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
     # "person" or "page" (automated news pages run by the platform).

@@ -268,3 +268,76 @@ def test_phone_otp_flow_with_mocked_twilio(client, monkeypatch):
     assert again.json()["id"] == ok.json()["id"]
     client.post("/api/auth/logout")
     client.cookies.clear()
+
+
+def test_account_settings_password_details_language_sessions(client):
+    from fastapi.testclient import TestClient
+
+    client.cookies.clear()
+    r = client.post("/api/auth/register", json={"email": "settings@example.com", "password": "first-pass-11"})
+    assert r.status_code == 201
+    other = TestClient(client.app)  # a second device
+    assert (
+        other.post("/api/auth/login", json={"identifier": "settings@example.com", "password": "first-pass-11"}).status_code == 200
+    )
+
+    assert (
+        client.post("/api/auth/me/password", json={"current_password": "wrong", "new_password": "second-pass-22"}).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/me/password", json={"current_password": "first-pass-11", "new_password": "second-pass-22"}
+        ).status_code
+        == 204
+    )
+    assert other.get("/api/auth/me").json()["user"] is None  # other devices are signed out after a password change
+    assert client.get("/api/auth/me").json()["user"]["email"] == "settings@example.com"  # this device stays signed in
+
+    me = client.patch("/api/auth/me", json={"username": "settings.user", "phone": "050 222 3333", "language": "ar"}).json()
+    assert (
+        me["username"] == "settings.user"
+        and me["phone"] == "+971502223333"
+        and me["language"] == "ar"
+        and me["has_password"] is True
+    )
+    assert client.patch("/api/auth/me", json={"email": "not-an-email"}).status_code == 422
+    assert client.patch("/api/auth/me", json={"language": "fr"}).status_code == 422
+
+    assert other.post("/api/auth/login", json={"identifier": "0502223333", "password": "second-pass-22"}).status_code == 200
+    assert client.post("/api/auth/me/logout-everywhere").json()["signed_out_sessions"] >= 1
+    assert other.get("/api/auth/me").json()["user"] is None
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+
+
+def test_passwordless_accounts_can_set_a_password(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import phone
+
+    s = get_settings()
+    for k, v in (("twilio_account_sid", "AC1"), ("twilio_auth_token", "t"), ("twilio_verify_sid", "VA1")):
+        monkeypatch.setattr(s, k, v)
+    monkeypatch.setattr(
+        phone.httpx, "post", lambda url, data=None, auth=None, timeout=None: httpx.Response(200, json={"status": "approved"})
+    )
+    client.cookies.clear()
+    u = client.post("/api/auth/phone/verify", json={"phone": "0559998877", "code": "123456"}).json()
+    assert u["has_password"] is False
+    assert client.post("/api/auth/me/password", json={"new_password": "brand-new-pass-1"}).status_code == 204
+    assert client.get("/api/auth/me").json()["user"]["has_password"] is True
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+
+
+def test_advisor_language_reaches_the_model(client, monkeypatch):
+    seen = {}
+
+    def fake_stream(messages, tools=None, **kw):  # type: ignore[no-untyped-def]
+        seen["system"] = messages[0]["content"]
+        yield ("text", "مرحبا")
+        yield ("message", {"role": "assistant", "content": "مرحبا"})
+
+    monkeypatch.setattr(llm, "chat_stream", fake_stream)
+    r = client.post("/api/advisor/chat", json={"messages": [{"role": "user", "content": "hello"}], "language": "ar"}).json()
+    assert "Arabic" in seen["system"] and r["answer"] == "مرحبا"

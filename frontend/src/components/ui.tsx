@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 import { useGlossary } from "../hooks/queries";
 import { errorMessage } from "../services/api";
 import type { Job } from "../types/api";
@@ -93,10 +93,14 @@ export function QueryView<T>({ q, children, label }: {
 }
 
 export function Field({ label, hint, children, metric }: { label: ReactNode; hint?: ReactNode; children: ReactNode; metric?: string }) {
+  const auto = useId();
+  // Tie the label to a single form control so screen readers (and clicks on the label) reach it.
+  const control = isValidElement(children) && ["input", "select", "textarea"].includes(children.type as string) ? (children as ReactElement<{ id?: string }>) : null;
+  const id = control ? control.props.id ?? auto : undefined;
   return (
     <div className="field">
-      <label>{label}{metric && <InfoTip metric={metric} />}</label>
-      {children}
+      <label htmlFor={id}>{label}{metric && <InfoTip metric={metric} />}</label>
+      {control ? cloneElement(control, { id }) : children}
       {hint && <span className="field-hint">{hint}</span>}
     </div>
   );

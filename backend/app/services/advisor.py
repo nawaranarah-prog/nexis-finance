@@ -192,14 +192,14 @@ def _status_text(name: str, args: dict[str, Any]) -> str:
         return tpl
 
 
-def stream(db: Session, messages: list[dict[str, str]]) -> Iterator[dict[str, Any]]:
+def stream(db: Session, messages: list[dict[str, str]], language: str | None = None) -> Iterator[dict[str, Any]]:
     """Answer as a stream of events: ``status`` (what is being looked up), ``delta`` (answer text) and ``done``."""
     if not messages or messages[-1]["role"] != "user":
         raise ConfigurationError("the last message must be from the user")
     trace: list[dict[str, Any]] = []
     sent_text = False
     try:
-        for ev in _llm_stream(db, messages, trace):
+        for ev in _llm_stream(db, messages, trace, language):
             if ev["type"] == "delta":
                 sent_text = True
             yield ev
@@ -219,10 +219,10 @@ def stream(db: Session, messages: list[dict[str, str]]) -> Iterator[dict[str, An
     yield {"type": "done", "meta": out}
 
 
-def ask(db: Session, messages: list[dict[str, str]]) -> dict[str, Any]:
+def ask(db: Session, messages: list[dict[str, str]], language: str | None = None) -> dict[str, Any]:
     """Non-streaming variant: collects the stream into one answer."""
     text, meta = [], {}
-    for ev in stream(db, messages):
+    for ev in stream(db, messages, language):
         if ev["type"] == "delta":
             text.append(ev["text"])
         elif ev["type"] == "done":
@@ -230,9 +230,16 @@ def ask(db: Session, messages: list[dict[str, str]]) -> dict[str, Any]:
     return {"answer": "".join(text).strip(), **meta}
 
 
-def _llm_stream(db: Session, messages: list[dict[str, str]], trace: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+def _llm_stream(
+    db: Session, messages: list[dict[str, str]], trace: list[dict[str, Any]], language: str | None = None
+) -> Iterator[dict[str, Any]]:
     today = datetime.now(UTC).strftime("%A %d %B %Y, %H:%M UTC")
-    convo: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM + f"\n\nCurrent date and time: {today}."}]
+    lang = (
+        "\n\nThe user has chosen Arabic: always answer in clear Modern Standard Arabic (keep tickers and numbers as they are)."
+        if language == "ar"
+        else ""
+    )
+    convo: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM + lang + f"\n\nCurrent date and time: {today}."}]
     convo += [{"role": m["role"], "content": m["content"][:6000]} for m in messages[-16:]]
     news_used: list[dict[str, Any]] = []
     symbols: list[str] = []

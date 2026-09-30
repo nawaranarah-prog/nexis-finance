@@ -52,7 +52,7 @@
 .text-card-src { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.8; }
 .text-card-title { font-size: clamp(20px, 2.6vw, 26px); font-weight: 750; line-height: 1.22; letter-spacing: -0.015em; }
 .text-card-cta { font-size: 13px; opacity: 0.85; }
-.post-actions .act.save { margin-left: auto; }
+.post-actions .act.save { margin-inline-start: auto; }
 .act svg { display: block; }
 .act.liked, .act.liked svg { color: #ed4956; }
 .act.saved { color: var(--text); }
@@ -97,3 +97,15 @@
 @media (prefers-reduced-motion: reduce) {
   .advisor-status .dot, .caret, .skeleton-post .sk-line, .skeleton-post .sk-media { animation: none !important; }
 }
+
+/* ---------------------------------------------------------------- ask the advisor about a post */
+.ask-ai { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; margin-inline-start: 4px; border-radius: 999px; font-size: 12.5px; font-weight: 650;
+  color: #fff; background: linear-gradient(135deg, #2563eb, #7c3aed); transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out); }
+.ask-ai:hover { color: #fff; filter: brightness(1.08); }
+.ask-ai:active { transform: scale(0.96); }
+.adv-attached { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); margin-bottom: 10px; }
+.adv-attached img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; flex: none; }
+.adv-attached-title { font-weight: 650; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.adv-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.adv-post-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, #7c3aed 14%, transparent); color: var(--text); margin-bottom: 4px; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) { .ask-ai { transition: none; } }

@@ -8,6 +8,7 @@ import { Toaster } from "../components/toast";
 import { useWorkspace } from "../hooks/workspace";
 import type { Notification } from "../types/api";
 import { dt } from "../utils/format";
+import { useT } from "../i18n";
 
 export const NAV: { group: string; items: { to: string; label: string }[] }[] = [
   {
@@ -74,6 +75,7 @@ function Account() {
   const me = useMe();
   const qc = useQueryClient();
   const nav = useNavigate();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -82,7 +84,7 @@ function Account() {
     return () => document.removeEventListener("mousedown", close);
   }, []);
   const u = me.data?.user;
-  if (!u) return <button className="btn primary sm" onClick={() => nav(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>Sign in</button>;
+  if (!u) return <button className="btn primary sm" onClick={() => nav(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>{t("Sign in")}</button>;
   const logout = async () => {
     await api.post("/auth/logout");
     await qc.invalidateQueries({ queryKey: ["me"] });
@@ -95,10 +97,11 @@ function Account() {
       {open && (
         <div className="share-menu popover-in" role="menu" style={{ right: 0, left: "auto", transformOrigin: "top right" }}>
           <div className="small" style={{ padding: "8px 10px" }}><b>{u.display_name}</b><div className="xs muted">@{u.username}{u.email ? ` · ${u.email}` : ""}</div></div>
-          <button role="menuitem" onClick={() => { setOpen(false); nav(`/finstagram/u/${u.username}`); }}>My Finstagram profile</button>
-          <button role="menuitem" onClick={() => { setOpen(false); nav("/finstagram?mode=saved"); }}>Saved posts</button>
-          <button role="menuitem" onClick={() => { setOpen(false); nav("/advisor"); }}>AI Advisor</button>
-          <button role="menuitem" onClick={logout}>Sign out</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav(`/finstagram/u/${u.username}`); }}>{t("My Finstagram profile")}</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/finstagram?mode=saved"); }}>{t("Saved posts")}</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/advisor"); }}>{t("AI Advisor")}</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/settings"); }}>{t("Account settings")}</button>
+          <button role="menuitem" onClick={logout}>{t("Sign out")}</button>
         </div>
       )}
     </div>
@@ -108,6 +111,7 @@ function Account() {
 /** Instagram-style bottom navigation on phones. */
 function TabBar() {
   const me = useMe().data?.user;
+  const { t: tr } = useT();
   const loc = useLocation();
   const on = (p: string) => (p === "/" ? loc.pathname === "/" : loc.pathname.startsWith(p));
   const tabs = [
@@ -122,7 +126,7 @@ function TabBar() {
       {tabs.map((t) => (
         <Link key={t.label} to={t.to} className={`tab ${on(t.to) ? "on" : ""} ${t.primary ? "primary" : ""}`}>
           <span className="tab-icon" aria-hidden>{t.icon}</span>
-          <span className="tab-label">{t.label}</span>
+          <span className="tab-label">{tr(t.label)}</span>
         </Link>
       ))}
     </nav>
@@ -170,6 +174,7 @@ function Notifications() {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { datasets, dataset, setDatasetId, settings, updateSettings } = useWorkspace();
+  const { t } = useT();
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
   const location = useLocation();
@@ -186,7 +191,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // The research-dataset picker only matters on the research pages, not on Home, Finstagram, markets or the advisor.
   const consumer = ["/finstagram", "/advisor", "/markets", "/compare", "/valuation", "/login"];
   const researchPage = location.pathname !== "/" && !consumer.some((p) => location.pathname.startsWith(p));
-  const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })));
+  const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, label: t(it.label), group: t(g.group) })));
   let idx = 0;
   return (
     <div className="app">
@@ -199,12 +204,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <nav className="nav" aria-label="Main">
           {NAV.map((g) => (
             <div key={g.group}>
-              <div className="nav-group">{g.group}</div>
+              <div className="nav-group">{t(g.group)}</div>
               {g.items.map((it) => {
                 idx += 1;
                 return (
                   <NavLink key={it.to} to={it.to} end={it.to === "/"} className={({ isActive }) => (isActive ? "active" : "")}>
-                    <span className="nav-idx">{idx}</span>{it.label}
+                    <span className="nav-idx">{idx}</span>{t(it.label)}
                   </NavLink>
                 );
               })}
@@ -231,10 +236,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           )}
           <span className="spacer hide-sm" />
           <button className="search-trigger" onClick={() => setPalette(true)} aria-label="Open command palette">
-            <span aria-hidden>⌕</span><span className="grow">Search or jump to…</span><kbd className="hide-sm">Ctrl K</kbd>
+            <span aria-hidden>⌕</span><span className="grow">{t("Search or jump to…")}</span><kbd className="hide-sm">Ctrl K</kbd>
           </button>
-          <Link to="/finstagram" className="top-pill finsta hide-sm" aria-label="Open Finstagram"><span className="top-pill-icon">F</span>Finstagram</Link>
-          <Link to="/advisor" className="top-pill ai hide-sm" aria-label="Open the AI advisor"><span className="top-pill-icon">✦</span>AI Advisor</Link>
+          <Link to="/finstagram" className="top-pill finsta hide-sm" aria-label="Open Finstagram"><span className="top-pill-icon">F</span>{t("Finstagram")}</Link>
+          <Link to="/advisor" className="top-pill ai hide-sm" aria-label="Open the AI advisor"><span className="top-pill-icon">✦</span>{t("AI Advisor")}</Link>
           <Notifications />
           <Account />
           <button className="btn ghost" aria-label="Toggle theme" title="Toggle theme"

@@ -52,6 +52,7 @@ class ChatMessage(_Base):
 
 class AdvisorRequest(_Base):
     messages: list[ChatMessage] = Field(min_length=1, max_length=30)
+    language: Literal["en", "ar"] | None = None
 
 
 @router.get("/markets/search")
@@ -144,7 +145,7 @@ def advisor_status(db: Session = Depends(get_db)) -> dict[str, Any]:
 @router.post("/advisor/chat")
 def advisor_chat(req: AdvisorRequest, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     ratelimit.hit(db, f"advisor:{ratelimit.client_ip(request)}", get_settings().advisor_requests_per_hour)
-    return advisor.ask(db, [m.model_dump() for m in req.messages])
+    return advisor.ask(db, [m.model_dump() for m in req.messages], req.language)
 
 
 @router.post("/advisor/chat/stream")
@@ -156,7 +157,7 @@ def advisor_chat_stream(req: AdvisorRequest, request: Request, db: Session = Dep
     def events() -> Iterator[str]:
         with db_session.SessionLocal() as s:
             try:
-                for ev in advisor.stream(s, messages):
+                for ev in advisor.stream(s, messages, req.language):
                     yield f"data: {json.dumps(ev, default=str)}\n\n"
             except NexisError as exc:
                 yield f"data: {json.dumps({'type': 'error', 'message': exc.message})}\n\n"

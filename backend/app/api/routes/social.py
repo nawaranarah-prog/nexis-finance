@@ -51,6 +51,15 @@ class ProfileUpdate(_Base):
     display_name: str | None = Field(default=None, max_length=60)
     bio: str | None = Field(default=None, max_length=300)
     links: dict[str, str] | None = None
+    username: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=254)
+    phone: str | None = Field(default=None, max_length=30)
+    language: Literal["en", "ar"] | None = None
+
+
+class PasswordChange(_Base):
+    current_password: str | None = Field(default=None, max_length=200)
+    new_password: str = Field(min_length=1, max_length=200)
 
 
 class CommentIn(_Base):
@@ -160,7 +169,21 @@ def me(user: User | None = Depends(auth.optional_user), db: Session = Depends(ge
 @router.patch("/auth/me")
 def update_me(req: ProfileUpdate, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     u = auth.update_profile(db, user, req.display_name, req.bio, req.links)
+    u = auth.update_account(db, u, req.username, req.email, req.phone, req.language)
     return auth.serialize_user(db, u, u, full=True)
+
+
+@router.post("/auth/me/password", status_code=204)
+def change_password(
+    req: PasswordChange, request: Request, user: User = Depends(auth.require_user), db: Session = Depends(get_db)
+) -> Response:
+    auth.change_password(db, request, user, req.current_password, req.new_password)
+    return Response(status_code=204)
+
+
+@router.post("/auth/me/logout-everywhere")
+def logout_everywhere(request: Request, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, int]:
+    return {"signed_out_sessions": auth.logout_everywhere(db, request, user)}
 
 
 class DeleteAccount(_Base):

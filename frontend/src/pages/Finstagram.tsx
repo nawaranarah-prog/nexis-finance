@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { useT } from "../i18n";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, Change, fmtPrice, TYPE_LABEL, useMe } from "../components/market";
@@ -82,6 +83,7 @@ function Icon({ name, filled }: { name: "heart" | "comment" | "share" | "bookmar
 // ------------------------------------------------------------------ search
 
 function SearchBar() {
+  const { t: tr } = useT();
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const [d, setD] = useState("");
@@ -101,7 +103,7 @@ function SearchBar() {
     <div className="insta-search" ref={box}>
       <span className="insta-search-icon" aria-hidden>⌕</span>
       <input className="input" value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
-        placeholder="Search stocks, pages, people, #tags" aria-label="Search Finstagram"
+        placeholder={tr("Search stocks, pages, people, #tags")} aria-label="Search Finstagram"
         onKeyDown={(e) => {
           if (e.key === "Enter" && res) {
             if (res.instruments[0]) go(`/finstagram/s/${encodeURIComponent(res.instruments[0].symbol)}`);
@@ -127,7 +129,7 @@ function SearchBar() {
               <span className="grow"><b>{u.username}</b>{u.kind === "page" && <span className="page-badge">News page</span>}<span className="xs muted"> · {u.display_name}</span></span>
             </button>
           ))}
-          {res?.tags.length > 0 && <div className="isr-head">Hashtags</div>}
+          {res?.tags.length > 0 && <div className="isr-head">{tr("Hashtags")}</div>}
           {res?.tags.map((t: AnyObj) => (
             <button key={t.tag} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/finstagram/t/${t.tag}`); }}>
               <span className="isr-ticker">#</span><span className="grow"><b>#{t.tag}</b><span className="xs muted"> · {t.posts} posts</span></span>
@@ -227,6 +229,7 @@ function ShareMenu({ post, onClose }: { post: AnyObj; onClose: () => void }) {
 // ------------------------------------------------------------------ post card
 
 function Comments({ post, me, gate }: { post: AnyObj; me: AnyObj | null; gate: Gate }) {
+  const { t: tr } = useT();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["social", "comments", post.id], queryFn: () => api.get<AnyObj[]>(`/social/posts/${post.id}/comments`) });
   const [text, setText] = useState("");
@@ -246,8 +249,8 @@ function Comments({ post, me, gate }: { post: AnyObj; me: AnyObj | null; gate: G
         </div>
       ))}
       <form className="comment-form" onSubmit={(e) => { e.preventDefault(); gate("Sign in to comment", () => void send()); }}>
-        <input className="input" dir="auto" placeholder={me ? "Add a comment…" : "Sign in to comment"} value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
-        <button className="link-btn" disabled={!text.trim()}>Post</button>
+        <input className="input" dir="auto" placeholder={me ? tr("Add a comment…") : tr("Sign in to comment")} value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
+        <button className="link-btn" disabled={!text.trim()}>{tr("Post")}</button>
       </form>
     </div>
   );
@@ -265,6 +268,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
   const [share, setShare] = useState(false);
   const [more, setMore] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const { t } = useT();
   useEffect(() => { setLiked(post.liked_by_me); setLikes(post.like_count); setSaved(post.saved_by_me); setFollowing(post.author.followed_by_me); }, [post]);
 
   const like = () => gate("Sign in to like posts", async () => {
@@ -315,25 +319,26 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
         <Link to={`/finstagram/u/${post.author.username}`} className="row" style={{ gap: 10, minWidth: 0 }}>
           <Avatar user={post.author} size={34} />
           <span style={{ minWidth: 0 }}>
-            <b>{post.author.username}</b>{isPage && <span className="page-badge" title="Automated news page">✓ News page</span>}
+            <b>{post.author.username}</b>{isPage && <span className="page-badge" title="Automated news page">✓ {t("News page")}</span>}
             <span className="xs muted"> · {ago(post.created_at)}</span>
             {link?.source && <div className="xs muted ellipsis">{isPage ? `via ${link.source}` : link.source}</div>}
           </span>
         </Link>
         <div className="row" style={{ gap: 4 }}>
-          {!post.is_mine && !following && <button className="link-btn follow-inline" onClick={follow}>Follow</button>}
+          {!post.is_mine && !following && <button className="link-btn follow-inline" onClick={follow}>{t("Follow")}</button>}
           <div className="post-more">
             <button className="icon-btn" aria-label="More options" onClick={() => setMore(!more)}><Icon name="more" /></button>
             {more && (
               <div className="share-menu popover-in" role="menu" style={{ right: 0, left: "auto", transformOrigin: "top right" }} onMouseLeave={() => setMore(false)}>
-                <button role="menuitem" onClick={() => { setMore(false); save(); }}>{saved ? "Remove from saved" : "Save"}</button>
-                <button role="menuitem" onClick={() => feedback("more")}>Suggest more like this</button>
-                <button role="menuitem" onClick={() => feedback("less")}>Suggest less like this</button>
+                <button role="menuitem" onClick={() => { setMore(false); save(); }}>{saved ? t("Remove from saved") : t("Save")}</button>
+                <Link role="menuitem" to={`/advisor?post=${post.id}`}>✦ {t("Ask the AI advisor about this")}</Link>
+                <button role="menuitem" onClick={() => feedback("more")}>{t("Suggest more like this")}</button>
+                <button role="menuitem" onClick={() => feedback("less")}>{t("Suggest less like this")}</button>
                 {!post.is_mine && <button role="menuitem" onClick={() => { setMore(false); follow(); }}>{following ? `Unfollow ${post.author.username}` : `Follow ${post.author.username}`}</button>}
-                {link && <a role="menuitem" href={link.url} target="_blank" rel="noreferrer noopener" onClick={() => setMore(false)}>Open original ↗</a>}
-                <Link role="menuitem" to={`/finstagram/p/${post.id}`}>Go to post</Link>
-                <button role="menuitem" onClick={copyLink}>Copy link</button>
-                {post.is_mine ? <button role="menuitem" className="neg" onClick={remove}>Delete</button> : <button role="menuitem" className="neg" onClick={report}>Report</button>}
+                {link && <a role="menuitem" href={link.url} target="_blank" rel="noreferrer noopener" onClick={() => setMore(false)}>{t("Open original ↗")}</a>}
+                <Link role="menuitem" to={`/finstagram/p/${post.id}`}>{t("Go to post")}</Link>
+                <button role="menuitem" onClick={copyLink}>{t("Copy link")}</button>
+                {post.is_mine ? <button role="menuitem" className="neg" onClick={remove}>{t("Delete")}</button> : <button role="menuitem" className="neg" onClick={report}>{t("Report")}</button>}
               </div>
             )}
           </div>
@@ -347,9 +352,10 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
           <button className="act" aria-label="Share" onClick={() => setShare(!share)}><Icon name="share" /></button>
           {share && <ShareMenu post={post} onClose={() => setShare(false)} />}
         </div>
+        <Link className="ask-ai" to={`/advisor?post=${post.id}`} title={t("Ask the AI advisor about this")}><span aria-hidden>✦</span>{t("Ask AI")}</Link>
         <button className={`act save ${saved ? "saved" : ""}`} aria-pressed={saved} aria-label="Save" onClick={save}><Icon name="bookmark" filled={saved} /></button>
       </div>
-      <div className="post-likes">{likes.toLocaleString()} {likes === 1 ? "like" : "likes"}</div>
+      <div className="post-likes">{likes.toLocaleString()} {likes === 1 ? t("like") : t("likes")}</div>
       <div className="post-body" dir="auto">
         {headline && <div className="post-headline">{link ? <a href={link.url} target="_blank" rel="noreferrer noopener">{headline.replace(/^▶ /, "")}</a> : headline}</div>}
         {rest && <div className={long ? "clamp" : ""}>{!link && <Link to={`/finstagram/u/${post.author.username}`}><b>{post.author.username}</b></Link>} <Rich text={rest} /></div>}
@@ -375,6 +381,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
 // ------------------------------------------------------------------ composer
 
 function Composer({ me, initial, onPosted }: { me: AnyObj; initial?: string; onPosted: () => void }) {
+  const { t: tr } = useT();
   const [text, setText] = useState(initial ?? "");
   const [file, setFile] = useState<Blob | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -405,15 +412,15 @@ function Composer({ me, initial, onPosted }: { me: AnyObj; initial?: string; onP
     <div className="composer">
       <Avatar user={me} size={38} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <textarea className="input" dir="auto" rows={2} maxLength={2200} placeholder="Share an idea, a chart or a trade thesis… use $EMAAR.AE and #tags" value={text} onChange={(e) => setText(e.target.value)} />
+        <textarea className="input" dir="auto" rows={2} maxLength={2200} placeholder={tr("Share an idea, a chart or a trade thesis… use $EMAAR.AE and #tags")} value={text} onChange={(e) => setText(e.target.value)} />
         {preview && <div className="composer-preview"><img src={preview} alt="" /><button className="icon-btn" aria-label="Remove photo" onClick={() => { setFile(null); setPreview(null); }}>✕</button></div>}
         <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
           <div className="row" style={{ gap: 6 }}>
             <input ref={input} type="file" accept="image/*" hidden onChange={(e) => void pick(e.target.files?.[0])} />
-            <button className="btn sm" onClick={() => input.current?.click()}>📷 Photo</button>
+            <button className="btn sm" onClick={() => input.current?.click()}>{tr("📷 Photo")}</button>
             <span className="xs muted">{text.length}/2200</span>
           </div>
-          <button className="btn primary sm" disabled={busy || (!text.trim() && !file)} onClick={submit}>{busy ? "Posting…" : "Post"}</button>
+          <button className="btn primary sm" disabled={busy || (!text.trim() && !file)} onClick={submit}>{busy ? tr("Posting…") : tr("Post")}</button>
         </div>
       </div>
     </div>
@@ -423,6 +430,7 @@ function Composer({ me, initial, onPosted }: { me: AnyObj; initial?: string; onP
 // ------------------------------------------------------------------ rail
 
 function Rail() {
+  const { t: tr } = useT();
   const qc = useQueryClient();
   const { gate } = useGate();
   const t = useQuery({ queryKey: ["social", "trending"], queryFn: () => api.get<AnyObj>("/social/trending"), refetchInterval: 120_000 });
@@ -432,17 +440,17 @@ function Rail() {
   });
   return (
     <aside className="insta-rail">
-      <div className="rail-card"><div className="rail-title">News pages to follow</div>
+      <div className="rail-card"><div className="rail-title">{tr("News pages to follow")}</div>
         {t.data.pages.map((u: AnyObj) => (
           <div key={u.id} className="rail-row">
             <Link to={`/finstagram/u/${u.username}`} className="row" style={{ gap: 8, minWidth: 0, flex: 1 }}><Avatar user={u} size={30} />
               <span style={{ minWidth: 0 }}><b className="small">{u.username}</b><div className="xs muted ellipsis">{u.display_name}</div></span></Link>
-            <button className={`link-btn xs ${u.followed_by_me ? "muted" : ""}`} onClick={() => follow(u)}>{u.followed_by_me ? "Following" : "Follow"}</button>
+            <button className={`link-btn xs ${u.followed_by_me ? "muted" : ""}`} onClick={() => follow(u)}>{u.followed_by_me ? tr("Following") : tr("Follow")}</button>
           </div>
         ))}
       </div>
       {t.data.symbols.length > 0 && (
-        <div className="rail-card"><div className="rail-title">Trending tickers · 7d</div>
+        <div className="rail-card"><div className="rail-title">{tr("Trending tickers · 7d")}</div>
           {t.data.symbols.map((s: AnyObj) => (
             <Link key={s.symbol} to={`/finstagram/s/${encodeURIComponent(s.symbol)}`} className="rail-row">
               <span className="mono">${s.symbol}</span><Change pct={s.change_pct} /><span className="xs muted">{s.posts} posts</span>
@@ -451,7 +459,7 @@ function Rail() {
         </div>
       )}
       {t.data.tags.length > 0 && (
-        <div className="rail-card"><div className="rail-title">Hashtags</div>
+        <div className="rail-card"><div className="rail-title">{tr("Hashtags")}</div>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{t.data.tags.map((x: AnyObj) => <Link key={x.tag} className="chip" to={`/finstagram/t/${encodeURIComponent(x.tag)}`}>#{x.tag}</Link>)}</div>
         </div>
       )}
@@ -504,6 +512,7 @@ function TopBar() {
 }
 
 export default function Finstagram() {
+  const { t: tr } = useT();
   const [sp, setSp] = useSearchParams();
   const qc = useQueryClient();
   const { me, gate } = useGate();
@@ -522,11 +531,11 @@ export default function Finstagram() {
         <TopBar />
         <div className="insta-tabs" role="tablist">
           {tabs.map(([m, label]) => (
-            <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? "on" : ""} onClick={() => setSp(m === "latest" ? {} : { mode: m })}>{label}</button>
+            <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? "on" : ""} onClick={() => setSp(m === "latest" ? {} : { mode: m })}>{tr(label)}</button>
           ))}
         </div>
         {me ? <Composer me={me} initial={compose} onPosted={() => qc.invalidateQueries({ queryKey: ["social"] })} />
-          : <button className="composer ghost" onClick={() => nav("/login?mode=signup&next=/finstagram")}><span className="text2">Join Finstagram to post ideas and charts, save posts, follow stocks and news pages, and tune your feed.</span></button>}
+          : <button className="composer ghost" onClick={() => nav("/login?mode=signup&next=/finstagram")}><span className="text2">{tr("Join Finstagram to post ideas and charts, save posts, follow stocks and news pages, and tune your feed.")}</span></button>}
         <FeedList params={{ mode }} gate={gate} me={me} />
       </div>
       <Rail />

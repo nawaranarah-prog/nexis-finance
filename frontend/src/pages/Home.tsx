@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Avatar, Change, fmtPrice, SymbolSearch, useMe } from "../components/market";
 import { api } from "../services/api";
 import type { AnyObj } from "../types/api";
+import { useT } from "../i18n";
 
 const TILES = [
   { symbol: "DFMGI.AE", label: "DFM General" }, { symbol: "FADGI.AD", label: "FTSE ADX General" }, { symbol: "USDAED=X", label: "USD / AED" },
@@ -21,6 +22,7 @@ export default function Home() {
   const nav = useNavigate();
   const me = useMe().data?.user;
   const [q, setQ] = useState("");
+  const { t: tr } = useT();
   const tiles = useQuery({ queryKey: ["home-tiles"], queryFn: () => api.get<AnyObj[]>("/markets/quotes", { symbols: TILES.map((t) => t.symbol).join(",") }), refetchInterval: 60_000 });
   const uae = useQuery({ queryKey: ["mk-list", "uae"], queryFn: () => api.get<AnyObj>("/markets/lists/uae"), refetchInterval: 120_000 });
   const feed = useQuery({ queryKey: ["social", "home-preview"], queryFn: () => api.get<AnyObj>("/social/feed", { mode: "latest" }), staleTime: 120_000 });
@@ -34,11 +36,11 @@ export default function Home() {
   return (
     <div className="home">
       <section className="home-hero">
-        <div className="home-hello">{me ? `Welcome back, ${me.display_name.split(" ")[0]}` : "Your UAE investing hub"}</div>
-        <h1>Research UAE and global markets, ask an AI advisor, and follow what investors are saying.</h1>
-        <SymbolSearch placeholder="Search any UAE stock, bond or sukuk — or any global market…" onPick={(s) => nav(`/markets/${encodeURIComponent(s.symbol)}`)} />
+        <div className="home-hello">{me ? `${tr("Welcome back")}${tr(", ")}${(me.display_name || me.username).split(" ")[0]}` : tr("Your UAE investing hub")}</div>
+        <h1>{tr("Research UAE and global markets, ask an AI advisor, and follow what investors are saying.")}</h1>
+        <SymbolSearch placeholder={tr("Search any UAE stock, bond or sukuk — or any global market…")} onPick={(s) => nav(`/markets/${encodeURIComponent(s.symbol)}`)} />
         <div className="home-quick">
-          {QUICK.map((x) => <Link key={x.label} className="chip" to={x.to}>{x.label}</Link>)}
+          {QUICK.map((x) => <Link key={x.label} className="chip" to={x.to}>{tr(x.label)}</Link>)}
         </div>
       </section>
 
@@ -47,7 +49,7 @@ export default function Home() {
           const d = bySym[t.symbol];
           return (
             <Link key={t.symbol} to={`/markets/${encodeURIComponent(t.symbol)}`} className="home-tile">
-              <span className="xs muted">{t.label}</span>
+              <span className="xs muted">{tr(t.label)}</span>
               <span className="home-tile-v num">{d ? (t.symbol === "^TNX" ? `${d.price?.toFixed(2)}%` : fmtPrice(d.price, undefined, t.symbol.endsWith("=X") ? 4 : 2)) : "—"}</span>
               {d ? <Change pct={d.change_pct} /> : <span className="xs muted">loading…</span>}
             </Link>
@@ -57,21 +59,21 @@ export default function Home() {
 
       <div className="home-grid">
         <section className="home-card home-advisor">
-          <div className="home-card-head"><span className="home-badge ai">✦</span><b>AI Advisor</b><Link className="link-btn small" to="/advisor">Open</Link></div>
-          <p className="small text2">Ask like you would ask a private banker. It checks live prices, news, analyst ratings and valuations before it answers.</p>
+          <div className="home-card-head"><span className="home-badge ai">✦</span><b>{tr("AI Advisor")}</b><Link className="link-btn small" to="/advisor">{tr("Open")}</Link></div>
+          <p className="small text2">{tr("Ask like you would ask a private banker. It checks live prices, news, analyst ratings and valuations before it answers.")}</p>
           <form onSubmit={ask} className="row" style={{ gap: 8 }}>
-            <input className="input" style={{ flex: 1, height: 42 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. Should I buy FAB or ADCB for dividends?" aria-label="Ask the AI advisor" />
-            <button className="btn primary" style={{ height: 42 }}>Ask</button>
+            <input className="input" style={{ flex: 1, height: 42 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr("e.g. Should I buy FAB or ADCB for dividends?")} aria-label="Ask the AI advisor" />
+            <button className="btn primary" style={{ height: 42 }}>{tr("Ask")}</button>
           </form>
           <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-            {["Which UAE banks look cheapest?", "Is Aldar a good buy now?", "What UAE bonds or sukuk yield the most?"].map((x) => (
+            {["Which UAE banks look cheapest?", "Is Aldar a good buy now?", "What UAE bonds or sukuk yield the most?"].map((x) => tr(x)).map((x) => (
               <button key={x} className="chip" onClick={() => nav(`/advisor?q=${encodeURIComponent(x)}`)}>{x}</button>
             ))}
           </div>
         </section>
 
         <section className="home-card home-finsta">
-          <div className="home-card-head"><span className="home-badge finsta">F</span><b>Finstagram</b><Link className="link-btn small" to="/finstagram">Open feed</Link></div>
+          <div className="home-card-head"><span className="home-badge finsta">F</span><b>{tr("Finstagram")}</b><Link className="link-btn small" to="/finstagram">{tr("Open feed")}</Link></div>
           <div className="home-posts">
             {posts.map((p) => {
               const vid = /watch\?v=([\w-]+)/.exec(p.link?.url ?? "")?.[1];
@@ -83,17 +85,17 @@ export default function Home() {
                 </Link>
               );
             })}
-            {!posts.length && <div className="small text2">Loading the latest posts…</div>}
+            {!posts.length && <div className="small text2">{tr("Loading the latest posts…")}</div>}
           </div>
-          <Link className="btn primary block" to="/finstagram" style={{ marginTop: 10 }}>Open Finstagram</Link>
+          <Link className="btn primary block" to="/finstagram" style={{ marginTop: 10 }}>{tr("Open Finstagram")}</Link>
         </section>
 
         <section className="home-card">
-          <div className="home-card-head"><b>UAE movers today</b><Link className="link-btn small" to="/markets">All {uae.data?.items?.length ?? ""} UAE shares</Link></div>
+          <div className="home-card-head"><b>{tr("UAE movers today")}</b><Link className="link-btn small" to="/markets">{tr("All UAE shares")} ({uae.data?.items?.length ?? ""})</Link></div>
           <div className="home-movers">
             {[["Top gainers", gainers], ["Biggest decliners", losers]].map(([title, rows]) => (
               <div key={title as string}>
-                <div className="xs muted" style={{ marginBottom: 6 }}>{title as string}</div>
+                <div className="xs muted" style={{ marginBottom: 6 }}>{tr(title as string)}</div>
                 {(rows as AnyObj[]).map((x) => (
                   <Link key={x.symbol} to={`/markets/${encodeURIComponent(x.symbol)}`} className="home-mover">
                     <span className="grow ellipsis"><b>{x.symbol.replace(/\.(AE|AD)$/, "")}</b> <span className="xs muted">{x.name}</span></span>
@@ -106,7 +108,7 @@ export default function Home() {
           </div>
         </section>
       </div>
-      <div className="xs muted" style={{ marginTop: 14 }}>Market data from public sources, delayed. Educational tools — not personalised financial advice.</div>
+      <div className="xs muted" style={{ marginTop: 14 }}>{tr("Market data from public sources, delayed. Educational tools — not personalised financial advice.")}</div>
     </div>
   );
 }

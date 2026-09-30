@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../services/api";
+import { useT } from "../i18n";
 
 function GoogleIcon() {
   return (
@@ -18,6 +19,7 @@ export default function Login() {
   const [sp] = useSearchParams();
   const nav = useNavigate();
   const qc = useQueryClient();
+  const { t } = useT();
   const next = sp.get("next") && sp.get("next")!.startsWith("/") ? sp.get("next")! : "/finstagram";
   const providers = useQuery({ queryKey: ["auth-providers"], queryFn: () => api.get<Record<string, boolean>>("/auth/providers"), staleTime: 600_000 });
   const [mode, setMode] = useState<"signin" | "signup">(sp.get("mode") === "signup" ? "signup" : "signin");
@@ -73,25 +75,25 @@ export default function Login() {
       </aside>
       <main className="login-main">
         <div className="login-card">
-          <h2>{mode === "signin" ? "Welcome back" : "Create your account"}</h2>
-          <p className="small text2">{mode === "signin" ? "Sign in to post, save, follow and get a feed tuned to you." : "One account for the whole site — the advisor, reports and Finstagram."}</p>
+          <h2>{mode === "signin" ? t("Welcome back") : t("Create your account")}</h2>
+          <p className="small text2">{mode === "signin" ? t("Sign in to post, save, follow and get a feed tuned to you.") : t("One account for the whole site — the advisor, reports and Finstagram.")}</p>
           {providers.data?.google && (
             <>
-              <button className="oauth-btn" onClick={google}><GoogleIcon /> Continue with Google</button>
+              <button className="oauth-btn" onClick={google}><GoogleIcon /> {t("Continue with Google")}</button>
               <div className="login-or"><span>or</span></div>
             </>
           )}
           <div className="seg-tabs" role="tablist" style={{ marginBottom: 6 }}>
-            <button type="button" role="tab" aria-selected={method === "email"} className={method === "email" ? "on" : ""} onClick={() => switchMethod("email")}>Email</button>
-            <button type="button" role="tab" aria-selected={method === "phone"} className={method === "phone" ? "on" : ""} onClick={() => switchMethod("phone")}>Phone number</button>
+            <button type="button" role="tab" aria-selected={method === "email"} className={method === "email" ? "on" : ""} onClick={() => switchMethod("email")}>{t("Email")}</button>
+            <button type="button" role="tab" aria-selected={method === "phone"} className={method === "phone" ? "on" : ""} onClick={() => switchMethod("phone")}>{t("Phone number")}</button>
           </div>
           <form onSubmit={submit} className="stack" style={{ gap: 10 }}>
             {method === "email" ? (
-              <label className="fld"><span>{mode === "signin" ? "Email or username" : "Email"}</span>
+              <label className="fld"><span>{mode === "signin" ? t("Email or username") : t("Email")}</span>
                 <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoFocus /></label>
             ) : (
-              <label className="fld"><span>Mobile number</span>
-                <div className="phone-field">
+              <label className="fld"><span>{t("Mobile number")}</span>
+                <div className="phone-field" dir="ltr">
                   <span className="phone-cc" aria-hidden>🇦🇪 +971</span>
                   <input className="input" type="tel" inputMode="tel" autoComplete="tel" required placeholder="50 123 4567" value={f.phone} disabled={otp && codeSent}
                     onChange={(e) => setF({ ...f, phone: e.target.value })} autoFocus />
@@ -103,23 +105,23 @@ export default function Login() {
               <label className="fld"><span>Code from the SMS</span>
                 <input className="input" inputMode="numeric" autoComplete="one-time-code" required maxLength={10} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} autoFocus /></label>
             )) : (
-              <label className="fld"><span>Password</span>
+              <label className="fld"><span>{t("Password")}</span>
                 <input className="input" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} required minLength={mode === "signup" ? 8 : 1} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
             )}
             {mode === "signup" && !otp && <div className="xs muted">At least 8 characters. Passwords are stored only as salted scrypt hashes.</div>}
             {err && <div className="banner error small">{err}</div>}
             <button className="btn primary block login-submit" disabled={busy}>
-              {busy ? "…" : otp ? (codeSent ? "Verify and continue" : "Send me a code") : mode === "signin" ? "Sign in" : "Create account"}
+              {busy ? "…" : t(otp ? (codeSent ? "Verify and continue" : "Send me a code") : mode === "signin" ? "Sign in" : "Create account")}
             </button>
             {otp && codeSent && <button type="button" className="link-btn small" onClick={() => { setCodeSent(false); setF({ ...f, code: "" }); }}>Use a different number or resend</button>}
           </form>
           {!otp && (
             <div className="small text2" style={{ marginTop: 14, textAlign: "center" }}>
-              {mode === "signin" ? <>New here? <button className="link-btn" onClick={() => { setMode("signup"); setErr(null); }}>Create an account</button></>
-                : <>Already have an account? <button className="link-btn" onClick={() => { setMode("signin"); setErr(null); }}>Sign in</button></>}
+              {mode === "signin" ? <>{t("New here?")} <button className="link-btn" onClick={() => { setMode("signup"); setErr(null); }}>{t("Create an account")}</button></>
+                : <>{t("Already have an account?")} <button className="link-btn" onClick={() => { setMode("signin"); setErr(null); }}>{t("Sign in")}</button></>}
             </div>
           )}
-          <div className="xs muted" style={{ marginTop: 18, textAlign: "center" }}><Link to="/">Continue without an account →</Link></div>
+          <div className="xs muted" style={{ marginTop: 18, textAlign: "center" }}><Link to="/">{t("Continue without an account →")}</Link></div>
         </div>
       </main>
     </div>

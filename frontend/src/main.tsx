@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { WorkspaceProvider } from "./hooks/workspace";
+import { LanguageProvider } from "./i18n";
 import { ApiError } from "./services/api";
 import "./styles.css";
 import "./styles-markets.css";
@@ -26,7 +27,9 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={client}>
       <BrowserRouter>
         <WorkspaceProvider>
-          <App />
+          <LanguageProvider>
+            <App />
+          </LanguageProvider>
         </WorkspaceProvider>
       </BrowserRouter>
     </QueryClientProvider>

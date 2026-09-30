@@ -66,6 +66,8 @@ def serialize_user(db: Session, u: User, viewer: User | None = None, full: bool 
             "following": db.scalar(select(func.count(Follow.id)).where(Follow.follower_id == u.id)) or 0,
             "is_me": viewer is not None and viewer.id == u.id,
             "kind": u.kind,
+            "language": u.language if viewer is not None and viewer.id == u.id else None,
+            "has_password": bool(u.password_hash) if viewer is not None and viewer.id == u.id else None,
             "email": u.email if viewer is not None and viewer.id == u.id else None,
             "phone": u.phone if viewer is not None and viewer.id == u.id else None,
             "auth_provider": u.auth_provider if viewer is not None and viewer.id == u.id else None,
@@ -333,3 +335,76 @@ def phone_verify(db: Session, request: Request, response: Response, number: str,
         raise AuthenticationRequired("this account is disabled")
     _start_session(db, u, response)
     return u
+
+
+LANGUAGES = ("en", "ar")
+
+
+def update_account(
+    db: Session,
+    u: User,
+    username: str | None = None,
+    email: str | None = None,
+    phone_number: str | None = None,
+    language: str | None = None,
+) -> User:
+    """Change the sign-in details and preferences of the signed-in account."""
+    if username is not None and username.strip().lower() != u.username:
+        uname = username.strip().lower()
+        if not USERNAME.match(uname):
+            raise ValidationFailed("usernames are 3–30 characters: lowercase letters, digits, underscores and dots")
+        if uname in RESERVED:
+            raise ValidationFailed("that username is reserved")
+        if db.scalar(select(User.id).where(func.lower(User.username) == uname, User.id != u.id)) is not None:
+            raise ConflictError("that username is taken")
+        u.username = uname
+    if email is not None:
+        mail = email.strip().lower() or None
+        if mail is not None:
+            if not EMAIL.match(mail):
+                raise ValidationFailed("enter a valid email address")
+            if db.scalar(select(User.id).where(func.lower(User.email) == mail, User.id != u.id)) is not None:
+                raise ConflictError("another account already uses that email")
+        if mail is None and not (u.phone or u.provider_sub):
+            raise ValidationFailed("keep an email or a phone number so you can still sign in")
+        u.email = mail
+    if phone_number is not None:
+        mobile = phone.normalize(phone_number) if phone_number.strip() else None
+        if mobile is not None and db.scalar(select(User.id).where(User.phone == mobile, User.id != u.id)) is not None:
+            raise ConflictError("another account already uses that mobile number")
+        if mobile is None and not (u.email or u.provider_sub):
+            raise ValidationFailed("keep an email or a phone number so you can still sign in")
+        u.phone = mobile
+    if language is not None:
+        if language not in LANGUAGES:
+            raise ValidationFailed("language must be 'en' or 'ar'")
+        u.language = language
+    db.commit()
+    return u
+
+
+def change_password(db: Session, request: Request, u: User, current: str | None, new: str) -> None:
+    """Change the password, or set one for accounts created with Google or an SMS code."""
+    ratelimit.hit(db, f"password:{u.id}", 10)
+    if u.password_hash and (not current or not verify_password(current, u.password_hash)):
+        raise AuthenticationRequired("your current password is not correct")
+    _check_password(new, u.username, u.email or "", u.phone or "")
+    u.password_hash = hash_password(new)
+    token = request.cookies.get(COOKIE)
+    keep = _token_hash(token) if token else None
+    # Other devices must sign in again with the new password.
+    db.execute(delete(UserSession).where(UserSession.user_id == u.id, UserSession.token_hash != keep))
+    db.commit()
+
+
+def logout_everywhere(db: Session, request: Request, u: User) -> int:
+    """Sign out every other device; the current session stays signed in."""
+    token = request.cookies.get(COOKIE)
+    keep = _token_hash(token) if token else None
+    n = (
+        db.query(UserSession)
+        .filter(UserSession.user_id == u.id, UserSession.token_hash != keep)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n)
