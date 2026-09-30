@@ -242,7 +242,7 @@ def _llm_stream(db: Session, messages: list[dict[str, str]], trace: list[dict[st
         if not calls:
             if not (msg.get("content") or "").strip():
                 raise llm.LLMUnavailable("The language model returned an empty answer.")
-            meta = {"mode": "ai", "ai": {"used": True, **llm.status()}, "tools": trace, "symbols": list(dict.fromkeys(symbols)),
+            meta = {"mode": "ai", "ai": {"used": True, "provider": msg.get("_provider"), "model": msg.get("_model")}, "tools": trace, "symbols": list(dict.fromkeys(symbols)),
                     "news": news_used[:8], "disclaimer": DISCLAIMER}  # fmt: skip
             yield {"type": "done", "meta": meta}
             return
@@ -288,7 +288,7 @@ def status(db: Session) -> dict[str, Any]:
     row = db.get(MarketCache, _LLM_STATE)
     if row is None or utcnow() - row.fetched_at > timedelta(minutes=30):
         try:  # one-token probe; free when the provider rejects the request
-            llm.chat([{"role": "user", "content": "Reply with: ok"}], max_tokens=1)
+            llm.chat([{"role": "user", "content": "Reply with: ok"}], max_tokens=20)
             _record_llm_state(db, None)
         except llm.LLMUnavailable as exc:
             _record_llm_state(db, exc.reason)

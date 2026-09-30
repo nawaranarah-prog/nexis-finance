@@ -70,10 +70,10 @@ export default function Login() {
         <div className="login-card">
           <h2>{mode === "signin" ? "Welcome back" : "Create your account"}</h2>
           <p className="small text2">{mode === "signin" ? "Sign in to post, save, follow and get a feed tuned to you." : "One account for the whole site — the advisor, reports and InstaFin."}</p>
-          <button className="oauth-btn" onClick={() => oauth("google")}><GoogleIcon /> Continue with Google</button>
-          <button className="oauth-btn apple" onClick={() => oauth("apple")}><AppleIcon /> Continue with Apple</button>
+          {providers.data?.google && <button className="oauth-btn" onClick={() => oauth("google")}><GoogleIcon /> Continue with Google</button>}
+          {providers.data?.apple && <button className="oauth-btn apple" onClick={() => oauth("apple")}><AppleIcon /> Continue with Apple</button>}
           {note && <div className="banner neutral small" style={{ marginTop: 8 }}>{note}</div>}
-          <div className="login-or"><span>or with email</span></div>
+          {(providers.data?.google || providers.data?.apple) && <div className="login-or"><span>or with email</span></div>}
           <form onSubmit={submit} className="stack" style={{ gap: 10 }}>
             {mode === "signup" && (
               <label className="fld"><span>Your name</span>

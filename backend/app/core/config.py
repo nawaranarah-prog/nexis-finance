@@ -64,7 +64,8 @@ class Settings(BaseSettings):
     # Language model for the AI advisor and report narratives (see app/services/llm.py for credential order).
     llm_api_key: str | None = None
     llm_base_url: str | None = None
-    llm_model: str = "anthropic/claude-opus-5.5"
+    # Comma-separated, strongest first; the Vercel AI Gateway free tier serves these OpenAI models.
+    llm_model: str = "openai/gpt-5.1,openai/gpt-5,openai/gpt-4.1"
     # Vercel Cron sends Authorization: Bearer <CRON_SECRET> when this is set.
     cron_secret: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_CRON_SECRET", "CRON_SECRET"))
     # Public origin of the web app (used for OAuth redirect URIs), e.g. https://nexis-finance-five.vercel.app

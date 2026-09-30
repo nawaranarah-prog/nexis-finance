@@ -344,6 +344,7 @@ the HTTP requests the web UI makes, so it works even when the database port is n
 * The research workspace on the hosted instance is shared (InstaFin has accounts, the research pages do not): anything imported there is visible to every visitor. Run your own instance for private data.
 * Market data, fundamentals and news come from unofficial public endpoints without an SLA; Abu Dhabi (ADX) listings and individual bond prices are not available from them.
 * The AI advisor needs a language model: on Vercel, activate the account's AI Gateway (adding a card unlocks the free monthly credits) — no key or redeploy needed — or set `ANTHROPIC_API_KEY` / `NEXIS_LLM_API_KEY`. Until then the built-in analyst engine answers from live data.
+* The AI advisor runs on GPT-5.1 (then GPT-5, GPT-4.1) through the Vercel AI Gateway free tier; add `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for more providers — they are tried in order and fail over automatically.
 * Sign in with Google/Apple needs the owner's OAuth credentials (see [docs/MARKETS_AND_SOCIAL.md](docs/MARKETS_AND_SOCIAL.md#accounts)); email accounts work without them. There is no email verification or password-reset email yet.
 * Automated recommendations are rule-based or model-written summaries of public data, not personalised advice; InstaFin moderation is report-based.
 * No user accounts or multi-tenant separation: it is a single-owner research tool (the public API uses owner-issued keys). A fake login screen would add nothing.
