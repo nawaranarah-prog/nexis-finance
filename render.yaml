@@ -23,7 +23,7 @@ services:
       - key: NEXIS_EXTERNAL_DATA_ENABLED
         value: "true"
       - key: NEXIS_SEC_USER_AGENT
-        value: "NexisFinance open-source research demo (github.com/nexis-finance)"
+        value: "NexisFinance research contact@example.com"  # SEC fair-access policy: replace with your own contact email
       - key: NEXIS_CORS_ORIGINS
         value: "https://nexis-finance-five.vercel.app"
       - key: NEXIS_LOG_JSON

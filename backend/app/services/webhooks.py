@@ -45,7 +45,7 @@ EVENTS = (
     "ping",
 )
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="nexis-webhook")
-INLINE = False  # tests may deliver synchronously
+INLINE = get_settings().jobs_inline  # tests may also set this to run synchronously
 BACKOFF = (1.0, 3.0)
 
 

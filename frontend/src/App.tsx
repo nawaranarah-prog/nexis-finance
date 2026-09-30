@@ -44,8 +44,8 @@ function Waking() {
   return (
     <div className="state">
       <span className="spinner" />
-      <div style={{ marginTop: 10, fontWeight: 600, color: "var(--text)" }}>Waking up the research API…</div>
-      <div style={{ marginTop: 4 }}>The hosted demo runs on a free server that sleeps when idle and re-seeds its data on boot. This usually takes under a minute — retrying automatically.</div>
+      <div style={{ marginTop: 10, fontWeight: 600, color: "var(--text)" }}>Reaching the research API…</div>
+      <div style={{ marginTop: 4 }}>The API is starting up or temporarily unavailable. Retrying automatically.</div>
     </div>
   );
 }
@@ -55,12 +55,11 @@ function Guard({ children }: { children: React.ReactNode }) {
   if (loading) return <Loading label="Connecting to the research API" />;
   if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) return <Waking />;
   if (error) return <ErrorState error={error} />;
-  if (!dataset && import.meta.env.PROD) return <Waking />;
   if (!dataset)
     return (
       <Empty>
-        No dataset loaded yet. Run <code>backend/.venv/Scripts/python scripts/seed_demo.py</code> or ingest data on the{" "}
-        <a href="/market-data">Market Data</a> page.
+        No dataset loaded yet. Ingest real market data on the <a href="/market-data">Market Data</a> page, connect a source on{" "}
+        <a href="/connections">Connections</a>, or run <code>scripts/seed_live.py</code>.
       </Empty>
     );
   return <>{children}</>;

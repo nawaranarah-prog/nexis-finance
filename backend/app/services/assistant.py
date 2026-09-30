@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import NexisError
-from app.models import Anomaly, Backtest, Experiment, Portfolio
+from app.models import Anomaly, Backtest, Experiment, Holding, Portfolio, Transaction
 from app.services import book as B
 from app.services import experiments as exp_svc
 from app.services import insights, intel
@@ -55,6 +55,26 @@ def _mine(q: str) -> bool:
     return bool(re.search(r"\b(my|mine|consolidated|holdings|accounts?)\b", q.lower()))
 
 
+def _has_holdings(db: Session) -> bool:
+    return db.scalar(select(Holding.id).limit(1)) is not None or db.scalar(select(Transaction.id).limit(1)) is not None
+
+
+def _target(db: Session, q: str) -> tuple[Portfolio | None, str]:
+    """The research portfolio a question is about, and a note when it stands in for "my portfolio".
+
+    Returns ``(None, "")`` when the question should be answered from the consolidated (imported) book.
+    """
+    p = _research_portfolio(db, q)
+    if p is not None and not _mine(q):
+        return p, ""
+    if _has_holdings(db):
+        return None, ""
+    p = p or db.scalars(select(Portfolio).order_by(Portfolio.id)).first()
+    if p is None:
+        return None, ""
+    return p, f"No brokerage holdings have been imported yet, so this answers for the research portfolio “{p.name}”. "
+
+
 def _answer(intent: str, text: str, evidence: list[dict[str, Any]], links: list[dict[str, str]]) -> dict[str, Any]:
     return {"intent": intent, "grounded": True, "answer": text, "evidence": evidence, "links": links}
 
@@ -63,15 +83,15 @@ def _answer(intent: str, text: str, evidence: list[dict[str, Any]], links: list[
 
 
 def drawdown(db: Session, q: str) -> dict[str, Any]:
-    p = _research_portfolio(db, q)
-    if p is not None and not _mine(q):
+    p, note = _target(db, q)
+    if p is not None:
         a = port_svc.analytics(db, p.id)
         d = a["max_drawdown_details"]
         _, sim, _, asset_r = port_svc.simulate(db, p, None, None)
         contrib = (sim.weights.shift(1) * asset_r).loc[d["peak_date"] : d["trough_date"]].sum().sort_values()
         top = [(s, float(v)) for s, v in contrib.head(3).items()]
         bench = a["benchmark"]["summary"] or {}
-        text = (
+        text = note + (
             f"{p.name}'s maximum drawdown was {_pct(d['max_drawdown'])}, from a peak on {d['peak_date']} to a trough on "
             f"{d['trough_date']} ({'recovered ' + d['recovery_date'] if d['recovery_date'] else 'not yet recovered'}). "
             f"The largest negative contributors over that window were " + ", ".join(f"{s} ({_pct(v)})" for s, v in top) + ". "
@@ -106,11 +126,11 @@ def drawdown(db: Session, q: str) -> dict[str, Any]:
 
 
 def volatility(db: Session, q: str) -> dict[str, Any]:
-    p = _research_portfolio(db, q)
-    if p is not None and not _mine(q):
+    p, note = _target(db, q)
+    if p is not None:
         dec = port_svc.analytics(db, p.id)["risk_decomposition"]
         top = sorted(dec.get("assets", []), key=lambda x: -x["pct_contribution"])[:3]
-        text = (
+        text = note + (
             f"{p.name} has annualised volatility of {_p(dec.get('portfolio_volatility'))}. The largest contributors (Euler "
             f"decomposition) are "
             + ", ".join(f"{x['symbol']} with {_p(x['pct_contribution'])} of risk at {_p(x['weight'])} weight" for x in top)
@@ -242,6 +262,20 @@ def regime(db: Session, q: str) -> dict[str, Any]:
 
 
 def largest(db: Session, q: str) -> dict[str, Any]:
+    p, note = _target(db, q)
+    if p is not None:
+        pos = sorted(p.positions, key=lambda x: -x.weight)
+        top5 = sum(x.weight for x in pos[:5])
+        hhi = sum(x.weight**2 for x in pos)
+        text = note + (
+            f"The largest position in {p.name} is {pos[0].symbol} at {_p(pos[0].weight)} target weight; the top five make up "
+            f"{_p(top5)} across {len(pos)} positions (Herfindahl index {hhi:.3f})."
+        )
+        ev = [
+            {"label": "Largest position", "value": f"{pos[0].symbol} {_p(pos[0].weight)}", "source": f"portfolio {p.id} weights"},
+            {"label": "Herfindahl index", "value": f"{hhi:.3f}", "source": "Σ w²"},
+        ]
+        return _answer("largest", text, ev, [{"label": "Portfolio Lab", "to": f"/portfolio-lab?id={p.id}"}])
     a = B.analytics(db)
     c = a.get("concentration") or {}
     ind = [i for i in a["industry"] if not i["label"].startswith("Unclassified")]
@@ -292,8 +326,8 @@ def reconciliation(db: Session, q: str) -> dict[str, Any]:
 
 
 def performance(db: Session, q: str) -> dict[str, Any]:
-    p = _research_portfolio(db, q)
-    if p is not None and not _mine(q):
+    p, note = _target(db, q)
+    if p is not None:
         s = port_svc.analytics(db, p.id)["summary"]
         name, link = p.name, f"/portfolio-lab?id={p.id}"
     else:
@@ -301,7 +335,7 @@ def performance(db: Session, q: str) -> dict[str, Any]:
         if not s:
             return _unverifiable("No portfolio history is available to compute performance.")
         name, link = "Your consolidated portfolio", "/intelligence"
-    text = (
+    text = note + (
         f"{name}: cumulative return {_pct(s.get('cumulative_return'))}, annualised return {_pct(s.get('annualized_return'))}, "
         f"annualised volatility {_p(s.get('annualized_volatility'))}, Sharpe ratio {s.get('sharpe_ratio') or float('nan'):.2f}, "
         f"maximum drawdown {_pct(s.get('max_drawdown'))} over {s.get('start_date')} → {s.get('end_date')}. Historical simulation, not a forecast."

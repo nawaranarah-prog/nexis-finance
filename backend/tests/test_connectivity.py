@@ -579,3 +579,42 @@ def test_research_assistant_is_grounded(client, imported):
     assert "FIN1" in rec["answer"]
     unknown = client.post("/api/assistant/ask", json={"question": "Will the market go up tomorrow?"}).json()
     assert unknown["grounded"] is False and "can't verify" in unknown["answer"] and unknown["suggestions"]
+
+
+def test_public_instance_refuses_stored_credentials(client, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "external_data_enabled", True)
+    monkeypatch.setattr(get_settings(), "public_instance", True)
+    r = client.post("/api/connections", json={"provider_key": "fred", "credentials": {"api_key": "a" * 32}})
+    assert r.status_code == 422 and "shared public workspace" in r.json()["error"]["message"]
+    assert client.get("/api/system/config").json()["public_instance"] is True
+
+
+def test_managed_postgres_urls_are_normalised(monkeypatch):
+    from app.core.config import Settings
+
+    monkeypatch.delenv("NEXIS_DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgres://u:p@db.example.com/nexis?sslmode=require")
+    assert Settings().database_url == "postgresql+psycopg://u:p@db.example.com/nexis?sslmode=require"
+
+
+def test_assistant_falls_back_to_research_portfolio_without_holdings(client, monkeypatch):
+    from app.services import assistant
+
+    ds = next(d for d in client.get("/api/datasets").json() if d["code"] == "TEST-SYN")
+    p = client.post(
+        "/api/portfolios",
+        json={
+            "name": "Assistant Fallback EW",
+            "dataset_id": ds["id"],
+            "benchmark_symbol": "NXMKT",
+            "symbols": ["TCH1", "FIN1", "UTL1"],
+            "allocation_method": "equal_weight",
+        },
+    )
+    assert p.status_code == 201, p.text
+    monkeypatch.setattr(assistant, "_has_holdings", lambda db: False)
+    for q in ("What contributed most to my portfolio's volatility?", "What is my largest position and exposure?"):
+        r = client.post("/api/assistant/ask", json={"question": q}).json()
+        assert r["grounded"] and "No brokerage holdings have been imported" in r["answer"] and r["evidence"]

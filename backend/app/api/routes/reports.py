@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConfigurationError
@@ -45,9 +45,11 @@ def list_reports(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
 
 
 @router.get("/reports/{report_id}/download")
-def download_report(report_id: int, db: Session = Depends(get_db)) -> FileResponse:
-    path, r = rep_svc.report_path(db, report_id)
-    return FileResponse(path, media_type="application/pdf", filename=r.file_name)
+def download_report(report_id: int, db: Session = Depends(get_db)) -> Response:
+    content, r = rep_svc.report_bytes(db, report_id)
+    return Response(
+        content, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{r.file_name}"'}
+    )
 
 
 def _csv(df: pd.DataFrame, name: str) -> StreamingResponse:

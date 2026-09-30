@@ -26,8 +26,10 @@ from app.data.synthetic import SyntheticConfig
 from app.db.base import utcnow
 from app.models import (
     Account,
+    Asset,
     CompanyProfile,
     Connection,
+    Dataset,
     EconomicObservation,
     EconomicSeries,
     Fundamental,
@@ -89,6 +91,12 @@ def connect(
     spec = cls.spec
     if spec.auth_type == "file":
         raise ConfigurationError("file sources are created by importing a file")
+    if spec.credential_fields and get_settings().public_instance:
+        raise ConfigurationError(
+            "this is a shared public workspace, so it does not store API keys or account credentials — "
+            "run your own instance (see the README) to connect "
+            f"{spec.name}; keyless sources and file imports work here"
+        )
     missing = [f.name for f in spec.credential_fields if f.required and not (credentials or {}).get(f.name)]
     if missing:
         raise ConfigurationError(f"missing credentials: {', '.join(missing)}")
@@ -413,6 +421,12 @@ def _sync_regulatory(db: Session, c: Connection, prov: FinancialConnectionProvid
             setattr(p, k, prof[k])
         p.fetched_at = utcnow()
         db.flush()
+        if prof.get("sic_major_group"):
+            # Live-market assets carry no sector from the price feed; use the filing's SIC major group.
+            for a in db.scalars(
+                select(Asset).join(Dataset).where(Dataset.code == LIVE_DATASET, Asset.symbol == sym, Asset.sector.is_(None))
+            ):
+                a.sector = prof["sic_major_group"][:64]
         if prof.get("sic"):
             try:
                 facts = prov.get_fundamentals(prof["cik"])  # type: ignore[attr-defined]

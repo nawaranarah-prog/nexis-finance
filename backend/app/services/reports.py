@@ -182,6 +182,7 @@ def generate(
         file_name=fname,
         file_size=len(content),
         sha256=hashlib.sha256(content).hexdigest(),
+        content=content,
         config={
             "portfolio_id": portfolio_id,
             "backtest_id": backtest_id,
@@ -517,12 +518,15 @@ def serialize(r: Report) -> dict[str, Any]:
     }
 
 
-def report_path(db: Session, report_id: int) -> tuple[Path, Report]:
+def report_bytes(db: Session, report_id: int) -> tuple[bytes, Report]:
     r = db.get(Report, report_id)
     if r is None:
         raise NotFoundError(f"report {report_id} not found")
+    if r.content is not None:
+        return r.content, r
+    # Reports generated before content was stored in the database live only on disk.
     base = Path(get_settings().reports_dir).resolve()
     path = (base / r.file_name).resolve()
     if base not in path.parents or not path.is_file():  # guard against path traversal / missing files
         raise NotFoundError("report file is not available")
-    return path, r
+    return path.read_bytes(), r

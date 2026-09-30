@@ -6,6 +6,8 @@ reproduce → report → exports, plus structured error handling.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -335,6 +337,14 @@ def test_report_generation_and_download(client, portfolio_id, backtest, vol_exp)
     )
     d = client.get(f"/api/reports/{res['report_id']}/download")
     assert d.status_code == 200 and d.content[:4] == b"%PDF"
+    # The PDF is served from the database, so it survives hosts without a durable disk.
+    from app.core.config import get_settings
+
+    for f in Path(get_settings().reports_dir).glob("*.pdf"):
+        f.unlink()
+    again = client.get(f"/api/reports/{res['report_id']}/download")
+    assert again.status_code == 200 and again.content == d.content
+    assert "attachment" in again.headers["content-disposition"]
     assert client.post("/api/reports", json={"title": "Empty"}).json()["status"] == "failed"
     assert client.get("/api/reports/99999/download").status_code == 404
 

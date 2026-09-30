@@ -1,0 +1,14 @@
+frontend
+docs
+tests
+.github
+backend/.venv
+backend/tests
+backend/.nexis_secret
+backend/.env
+**/__pycache__
+data/*
+!data/samples
+.agents
+.claude
+skills-lock.json

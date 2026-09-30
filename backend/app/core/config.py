@@ -6,15 +6,18 @@ defaults are safe for local development only.
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BACKEND_DIR.parent
 APP_VERSION = "1.0.0"
+# Serverless hosts (Vercel) only allow writes under /tmp.
+ON_SERVERLESS = bool(os.environ.get("VERCEL"))
 
 
 class Settings(BaseSettings):
@@ -29,9 +32,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
 
-    database_url: str = Field(default=f"sqlite:///{(PROJECT_DIR / 'data' / 'nexis.db').as_posix()}")
+    database_url: str = Field(
+        default=f"sqlite:///{(PROJECT_DIR / 'data' / 'nexis.db').as_posix()}",
+        # Managed Postgres integrations (Neon, Vercel) expose DATABASE_URL / POSTGRES_URL.
+        validation_alias=AliasChoices("NEXIS_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"),
+    )
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
-    reports_dir: Path = PROJECT_DIR / "data" / "reports"
+    reports_dir: Path = Path("/tmp/nexis-reports") if ON_SERVERLESS else PROJECT_DIR / "data" / "reports"
 
     public_provider_enabled: bool = True
     public_provider_timeout_seconds: float = 15.0
@@ -49,6 +56,10 @@ class Settings(BaseSettings):
     trading_days: int = 252
 
     job_workers: int = 2
+    # Run background jobs inside the request (serverless platforms freeze threads after the response).
+    jobs_inline: bool = ON_SERVERLESS
+    # Public shared deployment: every visitor sees the same workspace, so stored credentials are refused.
+    public_instance: bool = False
     # Seed the demo database in the background when it is empty (hosted demo deployments).
     auto_seed: bool = False
 
@@ -57,6 +68,9 @@ class Settings(BaseSettings):
     def _resolve_sqlite_path(cls, v: str) -> str:
         # Relative SQLite paths are resolved against the backend directory so the
         # app behaves the same regardless of the current working directory.
+        for scheme in ("postgres://", "postgresql://"):
+            if v.startswith(scheme):
+                return "postgresql+psycopg://" + v[len(scheme) :]
         prefix = "sqlite:///"
         if v.startswith(prefix) and not v.startswith("sqlite:///:memory:"):
             raw = v[len(prefix) :]

@@ -29,7 +29,7 @@ log = get_logger(__name__)
 JobFn = Callable[[Session, dict[str, Any], Callable[[float, str | None], None]], dict[str, Any]]
 
 _executor: ThreadPoolExecutor | None = None
-INLINE = False  # tests may set this to run jobs synchronously
+INLINE = get_settings().jobs_inline  # tests may also set this to run synchronously
 
 
 def _pool() -> ThreadPoolExecutor:

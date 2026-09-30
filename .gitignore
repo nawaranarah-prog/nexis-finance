@@ -43,3 +43,7 @@ Thumbs.db
 .idea/
 .vscode/
 .nexis_secret
+
+.vercel
+
+.env*

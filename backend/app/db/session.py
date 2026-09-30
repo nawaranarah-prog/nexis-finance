@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.config import get_settings
+from app.core.config import ON_SERVERLESS, get_settings
 
 
 def _build_engine(url: str) -> Engine:
@@ -26,6 +26,9 @@ def _build_engine(url: str) -> Engine:
             cur.close()
 
         return engine
+    if ON_SERVERLESS:
+        # Many short-lived instances: keep per-instance pools small and recycle idle connections.
+        return create_engine(url, pool_pre_ping=True, pool_size=1, max_overflow=4, pool_recycle=240, future=True)
     return create_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=10, future=True)
 
 

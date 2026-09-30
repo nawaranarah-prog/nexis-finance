@@ -1,0 +1,19 @@
+# Dependencies for the Vercel serverless API (api/index.py). Local and Docker installs use
+# backend/requirements.txt; this list omits the dev server and the offline Parquet pipeline.
+fastapi==0.142.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-multipart==0.0.32
+SQLAlchemy==2.1.1
+alembic==1.20.0
+pandas==3.0.6
+numpy==2.5.3
+scipy==1.18.1
+statsmodels==0.15.0
+scikit-learn==1.9.1
+reportlab==5.0.1
+matplotlib==3.11.2
+httpx==0.28.1
+cryptography==50.0.1
+openpyxl==3.1.5
+psycopg[binary]>=3.2

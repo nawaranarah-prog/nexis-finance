@@ -68,3 +68,21 @@ export function Warnings({ items }: { items: string[] | undefined }) {
     </div>
   );
 }
+
+export function useSystemConfig() {
+  return useQuery({ queryKey: ["config"], queryFn: () => api.get<AnyObj>("/system/config"), staleTime: Infinity });
+}
+
+/** Shown on a shared public deployment, where every visitor works in the same workspace. */
+export function PublicWorkspaceNotice() {
+  const cfg = useSystemConfig();
+  if (!cfg.data?.public_instance) return null;
+  return (
+    <div className="banner warn small" role="note" style={{ marginBottom: 12 }}>
+      <span aria-hidden>!</span>
+      <span>This is a <b>shared public workspace</b>: files you import here are visible to other visitors, and API keys are not stored.
+        Import only files you are happy to share, or <a href="https://github.com/nawaranarah-prog/nexis-finance#quick-start" target="_blank" rel="noreferrer">run your own instance</a> for private data and account connections.
+        Uploads are limited to {cfg.data.max_upload_mb} MB.</span>
+    </div>
+  );
+}

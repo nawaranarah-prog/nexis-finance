@@ -4,14 +4,16 @@
 
 > Nexis Finance — quantitative research platform for portfolio analytics, risk modelling, strategy backtesting, financial machine learning, and scalable market-data processing.
 
-**Live demo:** https://nexis-finance-five.vercel.app (frontend on Vercel; API on Render's free tier — the first
-request after idle wakes the server and re-seeds the demo data, which takes about a minute).
+**Live:** https://nexis-finance-five.vercel.app — running on **real data**: daily prices for 39 US large caps and ETFs
+since 2015 (Yahoo Finance chart endpoint), SEC EDGAR industries and XBRL fundamentals, the US Treasury yield curve
+and World Bank indicators, stored in PostgreSQL. Everything you run there (portfolios, backtests, models, imports,
+reports) is computed live and persists. It is a *shared* public workspace — see [Deployment](#deployment).
 
 Nexis Finance is a full-stack research application: a FastAPI/SQLAlchemy backend with a tested quantitative library, and a React/TypeScript front end with interactive Plotly charts. Every number on screen comes from a calculation over stored data. There are no hardcoded results, no invented market data, and no "AI insights".
 
-It runs fully offline in **DEMO / SYNTHETIC DATA MODE** on a seeded, documented synthetic universe. A public market-data provider and CSV upload are available for real data.
+Locally it can run fully offline in **DEMO / SYNTHETIC DATA MODE** on a seeded, documented synthetic universe (clearly badged as such), or on real data with `scripts/seed_live.py`.
 
-> ⚠️ Research and educational software. **Not investment advice.** Results are historical simulations or model outputs on (by default) synthetic data.
+> ⚠️ Research and educational software. **Not investment advice.** Results are historical simulations or model outputs.
 
 ---
 
@@ -159,6 +161,8 @@ pip install -r requirements-dev.txt
 #    4 portfolios, risk + stress tests, 3 backtests, walk-forward, 3 ML experiments, a PDF report.
 #    Takes about 1–2 minutes. --minimal loads only data + portfolios.
 python ../scripts/seed_demo.py
+#    …or real market data only (needs internet; about 4 minutes):
+#    python ../scripts/seed_live.py
 
 # 3. API  → http://127.0.0.1:8000  (OpenAPI docs: /docs)
 uvicorn app.main:app --port 8000
@@ -245,7 +249,7 @@ The conventions below are applied everywhere and are also served to the UI as to
 
 ```bash
 cd backend
-pytest                  # 151 tests, about 1 minute
+pytest                  # 154 tests, about 1 minute
 ruff check app tests ../scripts && ruff format --check app tests ../scripts
 cd ../frontend && npm run typecheck && npm run build
 # optional browser workflow check (API + Vite dev server running; needs `pip install playwright` and Edge/Chromium)
@@ -287,31 +291,52 @@ Errors always have the shape `{"error": {"code", "message", "details"}}`, with a
 
 ## Deployment
 
-The frontend is a static Vite build on **Vercel**; the Python API runs as a Docker service on **Render** (its
-scientific stack — scipy, pandas, scikit-learn — is ~350 MB, above Vercel's serverless function limit, and the
-app needs a database and background jobs). Vercel rewrites `/api/*`, `/docs` and `/openapi.json` to the API, so
-the browser talks to a single origin.
+The live instance runs entirely on **Vercel**, with a **Neon PostgreSQL** database from the Vercel marketplace:
 
-1. **API on Render** — [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/nawaranarah-prog/nexis-finance)
-   uses [`render.yaml`](render.yaml): Docker image from `backend/Dockerfile`, free plan, generated
-   `NEXIS_SECRET_KEY`, and `NEXIS_AUTO_SEED=true` so an empty database seeds itself in a background process on boot.
-2. **Frontend on Vercel** — `cd frontend && npx vercel deploy --prod` (config in [`frontend/vercel.json`](frontend/vercel.json)).
-   If Render assigns a different hostname, update the three rewrite destinations.
-3. **Self-hosted full stack** — `docker compose up --build` (PostgreSQL 16 + API + nginx frontend), then
-   `docker compose exec api python /app/scripts/seed_demo.py`.
+| Part | Where | Config |
+|---|---|---|
+| Frontend (static Vite build) | Vercel project `nexis-finance` | [`frontend/vercel.json`](frontend/vercel.json) — rewrites `/api/*`, `/docs`, `/openapi.json` to the API, so the browser talks to one origin |
+| API (FastAPI as a Python serverless function, ~420 MB of the 500 MB limit) | Vercel project `nexis-finance-api` (repository root) | [`vercel.json`](vercel.json), [`api/index.py`](api/index.py), [`requirements.txt`](requirements.txt) |
+| Database | Neon Postgres (`DATABASE_URL` injected by the integration) | Alembic migrations run on cold start |
 
-The free Render plan has an ephemeral disk and sleeps after inactivity: data you import there is a demo and resets
-on restart. For persistence, attach a Render disk or point `NEXIS_DATABASE_URL` at PostgreSQL. The same Alembic
-migrations run on SQLite and PostgreSQL.
+Serverless-specific behaviour, all driven by settings:
+
+* **Jobs run inline** (`NEXIS_JOBS_INLINE`, automatic on Vercel): the platform freezes background threads after a
+  response, so a job executes inside its request (up to 300 s) and is recorded exactly as before.
+* **Reports are stored in the database**, not on disk, so downloads work from any instance.
+* **Public workspace** (`NEXIS_PUBLIC_INSTANCE=true`): every visitor shares one workspace, so the API refuses to
+  store API keys or account credentials, and the UI says imported files are visible to others. Keyless sources
+  (Yahoo, SEC, Treasury, World Bank) and file imports work. Uploads are capped at 4 MB (Vercel's request limit).
+
+To reproduce it:
+
+```bash
+npx vercel project add nexis-finance-api && npx vercel link --project nexis-finance-api   # repository root
+npx vercel integration add neon                                                           # provisions DATABASE_URL
+npx vercel env add NEXIS_SECRET_KEY production        # Fernet key; also NEXIS_ENV=production, NEXIS_PUBLIC_INSTANCE=true,
+                                                      # NEXIS_SEC_USER_AGENT="YourApp you@example.com", NEXIS_MAX_UPLOAD_MB=4
+npx vercel deploy --prod                              # API
+python scripts/bootstrap_public.py https://<your-api>.vercel.app   # real data + research, through the REST API
+cd frontend && npx vercel deploy --prod               # after pointing frontend/vercel.json at <your-api>
+```
+
+`bootstrap_public.py` runs the same plan as `seed_live.py` ([`scripts/live_plan.py`](scripts/live_plan.py)) using only
+the HTTP requests the web UI makes, so it works even when the database port is not reachable from your machine.
+
+**Alternatives.** [`render.yaml`](render.yaml) deploys the API as a Docker service on Render
+([![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/nawaranarah-prog/nexis-finance));
+`docker compose up --build` runs PostgreSQL 16 + API + nginx frontend locally
+(`docker compose exec api python /app/scripts/seed_live.py`). The same migrations run on SQLite and PostgreSQL.
 
 ## Limitations
 
-* The default data is synthetic. Its statistical properties are designed, not observed. Real-market conclusions require real data.
+* The synthetic demo universe (local `seed_demo.py`) has designed, not observed, statistical properties; the live instance uses real data only.
 * Daily bars only. There is no intraday path, market impact, borrow or financing cost, or tax modelling. Costs are linear in traded notional.
 * The live public provider is an unofficial endpoint. Ingested live universes suffer survivorship bias.
 * Factor analytics use price- and volume-derived **proxies**. No accounting fundamentals are available, and none are fabricated.
 * Regime labels and anomaly flags are unsupervised model outputs with no guaranteed economic meaning.
-* The job runner is an in-process thread pool: jobs survive page reloads but not API restarts.
+* The job runner is an in-process thread pool (inline on serverless): jobs survive page reloads but not API restarts. On the hosted instance a single job is limited to 300 seconds.
+* The hosted instance is one shared workspace with no accounts: anything imported there is visible to every visitor. Run your own instance for private data.
 * No user accounts or multi-tenant separation: it is a single-owner research tool (the public API uses owner-issued keys). A fake login screen would add nothing.
 * The Research Assistant is deliberately not an LLM: it answers a fixed set of question types from stored metrics and declines everything else.
 * FRED and Alpaca integrations are verified only against documented response shapes (mocked tests) until you connect your own key/account; OAuth aggregators (Plaid, SnapTrade, IBKR, Schwab) are listed as *Coming soon*.

@@ -49,6 +49,8 @@ def system_config() -> dict[str, Any]:
         "trading_days_per_year": s.trading_days,
         "max_upload_mb": s.max_upload_mb,
         "job_workers": s.job_workers,
+        "jobs_inline": s.jobs_inline,
+        "public_instance": s.public_instance,
     }
 
 

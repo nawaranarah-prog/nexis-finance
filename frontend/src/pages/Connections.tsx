@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DataTable from "../components/DataTable";
 import { Card, Field, JobStatus, PageHead, QueryView, Tabs } from "../components/ui";
-import { ConnectionStatus, DataClassBadge } from "../components/connect";
+import { ConnectionStatus, DataClassBadge, PublicWorkspaceNotice, useSystemConfig } from "../components/connect";
 import { useJobRunner } from "../hooks/queries";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
@@ -28,6 +28,7 @@ export default function Connections() {
         <span aria-hidden>🔒</span>
         <span>Nexis never asks for brokerage passwords. Provider API keys are encrypted at rest (Fernet), never returned to the browser and never logged; disconnecting wipes them. Providers without a secure integration are marked <b>Coming soon</b> rather than simulated.</span>
       </div>
+      <PublicWorkspaceNotice />
       <ImportWizard onDone={refresh} />
       <div style={{ marginTop: 12 }}>
         <Tabs value={cat} onChange={setCat} tabs={CATS.map((c) => ({ value: c.value, label: c.label }))} />
@@ -66,6 +67,7 @@ function Integration({ spec, onChange }: { spec: AnyObj; onChange: () => void })
   const [busy, setBusy] = useState(false);
   const job = useJobRunner([["marketplace"], ["sync-runs"], ["intel"], ["intel-accounts"]]);
   const conns: AnyObj[] = spec.connections ?? [];
+  const locked = !!useSystemConfig().data?.public_instance && spec.credential_fields.length > 0;
   const connect = async () => {
     setBusy(true); setErr(null);
     try {
@@ -86,6 +88,7 @@ function Integration({ spec, onChange }: { spec: AnyObj; onChange: () => void })
       !spec.implemented ? <span className="badge">Coming soon</span>
         : spec.auth_type === "file" ? <a className="btn sm" href="#import">Import a file</a>
         : !spec.enabled ? <span className="badge bad" title="Disabled by server configuration">Unavailable</span>
+        : locked ? <span className="badge" title="The shared public workspace does not store credentials">Self-host to connect</span>
         : <button className="btn sm primary" onClick={() => setOpen(!open)}>{conns.length ? "Add connection" : "Connect"}</button>}>
       <div className="stack" style={{ gap: 8 }}>
         <div className="small text2">{spec.description}</div>
