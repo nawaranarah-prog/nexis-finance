@@ -22,7 +22,7 @@ export default function Login() {
   const providers = useQuery({ queryKey: ["auth-providers"], queryFn: () => api.get<Record<string, boolean>>("/auth/providers"), staleTime: 600_000 });
   const [mode, setMode] = useState<"signin" | "signup">(sp.get("mode") === "signup" ? "signup" : "signin");
   const [method, setMethod] = useState<"email" | "phone">("email");
-  const [f, setF] = useState({ email: "", phone: "", password: "", display_name: "", code: "" });
+  const [f, setF] = useState({ email: "", phone: "", password: "", code: "" });
   const [codeSent, setCodeSent] = useState(false);
   const [err, setErr] = useState<string | null>(sp.get("error"));
   const [busy, setBusy] = useState(false);
@@ -43,13 +43,13 @@ export default function Login() {
           setCodeSent(true);
           return;
         }
-        await api.post("/auth/phone/verify", { phone: f.phone, code: f.code, display_name: f.display_name || undefined });
+        await api.post("/auth/phone/verify", { phone: f.phone, code: f.code });
       } else if (mode === "signin") {
         await api.post("/auth/login", { identifier: method === "phone" ? f.phone : f.email, password: f.password });
       } else {
         await api.post("/auth/register", {
           ...(method === "phone" ? { phone: f.phone } : { email: f.email }),
-          password: f.password, display_name: f.display_name || undefined,
+          password: f.password,
         });
       }
       await done();
@@ -86,10 +86,6 @@ export default function Login() {
             <button type="button" role="tab" aria-selected={method === "phone"} className={method === "phone" ? "on" : ""} onClick={() => switchMethod("phone")}>Phone number</button>
           </div>
           <form onSubmit={submit} className="stack" style={{ gap: 10 }}>
-            {(mode === "signup" || (otp && codeSent)) && (
-              <label className="fld"><span>Your name{otp ? " (new accounts)" : ""}</span>
-                <input className="input" autoComplete="name" value={f.display_name} maxLength={60} onChange={(e) => setF({ ...f, display_name: e.target.value })} placeholder="How others see you" /></label>
-            )}
             {method === "email" ? (
               <label className="fld"><span>{mode === "signin" ? "Email or username" : "Email"}</span>
                 <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoFocus /></label>
