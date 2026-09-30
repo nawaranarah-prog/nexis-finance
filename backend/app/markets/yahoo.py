@@ -42,6 +42,16 @@ def _raw(v: Any) -> Any:
     return v
 
 
+def _thumbnail(t: Any) -> str | None:
+    """Widest thumbnail up to ~1200px from a Yahoo news item, if any."""
+    res = [r for r in ((t or {}).get("resolutions") or []) if r.get("url", "").startswith("https://")]
+    if not res:
+        return None
+    res.sort(key=lambda r: r.get("width") or 0)
+    fit = [r for r in res if (r.get("width") or 0) <= 1200]
+    return (fit[-1] if fit else res[0])["url"]
+
+
 class YahooClient:
     _lock = threading.Lock()
     _session: tuple[httpx.Cookies, str, float] | None = None  # cookies, crumb, obtained_at
@@ -129,6 +139,7 @@ class YahooClient:
                 if n.get("providerPublishTime")
                 else None,
                 "related": n.get("relatedTickers") or [],
+                "image": _thumbnail(n.get("thumbnail")),
             }
             for n in d.get("news", [])
             if n.get("title") and n.get("link")

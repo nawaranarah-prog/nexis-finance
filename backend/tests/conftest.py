@@ -81,3 +81,16 @@ def make_prices(values: dict[str, list[float]], start: str = "2024-01-01") -> pd
 @pytest.fixture
 def rng() -> np.random.Generator:
     return np.random.default_rng(123)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits(request):  # type: ignore[no-untyped-def]
+    """Rate limits are per client IP, and every test client shares one IP: start each API test with a clean slate."""
+    if "client" in request.fixturenames:
+        from app.db import session as db_session
+        from app.models import RateEvent
+
+        with db_session.SessionLocal() as db:
+            db.query(RateEvent).delete()
+            db.commit()
+    yield

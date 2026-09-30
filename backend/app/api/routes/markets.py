@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from datetime import date
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.errors import NexisError
+from app.core.logging import get_logger
+from app.db import session as db_session
 from app.db.session import get_db
 from app.services import advisor, market_reports, markets, ratelimit, valuation
 from app.services import compare as cmp
 
 router = APIRouter(tags=["markets"])
+log = get_logger(__name__)
 
 
 class _Base(BaseModel):
@@ -138,3 +145,25 @@ def advisor_status(db: Session = Depends(get_db)) -> dict[str, Any]:
 def advisor_chat(req: AdvisorRequest, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     ratelimit.hit(db, f"advisor:{ratelimit.client_ip(request)}", get_settings().advisor_requests_per_hour)
     return advisor.ask(db, [m.model_dump() for m in req.messages])
+
+
+@router.post("/advisor/chat/stream")
+def advisor_chat_stream(req: AdvisorRequest, request: Request, db: Session = Depends(get_db)) -> StreamingResponse:
+    """Server-sent events: ``status`` while data is fetched, ``delta`` chunks of the answer, then ``done`` with sources."""
+    ratelimit.hit(db, f"advisor:{ratelimit.client_ip(request)}", get_settings().advisor_requests_per_hour)
+    messages = [m.model_dump() for m in req.messages]
+
+    def events() -> Iterator[str]:
+        with db_session.SessionLocal() as s:
+            try:
+                for ev in advisor.stream(s, messages):
+                    yield f"data: {json.dumps(ev, default=str)}\n\n"
+            except NexisError as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': exc.message})}\n\n"
+            except Exception:
+                log.exception("advisor stream failed")
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Something went wrong — please try again.'})}\n\n"
+
+    return StreamingResponse(
+        events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )

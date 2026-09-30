@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
 
@@ -98,54 +98,4 @@ export function Avatar({ user, size = 36 }: { user: AnyObj | null | undefined; s
   return user?.avatar_url
     ? <img className="avatar" src={user.avatar_url} alt="" width={size} height={size} style={{ width: size, height: size }} />
     : <span className="avatar" aria-hidden style={{ width: size, height: size, fontSize: size * 0.42, background: `hsl(${hue} 55% 46%)` }}>{name.slice(0, 1).toUpperCase()}</span>;
-}
-
-export function AuthDialog({ open, onClose, initial = "login", reason }: { open: boolean; onClose: () => void; initial?: "login" | "register"; reason?: ReactNode }) {
-  const qc = useQueryClient();
-  const [mode, setMode] = useState(initial);
-  const [f, setF] = useState({ username: "", password: "", display_name: "" });
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (open) { setMode(initial); setErr(null); } }, [open, initial]);
-  useEffect(() => {
-    if (!open) return;
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [open, onClose]);
-  if (!open) return null;
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setErr(null);
-    try {
-      await api.post(mode === "login" ? "/auth/login" : "/auth/register", mode === "login" ? { username: f.username, password: f.password } : f);
-      await qc.invalidateQueries({ queryKey: ["me"] });
-      qc.invalidateQueries({ queryKey: ["social"] });
-      onClose();
-    } catch (x) { setErr(errorMessage(x)); } finally { setBusy(false); }
-  };
-  return (
-    <div className="modal-scrim" onMouseDown={onClose}>
-      <form className="modal popover-in" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit} aria-label={mode === "login" ? "Sign in" : "Create account"}>
-        <div className="modal-head">
-          <div className="insta-logo">InstaFin</div>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>✕</button>
-        </div>
-        {reason && <div className="small text2" style={{ marginBottom: 10 }}>{reason}</div>}
-        <div className="seg-tabs">
-          <button type="button" className={mode === "login" ? "on" : ""} onClick={() => setMode("login")}>Sign in</button>
-          <button type="button" className={mode === "register" ? "on" : ""} onClick={() => setMode("register")}>Create account</button>
-        </div>
-        <label className="fld"><span>Username</span>
-          <input className="input" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} required maxLength={30} autoFocus /></label>
-        {mode === "register" && <label className="fld"><span>Display name</span>
-          <input className="input" value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} maxLength={60} placeholder="How others see you" /></label>}
-        <label className="fld"><span>Password</span>
-          <input className="input" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required minLength={mode === "register" ? 8 : 1} /></label>
-        {mode === "register" && <div className="xs muted">3–30 lowercase letters, digits, _ or . · password at least 8 characters. Passwords are stored as scrypt hashes.</div>}
-        {err && <div className="banner error small" style={{ marginTop: 10 }}>{err}</div>}
-        <button className="btn primary block" disabled={busy} style={{ marginTop: 14 }}>{busy ? "…" : mode === "login" ? "Sign in" : "Create account"}</button>
-      </form>
-    </div>
-  );
 }

@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.errors import ValidationFailed
+from app.core.config import get_settings
+from app.core.errors import NexisError, ValidationFailed
 from app.db.session import get_db
 from app.models import User
-from app.services import auth, social
+from app.services import auth, newsfeed, oauth, social
 
 router = APIRouter(tags=["social"])
 MAX_UPLOAD = 8 * 1024 * 1024
@@ -21,10 +24,26 @@ class _Base(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class Credentials(_Base):
-    username: str = Field(min_length=1, max_length=30)
+class RegisterIn(_Base):
+    email: str | None = Field(default=None, max_length=254)
+    username: str | None = Field(default=None, max_length=30)
     password: str = Field(min_length=1, max_length=200)
     display_name: str | None = Field(default=None, max_length=60)
+
+
+class LoginIn(_Base):
+    identifier: str | None = Field(default=None, max_length=254, description="email or username")
+    username: str | None = Field(default=None, max_length=254, description="alias of identifier")
+    password: str = Field(min_length=1, max_length=200)
+
+
+class FeedbackIn(_Base):
+    signal: Literal["more", "less"]
+
+
+class TopicIn(_Base):
+    kind: Literal["symbol", "tag"]
+    value: str = Field(min_length=1, max_length=60)
 
 
 class ProfileUpdate(_Base):
@@ -54,15 +73,66 @@ async def _read_image(f: UploadFile | None) -> bytes | None:
 
 
 @router.post("/auth/register", status_code=201)
-def register(req: Credentials, request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
-    u = auth.register(db, request, response, req.username, req.password, req.display_name)
+def register(req: RegisterIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
+    u = auth.register(db, request, response, req.username, req.password, req.display_name, req.email)
     return auth.serialize_user(db, u, u, full=True)
 
 
 @router.post("/auth/login")
-def login(req: Credentials, request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
-    u = auth.login(db, request, response, req.username, req.password)
+def login(req: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
+    ident = req.identifier or req.username
+    if not ident:
+        raise ValidationFailed("enter your email or username")
+    u = auth.login(db, request, response, ident, req.password)
     return auth.serialize_user(db, u, u, full=True)
+
+
+@router.get("/auth/providers")
+def providers() -> dict[str, bool]:
+    return {"email": True, **oauth.configured()}
+
+
+@router.get("/auth/oauth/{provider}/start")
+def oauth_start(provider: str, request: Request, next: str = "/") -> Response:
+    resp = RedirectResponse("/", status_code=302)
+    try:
+        url = oauth.start(provider, request, resp, next)
+    except NexisError as exc:
+        return RedirectResponse(f"/login?error={quote(exc.message)}", status_code=302)
+    resp.headers["location"] = url
+    return resp
+
+
+def _oauth_finish(
+    provider: str, request: Request, db: Session, code: str | None, state: str | None, user: str | None
+) -> Response:
+    try:
+        ident = oauth.finish(provider, request, code, state, user)
+        resp = RedirectResponse(ident["next"], status_code=302)
+        auth.sign_in_external(db, resp, provider, ident["sub"], ident["email"], ident["name"])
+    except NexisError as exc:
+        resp = RedirectResponse(f"/login?error={quote(exc.message)}", status_code=302)
+    resp.delete_cookie(oauth.STATE_COOKIE, path="/api/auth/oauth")
+    return resp
+
+
+@router.get("/auth/oauth/{provider}/callback")
+def oauth_callback_get(
+    provider: str, request: Request, code: str | None = None, state: str | None = None, db: Session = Depends(get_db)
+) -> Response:
+    return _oauth_finish(provider, request, db, code, state, None)
+
+
+@router.post("/auth/oauth/{provider}/callback")
+def oauth_callback_post(
+    provider: str,
+    request: Request,
+    code: str | None = Form(default=None),
+    state: str | None = Form(default=None),
+    user: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+) -> Response:
+    return _oauth_finish(provider, request, db, code, state, user)
 
 
 @router.post("/auth/logout", status_code=204)
@@ -116,7 +186,7 @@ async def avatar(
 
 @router.get("/social/feed")
 def feed(
-    mode: Literal["latest", "following", "trending"] = "latest",
+    mode: Literal["latest", "following", "trending", "saved"] = "latest",
     symbol: str | None = None,
     tag: str | None = None,
     user: str | None = None,
@@ -127,9 +197,51 @@ def feed(
     return social.feed(db, viewer, mode, symbol, tag, user, before)
 
 
+@router.get("/social/search")
+def search(
+    q: str = Query(min_length=1, max_length=80), viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    return social.search(db, q, viewer)
+
+
+@router.get("/social/topics/{kind}/{value}")
+def topic(
+    kind: str, value: str, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    return social.topic_page(db, kind, value, viewer)
+
+
+@router.post("/social/topics/follow")
+def follow_topic(req: TopicIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return social.toggle_topic(db, user, req.kind, req.value)
+
+
+@router.get("/social/following")
+def following(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return social.my_following(db, user)
+
+
+@router.post("/social/posts/{pid}/save")
+def save(pid: int, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return social.toggle_save(db, pid, user)
+
+
+@router.post("/social/posts/{pid}/feedback")
+def feedback(pid: int, req: FeedbackIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return social.feedback(db, pid, user, req.signal)
+
+
+@router.get("/social/news/refresh")
+def refresh_news(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Imports new headlines when the last import is older than 20 minutes (also called by the daily cron)."""
+    secret = get_settings().cron_secret
+    forced = bool(secret) and request.headers.get("authorization") == f"Bearer {secret}"
+    return newsfeed.refresh(db, force=forced)
+
+
 @router.get("/social/trending")
-def trending(db: Session = Depends(get_db)) -> dict[str, Any]:
-    return social.trending_tags(db)
+def trending(viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return social.trending_tags(db, viewer)
 
 
 @router.post("/social/posts", status_code=201)

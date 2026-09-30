@@ -54,10 +54,10 @@ Locally it can run fully offline in **DEMO / SYNTHETIC DATA MODE** on a seeded, 
 | **Universal import** | CSV / JSON / XLSX holdings, transactions and market data with automatic column detection, confidence scores and manual mapping; every source row kept verbatim for lineage; duplicate-file and duplicate-transaction detection. |
 | **Portfolio intelligence** | Automatic reconstruction of *My Portfolio* across accounts (no double counting), FX conversion, time-weighted history from transactions (or a labelled backcast), X-Ray (asset class, SEC SIC industry, HQ country, currency, concentration), *Why is my portfolio moving?* attribution, risk drill-down (Euler, correlation effect, CVaR and drawdown contributors), transparent diagnostics, FIFO / average-cost P&L, cross-source reconciliation, Financial Intelligence Graph, data lineage, research audit log. |
 | **Global markets** | Live quotes, charts at hourly/daily/weekly/monthly resolution, fundamentals, four years of statements, analyst consensus and news for stocks, ETFs, indices, bond ETFs and yields, commodities, FX and crypto on most exchanges — including the **Dubai Financial Market**. |
-| **AI Financial Advisor** | Ask "what's up with Emaar? I want to buy 500 shares" — the model answers only through data tools (live quote, fundamentals, analyst consensus, news, price statistics, comparisons, valuation, position calculator) and shows its sources; without a model it returns a labelled live data briefing. |
+| **AI Financial Advisor** | Streams its answer like a chat app. Ask "what's up with Emaar? I want to buy 500 shares" — the model (Claude Opus via the Vercel AI Gateway) researches through data tools (live quote, fundamentals, analyst consensus, news, price statistics, comparisons, valuation, position calculator) and shows its sources; without a model it returns a labelled live data briefing. |
 | **Compare & Reports** | Compare up to 8 instruments over any window with periodic returns by hour/day/week/month/quarter/year, correlation, fundamentals and a transparent scorecard; export a PDF with a **Recommendation** section. |
 | **Valuation (investment banking)** | DCF with CAPM WACC and sensitivity grid, reverse DCF, trading comparables (curated GCC sector groups), football field, blended fair value with confidence flags; PDF export. |
-| **InstaFin** | Instagram-style finance community: accounts, photo posts with $CASHTAG price cards, likes, comments, follows, trending, profiles linking to people's Instagram/X/LinkedIn, share shortcuts, reporting. Details: [docs/MARKETS_AND_SOCIAL.md](docs/MARKETS_AND_SOCIAL.md). |
+| **InstaFin** | Instagram-style finance community, pre-filled by automated news pages with real articles (Khaleej Times, Gulf News, The National, CNBC, MarketWatch, Yahoo Finance …), market videos (CNBC, Bloomberg, Yahoo Finance) and daily charts from live prices. Photo posts with $CASHTAG price cards, likes, comments, saves, suggest more/less, following people, pages, stocks and hashtags, search, profiles linking to Instagram/X/LinkedIn, share shortcuts, reporting. Details: [docs/MARKETS_AND_SOCIAL.md](docs/MARKETS_AND_SOCIAL.md). |
 | **Research Assistant** | Answers questions such as "what contributed most to my volatility?" by retrieving stored metrics and showing the evidence — deterministic, no generative model; unverifiable questions are declined. |
 | **Developer platform** | Read-only public API (`/api/v1`, bearer keys stored as SHA-256 hashes), HMAC-signed webhooks with retries and a delivery log, OpenAPI docs. |
 | **Platform** | Background jobs with progress, toast notifications, ⌘K command palette, a System Health page (DB latency, freshness, record counts, request p50/p95, job failures), structured logging, structured error responses. |
@@ -254,7 +254,7 @@ The conventions below are applied everywhere and are also served to the UI as to
 
 ```bash
 cd backend
-pytest                  # 173 tests, about 1 minute
+pytest                  # 183 tests, about 1 minute
 ruff check app tests ../scripts && ruff format --check app tests ../scripts
 cd ../frontend && npm run typecheck && npm run build
 # optional browser workflow check (API + Vite dev server running; needs `pip install playwright` and Edge/Chromium)
@@ -343,7 +343,8 @@ the HTTP requests the web UI makes, so it works even when the database port is n
 * The job runner is an in-process thread pool (inline on serverless): jobs survive page reloads but not API restarts. On the hosted instance a single job is limited to 300 seconds.
 * The research workspace on the hosted instance is shared (InstaFin has accounts, the research pages do not): anything imported there is visible to every visitor. Run your own instance for private data.
 * Market data, fundamentals and news come from unofficial public endpoints without an SLA; Abu Dhabi (ADX) listings and individual bond prices are not available from them.
-* The AI advisor needs a language model: on Vercel, activate the account's AI Gateway (adding a card unlocks the free monthly credits) — no key or redeploy needed — or set `ANTHROPIC_API_KEY` / `NEXIS_LLM_API_KEY`. Until then it answers with data briefings.
+* The AI advisor needs a language model: on Vercel, activate the account's AI Gateway (adding a card unlocks the free monthly credits) — no key or redeploy needed — or set `ANTHROPIC_API_KEY` / `NEXIS_LLM_API_KEY`. Until then the built-in analyst engine answers from live data.
+* Sign in with Google/Apple needs the owner's OAuth credentials (see [docs/MARKETS_AND_SOCIAL.md](docs/MARKETS_AND_SOCIAL.md#accounts)); email accounts work without them. There is no email verification or password-reset email yet.
 * Automated recommendations are rule-based or model-written summaries of public data, not personalised advice; InstaFin moderation is report-based.
 * No user accounts or multi-tenant separation: it is a single-owner research tool (the public API uses owner-issued keys). A fake login screen would add nothing.
 * The Research Assistant is deliberately not an LLM: it answers a fixed set of question types from stored metrics and declines everything else.

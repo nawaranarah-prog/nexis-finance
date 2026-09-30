@@ -63,9 +63,11 @@ def serialize_user(db: Session, u: User, viewer: User | None = None, full: bool 
             "links": u.links or {},
             "joined": u.created_at.isoformat() + "Z",
             "posts": db.scalar(select(func.count(Post.id)).where(Post.user_id == u.id, Post.hidden.is_(False))) or 0,
-            "followers": db.scalar(select(func.count(Follow.id)).where(Follow.followee_id == u.id)) or 0,
             "following": db.scalar(select(func.count(Follow.id)).where(Follow.follower_id == u.id)) or 0,
             "is_me": viewer is not None and viewer.id == u.id,
+            "kind": u.kind,
+            "email": u.email if viewer is not None and viewer.id == u.id else None,
+            "auth_provider": u.auth_provider if viewer is not None and viewer.id == u.id else None,
             "followed_by_me": viewer is not None
             and db.scalar(select(Follow.id).where(Follow.follower_id == viewer.id, Follow.followee_id == u.id)) is not None,
         }
@@ -91,31 +93,106 @@ def _start_session(db: Session, user: User, response: Response) -> None:
     _set_cookie(response, token)
 
 
-def register(db: Session, request: Request, response: Response, username: str, password: str, display_name: str | None) -> User:
-    ratelimit.hit(db, f"register:{ratelimit.client_ip(request)}", 5)
-    uname = username.strip().lower()
-    if not USERNAME.match(uname):
-        raise ValidationFailed("usernames are 3–30 characters: lowercase letters, digits, underscores and dots")
-    if uname in RESERVED:
-        raise ValidationFailed("that username is reserved")
+EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,24}$")
+
+
+def _unique_username(db: Session, seed: str) -> str:
+    base = re.sub(r"[^a-z0-9_.]", "", seed.lower().replace(" ", "."))[:24].strip(".") or "investor"
+    if len(base) < 3:
+        base = f"{base}inv"
+    if base in RESERVED:
+        base = f"{base}.1"
+    cand, n = base, 1
+    while db.scalar(select(User.id).where(func.lower(User.username) == cand)) is not None:
+        n += 1
+        cand = f"{base[:26]}{n}"
+    return cand
+
+
+def _check_password(password: str, *avoid: str) -> None:
     if len(password) < 8 or len(password) > 200:
         raise ValidationFailed("passwords must be at least 8 characters")
-    if password.lower() in {"password", "12345678", "123456789", "qwertyui", uname}:
+    if password.lower() in {"password", "12345678", "123456789", "qwertyui", "password1", *[a.lower() for a in avoid if a]}:
         raise ValidationFailed("choose a less guessable password")
-    if db.scalar(select(User.id).where(func.lower(User.username) == uname)) is not None:
-        raise ConflictError("that username is taken")
-    u = User(username=uname, display_name=(display_name or uname).strip()[:60] or uname, password_hash=hash_password(password))
+
+
+def register(
+    db: Session,
+    request: Request,
+    response: Response,
+    username: str | None,
+    password: str,
+    display_name: str | None,
+    email: str | None = None,
+) -> User:
+    """Create an account with an email (preferred) and/or a username, then sign in."""
+    ratelimit.hit(db, f"register:{ratelimit.client_ip(request)}", 5)
+    mail = (email or "").strip().lower() or None
+    if mail is not None:
+        if not EMAIL.match(mail):
+            raise ValidationFailed("enter a valid email address")
+        if db.scalar(select(User.id).where(func.lower(User.email) == mail)) is not None:
+            raise ConflictError("an account with that email already exists — sign in instead")
+    if username:
+        uname = username.strip().lower()
+        if not USERNAME.match(uname):
+            raise ValidationFailed("usernames are 3–30 characters: lowercase letters, digits, underscores and dots")
+        if uname in RESERVED:
+            raise ValidationFailed("that username is reserved")
+        if db.scalar(select(User.id).where(func.lower(User.username) == uname)) is not None:
+            raise ConflictError("that username is taken")
+    elif mail is not None:
+        uname = _unique_username(db, mail.split("@")[0])
+    else:
+        raise ValidationFailed("enter an email address")
+    _check_password(password, uname, mail or "")
+    name = (display_name or "").strip()[:60] or uname
+    u = User(username=uname, display_name=name, password_hash=hash_password(password), email=mail, auth_provider="password")
     db.add(u)
     db.commit()
     _start_session(db, u, response)
     return u
 
 
-def login(db: Session, request: Request, response: Response, username: str, password: str) -> User:
+def login(db: Session, request: Request, response: Response, identifier: str, password: str) -> User:
+    """Sign in with an email address or a username."""
     ratelimit.hit(db, f"login:{ratelimit.client_ip(request)}", 20)
-    u = db.scalars(select(User).where(func.lower(User.username) == username.strip().lower())).first()
-    if u is None or u.is_disabled or not verify_password(password, u.password_hash):
-        raise AuthenticationRequired("wrong username or password")
+    ident = identifier.strip().lower()
+    col = User.email if "@" in ident else User.username
+    u = db.scalars(select(User).where(func.lower(col) == ident)).first()
+    if u is not None and u.password_hash is None and u.auth_provider in ("google", "apple"):
+        raise AuthenticationRequired(
+            f"this account uses {u.auth_provider.title()} sign-in — use the {u.auth_provider.title()} button"
+        )
+    if u is None or u.is_disabled or u.kind != "person" or not u.password_hash or not verify_password(password, u.password_hash):
+        raise AuthenticationRequired("wrong email/username or password")
+    _start_session(db, u, response)
+    return u
+
+
+def sign_in_external(db: Session, response: Response, provider: str, sub: str, email: str | None, name: str | None) -> User:
+    """Find or create the account for a verified Google/Apple identity and start a session."""
+    key = f"{provider}:{sub}"
+    u = db.scalars(select(User).where(User.provider_sub == key)).first()
+    mail = (email or "").strip().lower() or None
+    if u is None and mail:
+        u = db.scalars(select(User).where(func.lower(User.email) == mail)).first()
+        if u is not None:
+            u.provider_sub = key  # link the existing email account to this provider
+    if u is None:
+        seed = (name or (mail.split("@")[0] if mail else provider)).strip()
+        u = User(
+            username=_unique_username(db, seed),
+            display_name=(name or seed)[:60],
+            password_hash=None,
+            email=mail,
+            auth_provider=provider,
+            provider_sub=key,
+        )
+        db.add(u)
+    if u.is_disabled:
+        raise AuthenticationRequired("this account is disabled")
+    db.commit()
     _start_session(db, u, response)
     return u
 
@@ -175,7 +252,10 @@ def update_profile(db: Session, u: User, display_name: str | None, bio: str | No
 def delete_account(db: Session, request: Request, response: Response, user: User, password: str) -> None:
     """Permanently delete the account and everything it owns (posts, photos, comments, likes, follows, sessions)."""
     ratelimit.hit(db, f"delete-account:{ratelimit.client_ip(request)}", 10)
-    if not verify_password(password, user.password_hash):
+    if user.password_hash is None:
+        if password != "DELETE":
+            raise AuthenticationRequired("type DELETE to confirm")
+    elif not verify_password(password, user.password_hash):
         raise AuthenticationRequired("wrong password")
     from app.models import Comment, Like, Media, PostReport
 

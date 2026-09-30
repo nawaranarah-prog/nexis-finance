@@ -64,7 +64,19 @@ class Settings(BaseSettings):
     # Language model for the AI advisor and report narratives (see app/services/llm.py for credential order).
     llm_api_key: str | None = None
     llm_base_url: str | None = None
-    llm_model: str = "anthropic/claude-sonnet-5.5"
+    llm_model: str = "anthropic/claude-opus-5.5"
+    # Vercel Cron sends Authorization: Bearer <CRON_SECRET> when this is set.
+    cron_secret: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_CRON_SECRET", "CRON_SECRET"))
+    # Public origin of the web app (used for OAuth redirect URIs), e.g. https://nexis-finance-five.vercel.app
+    public_url: str | None = None
+    # Sign in with Google / Apple (each enabled when its credentials are set; see app/services/oauth.py).
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    apple_client_id: str | None = None
+    apple_team_id: str | None = None
+    apple_key_id: str | None = None
+    apple_private_key: str | None = None
+
     # Abuse protection for public endpoints (per client IP, per hour).
     advisor_requests_per_hour: int = 20
     posts_per_hour: int = 12

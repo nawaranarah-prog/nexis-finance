@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, utcnow
@@ -35,7 +35,13 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(60), nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Null for accounts that only sign in with Google/Apple.
+    password_hash: Mapped[str | None] = mapped_column(String(200))
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    auth_provider: Mapped[str] = mapped_column(String(20), default="password", nullable=False)
+    provider_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
+    # "person" or "page" (automated news pages run by the platform).
+    kind: Mapped[str] = mapped_column(String(12), default="person", nullable=False)
     bio: Mapped[str | None] = mapped_column(String(300))
     # Links to the person's profiles elsewhere ({"instagram": "handle", "x": "handle", ...}).
     links: Mapped[dict | None] = mapped_column(JSON)
@@ -77,6 +83,46 @@ class Post(Base, TimestampMixin):
     like_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     comment_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Link card for posts that share an article.
+    link_url: Mapped[str | None] = mapped_column(String(1500))
+    link_title: Mapped[str | None] = mapped_column(String(500))
+    link_source: Mapped[str | None] = mapped_column(String(160))
+    link_image: Mapped[str | None] = mapped_column(String(1500))
+    # De-duplication key for automatically imported articles.
+    external_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+
+
+class Save(Base, TimestampMixin):
+    __tablename__ = "saves"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_saves_post_user"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+
+class TopicFollow(Base, TimestampMixin):
+    """Following an instrument ($EMAAR.AE) or a hashtag (#dubai) rather than an account."""
+
+    __tablename__ = "topic_follows"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "value", name="uq_topic_follows_user_kind_value"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    value: Mapped[str] = mapped_column(String(60), nullable=False)
+
+
+class FeedPreference(Base):
+    """Per-user ranking signals from "suggest more / less" (keys like ``sym:EMAAR.AE``, ``tag:dubai``, ``author:12``)."""
+
+    __tablename__ = "feed_preferences"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_feed_preferences_user_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(160), nullable=False)
+    weight: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
 
 class Comment(Base, TimestampMixin):

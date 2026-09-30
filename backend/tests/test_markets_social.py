@@ -182,7 +182,13 @@ def test_advisor_runs_tools_then_answers(client, monkeypatch):
         assert tool_msg["role"] == "tool" and json.loads(tool_msg["content"])["cost"] == pytest.approx(5770.0)
         return {"content": "**Snapshot** 500 shares cost 5,770 AED. *Educational analysis, not personalised advice.*"}
 
-    monkeypatch.setattr(llm, "chat", fake_chat)
+    def fake_stream(messages, tools=None, **kw):  # type: ignore[no-untyped-def]
+        msg = fake_chat(messages, tools)
+        if msg.get("content"):
+            yield ("text", msg["content"])
+        yield ("message", {"role": "assistant", **msg})
+
+    monkeypatch.setattr(llm, "chat_stream", fake_stream)
     monkeypatch.setattr(llm, "status", lambda: {"configured": True, "provider": "test", "model": "m", "reason": None})
     monkeypatch.setattr(advisor.markets, "details", lambda db, s: {
         "symbol": "EMAAR.AE", "name": "Emaar Properties PJSC", "currency": "AED",
@@ -202,10 +208,11 @@ def test_advisor_falls_back_to_data_briefing(monkeypatch, client):
         raise llm.LLMUnavailable("no model here")
 
     monkeypatch.setattr(llm, "chat", unavailable)
+    monkeypatch.setattr(llm, "chat_stream", unavailable)
     monkeypatch.setattr(
         advisor,
         "briefing",
-        lambda db, q: {"answer": "data only", "mode": "data", "tools": [], "symbols": [], "news": [], "disclaimer": "d"},
+        lambda db, q, *rest: {"answer": "data only", "mode": "data", "tools": [], "symbols": [], "news": [], "disclaimer": "d"},
     )
     r = client.post("/api/advisor/chat", json={"messages": [{"role": "user", "content": "hello"}]}).json()
     assert r["mode"] == "data" and r["ai"] == {"used": False, "reason": "no model here"}
@@ -288,7 +295,7 @@ def test_instafin_end_to_end(client, monkeypatch):
     assert client.post("/api/social/users/trader_one/follow").json()["followed_by_me"] is True
     assert client.get("/api/social/feed", params={"mode": "following"}).json()["items"][0]["id"] == post["id"]
     prof = client.get("/api/social/users/trader_one").json()
-    assert prof["followers"] == 1 and prof["posts"] >= 1 and prof["followed_by_me"]
+    assert "followers" not in prof and prof["posts"] >= 1 and prof["followed_by_me"]  # no follower counts, only following
     assert (
         client.patch("/api/auth/me", json={"links": {"instagram": "@investor.two", "website": "http://insecure"}}).status_code
         == 422
@@ -298,7 +305,7 @@ def test_instafin_end_to_end(client, monkeypatch):
     assert client.post(f"/api/social/posts/{post['id']}/report", json={"reason": "spam"}).json()["hidden"] is False
     assert client.post(f"/api/social/posts/{post['id']}/report", json={}).status_code == 409
     trending = client.get("/api/social/trending").json()
-    assert trending["symbols"][0]["symbol"] == "EMAAR.AE" and {"tag": "dubai", "posts": 1} in trending["tags"]
+    assert "EMAAR.AE" in [s["symbol"] for s in trending["symbols"]] and "dubai" in [t["tag"] for t in trending["tags"]]
 
     # Wrong password is rejected; the author can delete their own post.
     client.post("/api/auth/logout")
@@ -325,7 +332,9 @@ def test_advisor_status_reflects_real_availability(client, monkeypatch):
         if row is not None:
             db.delete(row)
             db.commit()
-    monkeypatch.setattr(llm, "status", lambda: {"configured": True, "provider": "vercel-ai-gateway", "model": "m", "reason": None})
+    monkeypatch.setattr(
+        llm, "status", lambda: {"configured": True, "provider": "vercel-ai-gateway", "model": "m", "reason": None}
+    )
 
     def locked(*a, **k):  # type: ignore[no-untyped-def]
         raise llm.LLMUnavailable("gateway not activated")

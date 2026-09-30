@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "./services/api";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
+import { Toaster } from "./components/toast";
 import AppLayout from "./layouts/AppLayout";
 import { Empty, ErrorState, Loading } from "./components/ui";
 import { useWorkspace } from "./hooks/workspace";
@@ -34,6 +35,8 @@ const Economic = lazy(() => import("./pages/Economic"));
 const AuditLog = lazy(() => import("./pages/AuditLog"));
 const Developer = lazy(() => import("./pages/Developer"));
 const Assistant = lazy(() => import("./pages/Assistant"));
+const Login = lazy(() => import("./pages/Login"));
+const InstaTopic = lazy(() => import("./pages/InstaFin").then((m) => ({ default: m.TopicPage })));
 const Markets = lazy(() => import("./pages/Markets"));
 const Instrument = lazy(() => import("./pages/Instrument"));
 const Advisor = lazy(() => import("./pages/Advisor"));
@@ -74,6 +77,10 @@ function Guard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const location = useLocation();
+  if (location.pathname === "/login") {
+    return <Suspense fallback={<Loading />}><Login /><Toaster /></Suspense>;
+  }
   return (
     <AppLayout>
       <Suspense fallback={<Loading />}>
@@ -115,6 +122,8 @@ export default function App() {
           <Route path="/social" element={<InstaFin />} />
           <Route path="/social/p/:id" element={<InstaPost />} />
           <Route path="/social/u/:username" element={<InstaProfile />} />
+          <Route path="/social/s/:symbol" element={<InstaTopic kind="symbol" />} />
+          <Route path="/social/t/:tag" element={<InstaTopic kind="tag" />} />
           <Route path="*" element={<Empty>Page not found.</Empty>} />
         </Routes>
       </Suspense>

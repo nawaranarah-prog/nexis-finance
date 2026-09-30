@@ -1,6 +1,20 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
-from app.models.community import Comment, Follow, Like, MarketCache, Media, Post, PostReport, RateEvent, User, UserSession
+from app.models.community import (
+    Comment,
+    FeedPreference,
+    Follow,
+    Like,
+    MarketCache,
+    Media,
+    Post,
+    PostReport,
+    RateEvent,
+    Save,
+    TopicFollow,
+    User,
+    UserSession,
+)
 from app.models.connectivity import (
     Account,
     ApiKey,
@@ -49,6 +63,7 @@ __all__ = [
     "EconomicSeries",
     "Experiment",
     "ExperimentMetric",
+    "FeedPreference",
     "Follow",
     "Fundamental",
     "Holding",
@@ -69,10 +84,12 @@ __all__ = [
     "RateEvent",
     "Report",
     "RiskMetric",
+    "Save",
     "SourceRecord",
     "Strategy",
     "StressTest",
     "SyncRun",
+    "TopicFollow",
     "Transaction",
     "User",
     "UserSession",

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConfigurationError, NexisError, ProviderError
 from app.db.base import utcnow
 from app.models import MarketCache
+from app.services import advisor_voice as voice
 from app.services import compare as cmp
 from app.services import llm, markets, valuation
 
@@ -28,24 +30,42 @@ DISCLAIMER = (
     "Markets can fall; consider your goals, horizon and risk tolerance, and consult a licensed professional before investing."
 )
 
-SYSTEM = """You are Nexis Advisor, the research assistant of the Nexis Finance platform. You explain markets the way a careful,
-experienced (CFA-charterholder style) financial adviser would: balanced, specific, plain-spoken, never hype.
+SYSTEM = """You are Nexis Advisor — the AI financial advisor inside the Nexis Finance app. You talk like a brilliant, warm,
+senior wealth adviser and equity analyst sitting across the table from the user: natural conversation, clear opinions,
+real numbers, zero fluff. Your advice should be more thorough and more useful than any generic chatbot's, because you
+work from live data.
 
-Rules:
-- Ground every number and every factual claim in tool results from this conversation. Call tools first; never guess prices,
-  ratios, dates or news. If a tool fails or data is missing, say so.
-- For a named company, resolve the ticker with search_instruments (UAE Dubai listings end in .AE; Abu Dhabi/ADX listings are not
-  available in this data source — say so if asked), then call get_instrument and get_news, and get_price_stats for recent behaviour.
-- When the user mentions a quantity of shares or an amount of money, call position_calculator and show the cost in the
-  instrument's currency (and USD/AED where helpful), what that position is worth at the 52-week low/high and the analyst target,
-  and how it compares with typical daily volume.
-- Structure answers with short markdown headings: **Snapshot**, **What's happening** (news, cite publisher and date, link the
-  headline), **Fundamentals & valuation**, **What analysts say**, **Risks**, **If you buy …** (when relevant), **Bottom line**.
-- The bottom line weighs both sides and says under which circumstances the idea is reasonable or not (horizon, diversification,
-  concentration, valuation, momentum). Do not promise returns. You may say what the data suggests; never tell the user to put
-  all their money in one position. End with one or two questions about their goals/horizon/risk tolerance if unknown.
-- Answer in the user's language (e.g. Arabic if they write in Arabic). Be concise: aim for 250–450 words.
-- Finish with one italic line: *Educational analysis, not personalised advice.*"""
+How you work
+- Always research before you answer. Use the tools generously — typically several per question:
+  * resolve names with search_instruments (Dubai listings end in .AE; Saudi in .SR; Abu Dhabi/ADX listings are not in the
+    data source — say so if asked);
+  * get_instrument for the live quote, valuation, financials, dividends and the analyst consensus;
+  * get_news for what is happening right now (read the headlines and explain why they matter);
+  * get_price_stats for 1y behaviour, and 5y when the horizon is long;
+  * run_valuation when the user asks whether something is cheap/expensive or worth buying;
+  * compare_instruments to benchmark against peers or alternatives (e.g. a stock vs its sector peers, vs the local index
+    DFMGI.AE or the S&P 500) — suggest a better alternative when there is one;
+  * position_calculator whenever shares or a money amount are mentioned.
+- Every number and fact must come from tool results in this conversation. Never invent prices, ratios, dates or news. If
+  data is missing, say so plainly.
+
+How you answer
+- Open with a direct answer to the question in one or two sentences (a clear view — e.g. "I'd buy some, but in stages" /
+  "I'd wait" / "I'd trim"), then explain. Write in flowing, conversational paragraphs with a few short headings or bullets
+  where they genuinely help; bold the key numbers.
+- Cover what matters for the decision: what the business does and how it's doing; what's in the news and why it matters;
+  valuation vs history, peers and analyst targets; momentum and risk (drawdowns, volatility); income; the bull case and the
+  bear case; and your recommendation with reasoning.
+- Make it actionable: for a buy idea, suggest a sensible position size (as a share of the portfolio), an entry approach
+  (e.g. split into 2–3 purchases), what would make you change your mind, and what to watch next (earnings dates, catalysts).
+  When the user gives a quantity or amount, show the cost, scenarios (52-week low, analyst target) and dividend income.
+- Tailor to the person: if you don't know their horizon, risk tolerance or how big this is versus their savings, give your
+  best general advice and ask one or two sharp follow-up questions at the end.
+- Be honest about uncertainty; never promise returns; never suggest putting everything in one position.
+- Reply in the user's language (Arabic if they write in Arabic, etc.).
+- Length: as long as the question deserves — usually 300–700 words for an investment question, shorter for simple ones.
+- End with one short italic line: *Educational guidance based on public data — not personalised financial advice.*"""
+
 
 TOOLS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "search_instruments", "description": "Find tickers for a company, fund, index, bond ETF, currency or crypto name.",
@@ -144,22 +164,107 @@ def _run_tool(db: Session, name: str, args: dict[str, Any]) -> Any:
     raise ConfigurationError(f"unknown tool {name}")
 
 
-# ---------------------------------------------------------------------- entry point
+# ---------------------------------------------------------------------- entry points
+
+TOOL_STATUS = {
+    "search_instruments": "Looking up {query}",
+    "get_instrument": "Checking {symbol}'s price, valuation and analyst ratings",
+    "get_news": "Reading the latest news on {symbol}",
+    "get_price_stats": "Analysing {symbol}'s price history",
+    "compare_instruments": "Comparing {symbols}",
+    "run_valuation": "Running a valuation on {symbol}",
+    "position_calculator": "Working out your position in {symbol}",
+}
 
 
-def ask(db: Session, messages: list[dict[str, str]]) -> dict[str, Any]:
+def _status_text(name: str, args: dict[str, Any]) -> str:
+    tpl = TOOL_STATUS.get(name, name)
+    try:
+        return tpl.format(
+            query=args.get("query", ""), symbol=args.get("symbol", ""), symbols=", ".join(args.get("symbols") or [])
+        )
+    except (KeyError, IndexError):
+        return tpl
+
+
+def stream(db: Session, messages: list[dict[str, str]]) -> Iterator[dict[str, Any]]:
+    """Answer as a stream of events: ``status`` (what is being looked up), ``delta`` (answer text) and ``done``."""
     if not messages or messages[-1]["role"] != "user":
         raise ConfigurationError("the last message must be from the user")
     trace: list[dict[str, Any]] = []
+    sent_text = False
     try:
-        out = _ask_llm(db, messages, trace)
+        for ev in _llm_stream(db, messages, trace):
+            if ev["type"] == "delta":
+                sent_text = True
+            yield ev
         _record_llm_state(db, None)
-        return out
+        return
     except llm.LLMUnavailable as exc:
         _record_llm_state(db, exc.reason)
-        out = briefing(db, messages[-1]["content"])
-        out["ai"] = {"used": False, "reason": exc.reason}
-        return out
+        if sent_text:
+            yield {"type": "delta", "text": "\n\n*(The AI model stopped responding — please ask again.)*"}
+            yield {"type": "done", "meta": {"mode": "ai", "tools": trace, "symbols": [], "news": [], "disclaimer": DISCLAIMER}}
+            return
+        reason = exc.reason
+    yield {"type": "status", "text": "Pulling live prices, fundamentals and news"}
+    out = briefing(db, messages[-1]["content"], messages)
+    out["ai"] = {"used": False, "reason": reason}
+    yield {"type": "delta", "text": out.pop("answer")}
+    yield {"type": "done", "meta": out}
+
+
+def ask(db: Session, messages: list[dict[str, str]]) -> dict[str, Any]:
+    """Non-streaming variant: collects the stream into one answer."""
+    text, meta = [], {}
+    for ev in stream(db, messages):
+        if ev["type"] == "delta":
+            text.append(ev["text"])
+        elif ev["type"] == "done":
+            meta = ev["meta"]
+    return {"answer": "".join(text).strip(), **meta}
+
+
+def _llm_stream(db: Session, messages: list[dict[str, str]], trace: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+    today = datetime.now(UTC).strftime("%A %d %B %Y, %H:%M UTC")
+    convo: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM + f"\n\nCurrent date and time: {today}."}]
+    convo += [{"role": m["role"], "content": m["content"][:6000]} for m in messages[-16:]]
+    news_used: list[dict[str, Any]] = []
+    symbols: list[str] = []
+    for _ in range(8):
+        msg: dict[str, Any] = {}
+        for kind, payload in llm.chat_stream(convo, TOOLS, max_tokens=3500):
+            if kind == "text":
+                yield {"type": "delta", "text": payload}
+            else:
+                msg = payload
+        calls = msg.get("tool_calls") or []
+        if not calls:
+            if not (msg.get("content") or "").strip():
+                raise llm.LLMUnavailable("The language model returned an empty answer.")
+            meta = {"mode": "ai", "ai": {"used": True, **llm.status()}, "tools": trace, "symbols": list(dict.fromkeys(symbols)),
+                    "news": news_used[:8], "disclaimer": DISCLAIMER}  # fmt: skip
+            yield {"type": "done", "meta": meta}
+            return
+        if msg.get("content"):
+            yield {"type": "delta", "text": "\n\n"}
+        convo.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
+        for c in calls:
+            name, args = c["function"]["name"], {}
+            try:
+                args = json.loads(c["function"].get("arguments") or "{}")
+                yield {"type": "status", "text": _status_text(name, args)}
+                result = _run_tool(db, name, args)
+                ok = True
+            except (NexisError, KeyError, TypeError, ValueError) as exc:
+                result, ok = {"error": getattr(exc, "message", str(exc))}, False
+            trace.append({"tool": name, "args": args, "ok": ok})
+            if ok and name == "get_news":
+                news_used += result["items"][:4]
+            if ok and isinstance(result, dict) and result.get("symbol"):
+                symbols.append(result["symbol"])
+            convo.append({"role": "tool", "tool_call_id": c["id"], "content": json.dumps(result, default=str)[:14000]})
+    raise llm.LLMUnavailable("The language model did not finish within the tool-call budget.")
 
 
 _LLM_STATE = "llm:state"
@@ -190,39 +295,6 @@ def status(db: Session) -> dict[str, Any]:
         row = db.get(MarketCache, _LLM_STATE)
     state = row.payload["v"]
     return {**st, "available": bool(state["ok"]), "last_error": state["reason"]}
-
-
-def _ask_llm(db: Session, messages: list[dict[str, str]], trace: list[dict[str, Any]]) -> dict[str, Any]:
-    today = datetime.now(UTC).strftime("%A %d %B %Y, %H:%M UTC")
-    convo: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM + f"\n\nCurrent date and time: {today}."}]
-    convo += [{"role": m["role"], "content": m["content"][:4000]} for m in messages[-12:]]
-    news_used: list[dict[str, Any]] = []
-    symbols: list[str] = []
-    for _ in range(7):
-        msg = llm.chat(convo, TOOLS)
-        calls = msg.get("tool_calls") or []
-        if not calls:
-            text = (msg.get("content") or "").strip()
-            if not text:
-                raise llm.LLMUnavailable("The language model returned an empty answer.")
-            return {"answer": text, "mode": "ai", "ai": {"used": True, **llm.status()}, "tools": trace,
-                    "symbols": list(dict.fromkeys(symbols)), "news": news_used[:8], "disclaimer": DISCLAIMER}  # fmt: skip
-        convo.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
-        for c in calls:
-            name, args = c["function"]["name"], {}
-            try:
-                args = json.loads(c["function"].get("arguments") or "{}")
-                result = _run_tool(db, name, args)
-                ok = True
-            except (NexisError, KeyError, TypeError, ValueError) as exc:
-                result, ok = {"error": getattr(exc, "message", str(exc))}, False
-            trace.append({"tool": name, "args": args, "ok": ok})
-            if ok and name == "get_news":
-                news_used += result["items"][:4]
-            if ok and isinstance(result, dict) and result.get("symbol"):
-                symbols.append(result["symbol"])
-            convo.append({"role": "tool", "tool_call_id": c["id"], "content": json.dumps(result, default=str)[:12000]})
-    raise llm.LLMUnavailable("The language model did not finish within the tool-call budget.")
 
 
 # ---------------------------------------------------------------------- data-only briefing
@@ -305,6 +377,62 @@ _STOP = set(
         "good",
         "bad",
         "time",
+        "dividend",
+        "dividends",
+        "target",
+        "targets",
+        "analyst",
+        "analysts",
+        "risk",
+        "risky",
+        "valuation",
+        "expensive",
+        "cheap",
+        "fair",
+        "value",
+        "hold",
+        "long",
+        "term",
+        "short",
+        "week",
+        "month",
+        "year",
+        "years",
+        "earnings",
+        "better",
+        "which",
+        "best",
+        "right",
+        "should",
+        "could",
+        "will",
+        "think",
+        "about",
+        "buying",
+        "selling",
+        "sell",
+        "own",
+        "owning",
+        "holding",
+        "money",
+        "portfolio",
+        "after",
+        "before",
+        "still",
+        "really",
+        "more",
+        "less",
+        "than",
+        "know",
+        "explain",
+        "tell",
+        "advice",
+        "advise",
+        "recommend",
+        "opinion",
+        "view",
+        "market",
+        "markets",
     ]
 )
 _QTY = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|m|million)?\s*(shares?|stocks?|units?)\b", re.I)
@@ -369,90 +497,89 @@ def _fmt(v: float | None, ccy: str | None = None, pct: bool = False, digits: int
     return f"{s} {ccy}" if ccy else s
 
 
-def briefing(db: Session, question: str) -> dict[str, Any]:
-    inst = resolve_symbol(db, question)
-    if inst is None:
-        return {"answer": "I couldn't identify an instrument in your question. Mention a company, fund or ticker — for example "
-                "“What's happening with Emaar? I want to buy 500 shares.”", "mode": "data", "tools": [], "symbols": [], "news": [],
-                "disclaimer": DISCLAIMER}  # fmt: skip
-    sym = inst["symbol"]
-    d = markets.details(db, sym)
-    ccy, q, v, an, dv, f = d["currency"], d["quote"], d["valuation"], d["analysts"], d["dividends"], d["financials"]
-    lines = [f"### {d['name']} ({sym}) · {d['exchange']}"]
-    lines.append(
-        f"**Snapshot** — {_fmt(q['price'], ccy)} ({_fmt(q.get('change_pct'), pct=True)} today). 52-week range "
-        f"{_fmt(q.get('week52_low'))}–{_fmt(q.get('week52_high'))} {ccy}; market cap {_fmt((v.get('market_cap') or 0) / 1e9, digits=1)}bn {ccy}."
-    )
-    try:
-        st = price_stats(db, sym, "1y")
-        lines.append(
-            f"Over the past year it returned {_fmt(st['total_return'], pct=True)} with {_fmt(st['annualized_volatility'], pct=True).lstrip('+')} "
-            f"annualised volatility and a maximum drawdown of {_fmt(st['max_drawdown'], pct=True)}."
-        )
-    except NexisError:
-        st = None
-    try:
-        news_items = markets.news(db, sym)["items"][:6]
-    except NexisError:
-        news_items = []
-    if news_items:
-        lines.append("**What's happening** — latest headlines:")
-        for n in news_items:
-            when = (n.get("published_at") or "")[:10]
-            lines.append(f"- [{n['title']}]({n['url']}) — {n.get('publisher') or n['source']}, {when}")
-    val = [
-        f"P/E {v['pe_trailing']:.1f}x" if v.get("pe_trailing") else None,
-        f"forward P/E {v['pe_forward']:.1f}x" if v.get("pe_forward") else None,
-        f"P/B {v['price_to_book']:.2f}x" if v.get("price_to_book") else None,
-        f"EV/EBITDA {v['ev_to_ebitda']:.1f}x" if v.get("ev_to_ebitda") else None,
-        f"dividend yield {dv['yield'] * 100:.1f}%" if dv.get("yield") else None,
-        f"revenue growth {f['revenue_growth'] * 100:+.1f}%" if f.get("revenue_growth") is not None else None,
-        f"profit margin {f['profit_margin'] * 100:.1f}%" if f.get("profit_margin") is not None else None,
+_FOLLOW_UP = re.compile(
+    r"\b(it|its|it's|this|that|they|them|the stock|the company|the share|what about|how about|and the|dividend|target|analysts?|"
+    r"valuation|expensive|cheap|risk|risky|sell|hold|news|earnings|should i|worth it|long term|short term)\b",
+    re.I,
+)
+_SPLIT = re.compile(r"\b(?:vs\.?|versus|compared (?:to|with)|against|and|or)\b|,|/", re.I)
+
+
+def _result(
+    answer: str, symbols: list[str] | None = None, news: list[dict[str, Any]] | None = None, pos: Any = None
+) -> dict[str, Any]:
+    return {
+        "answer": answer,
+        "mode": "data",
+        "tools": [
+            {"tool": t, "args": {"symbol": s}, "ok": True}
+            for s in (symbols or [])
+            for t in ("get_instrument", "get_news", "get_price_stats")
+        ],
+        "symbols": symbols or [],
+        "news": news or [],
+        "position": pos,
+        "disclaimer": DISCLAIMER,
+    }
+
+
+def _resolve_many(db: Session, text: str) -> list[str]:
+    parts = [
+        p.strip()
+        for p in _SPLIT.split(re.sub(r"(?i)^\s*(compare|which is better|is it better to buy)\s*", "", text))
+        if p and p.strip()
     ]
-    if any(val):
-        lines.append("**Fundamentals & valuation** — " + ", ".join(x for x in val if x) + ".")
-    if an.get("count"):
-        lines.append(
-            f"**What analysts say** — {int(an['count'])} analysts, consensus **{(an.get('recommendation') or 'n/a').replace('_', ' ')}** "
-            f"(mean {an['recommendation_mean']:.2f} on a 1 = strong buy … 5 = sell scale); mean target {_fmt(an.get('target_mean'), ccy)} "
-            f"({_fmt(an.get('upside_to_mean_target'), pct=True)} vs the current price), range {_fmt(an.get('target_low'))}–{_fmt(an.get('target_high'))}."
+    out: list[str] = []
+    for part in parts:
+        if len(re.findall(r"[A-Za-z]", part)) < 2:
+            continue
+        hit = resolve_symbol(db, part)
+        if hit and hit["symbol"] not in out:
+            out.append(hit["symbol"])
+    return out[:5]
+
+
+def briefing(db: Session, question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    """Conversational answer assembled from live data (used when no language model is available)."""
+    messages = history or [{"role": "user", "content": question}]
+    text = question.strip()
+    if reply := voice.smalltalk(text):
+        return _result(reply)
+    gloss = voice.glossary_answer(text)
+    explicit = re.search(r"\$?\b[A-Z]{2,6}(\.[A-Z]{1,3})?\b|\.ae\b", text)
+    if gloss and not explicit:
+        return _result(gloss)
+    if voice.COMPARE.search(text):
+        syms = _resolve_many(db, text)
+        if len(syms) >= 2:
+            try:
+                return _result(voice.comparison_answer(db, syms, text), syms)
+            except NexisError as exc:
+                return _result(
+                    f"I tried to compare {', '.join(syms)} but couldn't get the data right now ({exc.message}). Try again in a minute?"
+                )
+    prior = voice.symbol_from_history(messages)
+    sym = None
+    if prior and _FOLLOW_UP.search(text) and not explicit and len(text.split()) <= 14:
+        sym = prior
+    if sym is None:
+        inst = resolve_symbol(db, text)
+        sym = inst["symbol"] if inst else prior
+    if sym is None:
+        return _result(
+            "Happy to help — which company, fund or market are you asking about? You can type a name (*Emaar*, *Emirates NBD*, "
+            "*Apple*), a ticker (*EMAAR.AE*, *NVDA*) or something like *gold*, *S&P 500* or *Bitcoin*. If you're planning a purchase, "
+            "tell me the number of shares or the amount and I'll work out the numbers."
         )
-    req = parse_request(question)
+    req = parse_request(text)
     pos = None
     if req["shares"] or req["amount"]:
         try:
             pos = position(db, sym, req["shares"], req["amount"], req["amount_currency"])
         except NexisError:
             pos = None
-    if pos:
-        extra = f" (≈ {_fmt(pos['cost_usd'], 'USD')})" if ccy == "AED" and pos.get("cost_usd") else ""
-        lines.append(f"**If you buy {pos['shares']:,.0f} shares** — cost {_fmt(pos['cost'], ccy)}{extra} before fees.")
-        for label, k in (
-            ("at the 52-week low", "at_52w_low"),
-            ("at the 52-week high", "at_52w_high"),
-            ("at the mean analyst target", "at_analyst_mean_target"),
-        ):
-            if pos.get(k):
-                lines.append(f"- {label}: {_fmt(pos[k]['value'], ccy)} ({_fmt(pos[k]['change_pct'], pct=True)})")
-        if pos.get("annual_dividends"):
-            lines.append(f"- dividends at the current rate: about {_fmt(pos['annual_dividends'], ccy)} a year")
-    risks = []
-    if st and st["max_drawdown"] is not None and st["max_drawdown"] < -0.25:
-        risks.append(f"it fell {abs(st['max_drawdown']):.0%} peak-to-trough within the last year")
-    if v.get("beta") and v["beta"] > 1.2:
-        risks.append(f"it moves more than the market (beta {v['beta']:.2f})")
-    if q.get("price") and q.get("ma200") and q["price"] < q["ma200"]:
-        risks.append("the price is below its 200-day average (weak trend)")
-    if f.get("debt_to_equity_pct") and f["debt_to_equity_pct"] > 150:
-        risks.append(f"high leverage (debt/equity {f['debt_to_equity_pct']:.0f}%)")
-    lines.append("**Risks to weigh** — " + ("; ".join(risks) if risks else "single-stock concentration and market-wide drawdowns") +
-                 ". Size the position so a large fall would not derail your plans, and diversify across sectors.")  # fmt: skip
-    return {
-        "answer": "\n".join(lines),
-        "mode": "data",
-        "tools": [{"tool": t, "args": {"symbol": sym}, "ok": True} for t in ("get_instrument", "get_news", "get_price_stats")],
-        "symbols": [sym],
-        "news": news_items,
-        "position": pos,
-        "disclaimer": DISCLAIMER,
-    }
+    try:
+        answer, news_items = voice.instrument_answer(db, sym, text, pos, price_stats, lambda d, s: markets.news(d, s)["items"])
+    except NexisError as exc:
+        return _result(f"I couldn't load live data for {sym} right now ({exc.message}). Mind trying again in a moment?")
+    return _result(answer, [sym], news_items[:6], pos)

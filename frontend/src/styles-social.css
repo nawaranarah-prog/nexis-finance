@@ -1,0 +1,99 @@
+/* Sign-in page, InstaFin v2 (search, article/video/text cards, save, topic pages) and the streaming advisor. */
+
+/* ---------------------------------------------------------------- sign in */
+.login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--page); }
+.login-brand { background: radial-gradient(120% 120% at 0% 0%, #1d4ed8 0%, #0b1220 55%, #050810 100%); color: #e2e8f0; padding: 56px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.login-logo { font-weight: 800; letter-spacing: 0.08em; font-size: 14px; color: #93c5fd; }
+.login-brand h1 { font-size: clamp(28px, 3.2vw, 42px); line-height: 1.12; letter-spacing: -0.02em; margin: 0; color: #fff; max-width: 560px; }
+.login-brand ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; }
+.login-brand li::before { content: "✓"; color: #60a5fa; margin-right: 10px; font-weight: 700; }
+.login-main { display: grid; place-items: center; padding: 32px 16px; }
+.login-card { width: min(400px, 100%); animation: route-in var(--dur-slow) var(--ease-out); }
+.login-card h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.02em; }
+.oauth-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 46px; margin-top: 10px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
+.oauth-btn:hover { background: var(--surface-2); }
+.oauth-btn:active { transform: scale(0.98); }
+.oauth-btn.apple { background: #0b0b0b; color: #fff; border-color: #0b0b0b; }
+.oauth-btn.apple:hover { background: #222; }
+.login-or { display: flex; align-items: center; gap: 12px; margin: 18px 0 8px; color: var(--muted); font-size: 12px; }
+.login-or::before, .login-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.login-submit { height: 44px; border-radius: 12px; font-size: 14px; }
+@media (max-width: 860px) {
+  .login { grid-template-columns: 1fr; }
+  .login-brand { padding: 28px 20px; gap: 12px; }
+  .login-brand ul, .login-brand > .xs { display: none; }
+  .login-brand h1 { font-size: 22px; }
+}
+
+/* ---------------------------------------------------------------- InstaFin top & search */
+.insta-top { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.insta-top .insta-logo { flex: none; }
+.insta-search { position: relative; flex: 1; min-width: 0; }
+.insta-search .input { width: 100%; height: 38px; border-radius: 10px; padding-left: 34px; background: var(--surface-2); border-color: transparent; }
+.insta-search .input:focus { background: var(--surface); border-color: var(--border-strong); }
+.insta-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; pointer-events: none; }
+.insta-search-results { position: absolute; z-index: 80; top: calc(100% + 6px); left: 0; right: 0; max-height: 440px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 6px; }
+.isr-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 8px 10px 4px; }
+.isr-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.isr-row:hover { background: var(--surface-2); }
+.isr-row .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isr-ticker { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); font-size: 9.5px; font-weight: 800; }
+.page-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-ink); font-size: 10.5px; font-weight: 650; vertical-align: 1px; }
+.follow-inline { font-weight: 700; font-size: 13px; }
+
+/* ---------------------------------------------------------------- post media */
+.post-media.linked { display: block; }
+.post-video { position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border: 0; padding: 0; cursor: pointer; }
+.post-video iframe, .post-video img { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: cover; }
+.post-video .play { position: absolute; inset: 0; display: grid; place-items: center; transition: transform var(--dur) var(--ease-out); }
+.post-video.poster:hover .play { transform: scale(1.06); }
+.text-card { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-height: 300px; padding: 36px 30px; color: #fff; text-decoration: none; }
+.text-card:hover { color: #fff; }
+.text-card-src { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.8; }
+.text-card-title { font-size: clamp(20px, 2.6vw, 26px); font-weight: 750; line-height: 1.22; letter-spacing: -0.015em; }
+.text-card-cta { font-size: 13px; opacity: 0.85; }
+.post-actions .act.save { margin-left: auto; }
+.act svg { display: block; }
+.act.liked, .act.liked svg { color: #ed4956; }
+.act.saved { color: var(--text); }
+.post-likes { padding: 0 14px 4px; font-weight: 650; font-size: 13px; }
+.post-headline { font-weight: 700; font-size: 15px; line-height: 1.35; margin-bottom: 6px; }
+.post-headline a { color: var(--text); }
+.post-headline a:hover { text-decoration: underline; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.post-view-comments { display: block; padding: 0 14px 10px; color: var(--muted); }
+.hidden-note { padding: 16px; text-align: center; }
+.skeleton-post { padding: 12px; }
+.skeleton-post .sk-line, .skeleton-post .sk-media { background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%); background-size: 200% 100%; animation: sk 1.4s linear infinite; border-radius: 8px; }
+.skeleton-post .sk-line { height: 14px; width: 60%; margin: 6px 0; }
+.skeleton-post .sk-line.short { width: 35%; }
+.skeleton-post .sk-media { height: 320px; margin: 10px 0; }
+
+/* ---------------------------------------------------------------- topic pages & grid */
+.topic-head { display: flex; gap: 18px; align-items: flex-start; padding: 12px 4px 18px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.topic-icon { width: 76px; height: 76px; flex: none; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, #1d4ed8, #7c3aed); color: #fff; font-weight: 800; font-size: 18px; }
+.topic-price { font-size: 22px; font-weight: 700; margin: 6px 0 2px; }
+.topic-price .chg { font-size: 14px; }
+.grid-video { position: absolute; top: 8px; right: 8px; color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); font-size: 14px; }
+.grid-text { height: 100%; display: flex; align-items: center; }
+.account .share-menu { min-width: 240px; }
+
+/* ---------------------------------------------------------------- streaming advisor */
+.advisor-status { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 13px; }
+.advisor-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s var(--ease-in-out) infinite; }
+@keyframes pulse { 0%, 100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+.advisor-steps { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.advisor-steps .step { font-size: 12px; color: var(--muted); }
+.advisor-steps .step::before { content: "✓ "; color: var(--pos); }
+.caret { display: inline-block; width: 7px; height: 15px; background: var(--text); vertical-align: -2px; margin-left: 2px; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+@media (max-width: 560px) {
+  .insta-top .insta-logo { font-size: 20px; }
+  .text-card { min-height: 240px; padding: 26px 20px; }
+  .topic-head { gap: 12px; }
+  .topic-icon { width: 56px; height: 56px; font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .advisor-status .dot, .caret, .skeleton-post .sk-line, .skeleton-post .sk-media { animation: none !important; }
+}

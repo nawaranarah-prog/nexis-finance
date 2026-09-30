@@ -91,3 +91,11 @@ def new_api_key() -> tuple[str, str, str]:
 
 def hash_api_key(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def signing_key() -> bytes:
+    """HMAC key for short-lived signed values (e.g. sign-in state), derived from the encryption secret."""
+    get_fernet()  # ensures a development key exists
+    s = get_settings()
+    raw = s.secret_key or KEY_FILE.read_text().strip()
+    return hashlib.sha256(b"nexis-signing:" + raw.encode()).digest()

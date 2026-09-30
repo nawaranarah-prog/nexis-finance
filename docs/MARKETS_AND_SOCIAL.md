@@ -83,3 +83,45 @@ reporting (a post reported by three people is hidden).
 
 Images are downscaled in the browser (≤1440 px) to fit the hosting request limit, then decoded and re-encoded as JPEG
 on the server, which also strips EXIF metadata such as GPS location.
+
+## InstaFin news pages, video and charts
+
+InstaFin is pre-filled by platform-run **news pages** (`uae.markets`, `gulf.business`, `global.markets`, `tech.stocks`,
+`energy.desk`, `crypto.desk`, `macro.watch`, `market.tv`, `nexis.charts`), each labelled as automated:
+
+* **Articles** from publisher RSS feeds (Khaleej Times, Gulf News, The National, Arabian Business, Yahoo Finance,
+  MarketWatch, CNBC, Investing.com, Cointelegraph), Yahoo Finance ticker news and Google News search. A post carries the
+  headline, publisher, time, a short excerpt (≤ 280 characters) and the publisher's lead image, and links to the original
+  article — full text is never copied. Company names in headlines become `$CASHTAG` price cards.
+* **Videos** from the public YouTube channel feeds of CNBC Television, Yahoo Finance and Bloomberg Television, played in
+  YouTube's embedded (privacy-enhanced) player on demand.
+* **Charts** drawn from live prices every day: the Dubai market pulse (every DFM stock's daily move), world indices, and
+  a chart of the day for the most-mentioned company in the headlines.
+
+Imports run lazily when the feed is opened and the last import is older than 20 minutes (plus a daily Vercel cron);
+duplicates are skipped by headline, and page posts nobody interacted with are pruned after 21 days. Likes, saves and
+comments come only from real people.
+
+Engagement: like, comment, **save** (Saved tab), share, and a ⋯ menu with **suggest more / suggest less like this**
+(stored per user as weights on the author, tickers and hashtags; "less" also hides the post). The **For you** feed ranks
+recent posts by freshness (18-hour half-life), engagement, what you follow and those weights; **Following** shows accounts,
+news pages, stocks and hashtags you follow (there are no follower counts — following is a way to see more). The search
+bar finds stocks, accounts and hashtags; stock and hashtag pages can be followed.
+
+## Accounts
+
+One account covers the whole site (`/login`): email and password, **Continue with Google** (`NEXIS_GOOGLE_CLIENT_ID`,
+`NEXIS_GOOGLE_CLIENT_SECRET`) and **Continue with Apple** (`NEXIS_APPLE_CLIENT_ID`, `NEXIS_APPLE_TEAM_ID`,
+`NEXIS_APPLE_KEY_ID`, `NEXIS_APPLE_PRIVATE_KEY`), with redirect URIs `{NEXIS_PUBLIC_URL}/api/auth/oauth/{google|apple}/callback`.
+The OAuth flow uses state, nonce and PKCE (Google) in a signed cookie and checks the ID token's issuer, audience, expiry
+and nonce. An existing email account is linked when the provider reports a verified email.
+
+## AI advisor (streaming)
+
+`POST /api/advisor/chat/stream` returns server-sent events — `status` lines while the model gathers data ("Checking
+EMAAR.AE's price…"), `delta` chunks of the answer as the model writes it, and `done` with sources — using
+`anthropic/claude-opus-5.5` by default (`NEXIS_LLM_MODEL`). The system prompt asks for advisor-grade answers: a direct
+view first, the business, the news and why it matters, valuation vs peers and analyst targets, risks, bull and bear cases,
+position sizing and an entry plan, and follow-up questions. Without a working model, a built-in analyst engine answers
+conversationally from the same live data (a clear "my take", pros and cons, position maths, follow-ups that keep the
+instrument in context, comparisons and plain-English explanations of finance terms).

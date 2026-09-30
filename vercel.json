@@ -7,5 +7,16 @@
       "includeFiles": "{backend/app/**,backend/alembic/**,backend/alembic.ini,data/samples/**}"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/social/news/refresh",
+      "schedule": "0 5 * * *"
+    }
+  ]
 }

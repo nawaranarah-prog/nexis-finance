@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextvars
 import json
 import os
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -102,3 +103,77 @@ def chat(
         return r.json()["choices"][0]["message"]
     except (ValueError, KeyError, IndexError) as exc:
         raise LLMUnavailable("Unexpected response from the language model.") from exc
+
+
+def _error_message(status: int, raw: bytes) -> str:
+    try:
+        err = json.loads(raw or b"{}").get("error") or {}
+    except ValueError:
+        err = {}
+    msg = err.get("message") if isinstance(err, dict) else str(err)
+    if isinstance(err, dict) and err.get("type") == "customer_verification_required":
+        msg = "The Vercel AI Gateway is not activated for this account yet (the owner must add a card to unlock the free monthly credits)."
+    return msg or f"The language model returned HTTP {status}."
+
+
+def chat_stream(
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, max_tokens: int = 3000, temperature: float = 0.4
+) -> Iterator[tuple[str, Any]]:
+    """Streaming chat completion. Yields ``("text", delta)`` as tokens arrive, then ``("message", message)``
+    with the full content and any tool calls reassembled from the stream."""
+    c = _config()
+    if c is None:
+        raise LLMUnavailable("No language-model credentials are configured on the server.")
+    body: dict[str, Any] = {
+        "model": c["model"],
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": True,
+    }
+    if tools:
+        body["tools"] = tools
+    content: list[str] = []
+    calls: dict[int, dict[str, Any]] = {}
+    try:
+        with httpx.stream(
+            "POST",
+            f"{c['url']}/chat/completions",
+            headers={"Authorization": f"Bearer {c['key']}", "Content-Type": "application/json"},
+            content=json.dumps(body, default=str),
+            timeout=httpx.Timeout(120.0, connect=15.0),
+        ) as r:
+            if r.status_code != 200:
+                msg = _error_message(r.status_code, r.read())
+                log.warning("LLM stream failed: HTTP %s %s", r.status_code, msg[:200])
+                raise LLMUnavailable(msg)
+            for line in r.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except ValueError:
+                    continue
+                for choice in chunk.get("choices") or []:
+                    delta = choice.get("delta") or {}
+                    if delta.get("content"):
+                        content.append(delta["content"])
+                        yield ("text", delta["content"])
+                    for tc in delta.get("tool_calls") or []:
+                        slot = calls.setdefault(
+                            tc.get("index", 0), {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                        )
+                        if tc.get("id"):
+                            slot["id"] = tc["id"]
+                        fn = tc.get("function") or {}
+                        slot["function"]["name"] += fn.get("name") or ""
+                        slot["function"]["arguments"] += fn.get("arguments") or ""
+    except httpx.HTTPError as exc:
+        raise LLMUnavailable(f"The language model could not be reached ({exc.__class__.__name__}).") from exc
+    msg: dict[str, Any] = {"role": "assistant", "content": "".join(content)}
+    if calls:
+        msg["tool_calls"] = [calls[i] for i in sorted(calls)]
+    yield ("message", msg)

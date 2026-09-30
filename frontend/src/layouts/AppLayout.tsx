@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../services/api";
+import { Avatar, useMe } from "../components/market";
 import CommandPalette from "../components/CommandPalette";
 import { Toaster } from "../components/toast";
 import { useWorkspace } from "../hooks/workspace";
@@ -67,6 +68,41 @@ export const NAV: { group: string; items: { to: string; label: string }[] }[] = 
     ],
   },
 ];
+
+function Account() {
+  const me = useMe();
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  const u = me.data?.user;
+  if (!u) return <button className="btn primary sm" onClick={() => nav(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>Sign in</button>;
+  const logout = async () => {
+    await api.post("/auth/logout");
+    await qc.invalidateQueries({ queryKey: ["me"] });
+    qc.invalidateQueries({ queryKey: ["social"] });
+    setOpen(false);
+  };
+  return (
+    <div className="account" ref={ref} style={{ position: "relative" }}>
+      <button className="icon-btn" aria-label="Account menu" onClick={() => setOpen(!open)} style={{ width: 34, height: 34 }}><Avatar user={u} size={28} /></button>
+      {open && (
+        <div className="share-menu popover-in" role="menu" style={{ right: 0, left: "auto", transformOrigin: "top right" }}>
+          <div className="small" style={{ padding: "8px 10px" }}><b>{u.display_name}</b><div className="xs muted">@{u.username}{u.email ? ` · ${u.email}` : ""}</div></div>
+          <button role="menuitem" onClick={() => { setOpen(false); nav(`/social/u/${u.username}`); }}>My InstaFin profile</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/social?mode=saved"); }}>Saved posts</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/advisor"); }}>AI Advisor</button>
+          <button role="menuitem" onClick={logout}>Sign out</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Notifications() {
   const [open, setOpen] = useState(false);
@@ -166,6 +202,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <span aria-hidden>⌕</span><span className="grow">Search or jump to…</span><kbd className="hide-sm">Ctrl K</kbd>
           </button>
           <Notifications />
+          <Account />
           <button className="btn ghost" aria-label="Toggle theme" title="Toggle theme"
             onClick={() => updateSettings({ theme: settings.theme === "dark" ? "light" : settings.theme === "light" ? "system" : "dark" })}>
             {settings.theme === "dark" ? "☾" : settings.theme === "light" ? "☀" : "◐"}
