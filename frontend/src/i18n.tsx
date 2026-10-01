@@ -69,6 +69,41 @@ const AR: Record<string, string> = {
   "Set a password": "تعيين كلمة مرور", "Current password": "كلمة المرور الحالية", "New password": "كلمة المرور الجديدة",
   "Security": "الأمان", "Sign out of all other devices": "تسجيل الخروج من جميع الأجهزة الأخرى", "Delete account": "حذف الحساب",
   "Danger zone": "منطقة الخطر", "Sign in to manage your account": "سجّل الدخول لإدارة حسابك", "Changes saved": "تم حفظ التغييرات",
+  // navigation groups
+  "Research": "الأبحاث", "Portfolio": "المحفظة", "Intelligence": "الذكاء", "Quant": "الكمّي", "Valuation": "التقييم",
+  "Research software · not investment advice": "برنامج أبحاث · ليس نصيحة استثمارية",
+  // home
+  "Understand the move before you make one.": "افهم حركة السوق قبل أن تتحرك.",
+  "Search any ADX or DFM share, UAE bond or global market — or ask a research question. The advisor checks live prices, news and valuations, and shows its working.":
+    "ابحث عن أي سهم في سوق أبوظبي أو دبي، أو سند إماراتي، أو أي سوق عالمي — أو اطرح سؤالًا بحثيًا. يتحقق المستشار من الأسعار المباشرة والأخبار والتقييمات، ويعرض خطواته.",
+  "Search a ticker or ask a question — e.g. Compare FAB and Emirates NBD": "ابحث عن رمز أو اطرح سؤالًا — مثلًا: قارن بين أبوظبي الأول والإمارات دبي الوطني",
+  "Ticker or question": "رمز أو سؤال", "Search a market or ask a research question": "ابحث في سوق أو اطرح سؤالًا بحثيًا", "Search": "بحث", "Searching…": "جارٍ البحث…",
+  "Ask the AI advisor": "اسأل المستشار الذكي", "Open in Compare & Reports": "افتح في المقارنات والتقارير", "move": "تنقّل", "open": "فتح", "close": "إغلاق",
+  "Try": "جرّب", "Compare FAB and Emirates NBD": "قارن بين أبوظبي الأول والإمارات دبي الوطني", "Why did NVIDIA move today?": "لماذا تحرك سهم إنفيديا اليوم؟",
+  "Is Aldar expensive vs. peers?": "هل سهم الدار مرتفع مقارنة بنظرائه؟", "UAE bonds and sukuk": "السندات والصكوك الإماراتية", "What's happening with gold?": "ماذا يحدث للذهب؟",
+  "ADX & DFM in session": "سوقا أبوظبي ودبي مفتوحان", "ADX & DFM closed": "سوقا أبوظبي ودبي مغلقان",
+  "Regular hours Mon–Fri 10:00–15:00 GST": "ساعات التداول الاعتيادية من الاثنين إلى الجمعة ١٠:٠٠–١٥:٠٠",
+  "AI advisor online": "المستشار الذكي متصل", "uses live quotes, news, price statistics, comparisons and DCF valuations": "يستخدم الأسعار المباشرة والأخبار وإحصاءات الأسعار والمقارنات وتقييمات التدفقات النقدية",
+  "AI model offline — the advisor answers with its built-in analyst engine from live data": "نموذج الذكاء الاصطناعي غير متصل — يجيب المستشار بمحرّكه التحليلي المدمج من البيانات المباشرة",
+  "Checking the AI advisor…": "جارٍ التحقق من المستشار الذكي…", "Open the advisor": "افتح المستشار",
+  "Markets now": "الأسواق الآن", "US 10Y Treasury": "سندات الخزانة الأمريكية لعشر سنوات", "Unavailable right now": "غير متاح حاليًا",
+  "Market data could not be loaded": "تعذّر تحميل بيانات السوق", "Retry": "إعادة المحاولة",
+  "Delayed quotes · UAE indices via TradingView, FX, rates and commodities via Yahoo Finance · lines show the last month of daily closes":
+    "أسعار متأخرة · مؤشرات الإمارات من TradingView، والعملات والعوائد والسلع من Yahoo Finance · تُظهر الخطوط إغلاقات الشهر الأخير",
+  "Market wire": "شريط الأخبار", "Latest on Finstagram": "الأحدث على فينستغرام", "News": "أخبار", "Member post": "منشور عضو",
+  "The feed could not be loaded": "تعذّر تحميل الخلاصة", "No posts yet. News pages refresh daily.": "لا منشورات بعد. تُحدَّث صفحات الأخبار يوميًا.",
+  "Ask the advisor what this story means": "اسأل المستشار عن معنى هذا الخبر",
+  "Watchlist": "قائمة المتابعة", "Keep the stocks, bonds and indices you research in one place, with live prices and a month of history.":
+    "احتفظ بالأسهم والسندات والمؤشرات التي تبحث فيها في مكان واحد، مع أسعار مباشرة وسجل شهر.",
+  "Create a free account": "أنشئ حسابًا مجانيًا", "or": "أو", "sign in": "سجّل الدخول",
+  "Your watchlist is empty. Follow a ticker here or on any Finstagram stock page.": "قائمة متابعتك فارغة. تابع رمزًا هنا أو من أي صفحة سهم على فينستغرام.",
+  "added to your watchlist": "أُضيف إلى قائمة متابعتك", "removed from your watchlist": "أُزيل من قائمة متابعتك", "Couldn't update your watchlist": "تعذّر تحديث قائمة متابعتك",
+  "Asset": "الأصل", "Last": "الأخير", "Day": "اليوم", "1 month": "شهر", "Nexis Pulse": "نبض نكسس", "Most mentioned · 7 days": "الأكثر ذكرًا · ٧ أيام",
+  "Number of Finstagram posts that mention each ticker, mostly from news pages. A measure of attention — not sentiment, and not a prediction. Investor-opinion analysis from other sources is not connected yet.":
+    "عدد منشورات فينستغرام التي تذكر كل رمز، ومعظمها من صفحات الأخبار. مقياس للاهتمام — وليس للمزاج العام ولا للتنبؤ. تحليل آراء المستثمرين من مصادر أخرى غير متصل بعد.",
+  "UAE movers": "الأكثر تحركًا في الإمارات", "ADX and DFM shares": "سهمًا في أبوظبي ودبي", "delayed": "متأخرة",
+  "Market data from public sources, delayed. AI answers are generated from that data and can be wrong. Educational tools — not personalised financial advice.":
+    "بيانات السوق من مصادر عامة ومتأخرة. إجابات الذكاء الاصطناعي مولّدة من هذه البيانات وقد تكون خاطئة. أدوات تعليمية — وليست نصيحة مالية شخصية.",
 };
 
 const DICTS: Record<Lang, Record<string, string>> = { en: {}, ar: AR };

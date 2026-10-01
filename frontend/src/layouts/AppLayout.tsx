@@ -10,44 +10,52 @@ import type { Notification } from "../types/api";
 import { dt } from "../utils/format";
 import { useT } from "../i18n";
 
-export const NAV: { group: string; items: { to: string; label: string }[] }[] = [
+/** Every route in the app, grouped by task. Discover and Research stay open; the rest fold away until needed. */
+export const NAV: { group: string; fixed?: boolean; items: { to: string; label: string }[] }[] = [
   {
     group: "Discover",
+    fixed: true,
     items: [
       { to: "/", label: "Home" },
+      { to: "/markets", label: "Markets" },
       { to: "/finstagram", label: "Finstagram" },
       { to: "/advisor", label: "AI Advisor" },
-      { to: "/markets", label: "UAE & Global Markets" },
-      { to: "/compare", label: "Compare & Reports" },
-      { to: "/valuation", label: "Valuation (IB)" },
     ],
   },
-  { group: "Research workspace", items: [{ to: "/research", label: "Research Overview" }] },
   {
-    group: "Connect & Understand",
-    items: [
-      { to: "/connections", label: "Connections" },
-      { to: "/intelligence", label: "Financial Intelligence" },
-      { to: "/xray", label: "Portfolio X-Ray" },
-      { to: "/transactions", label: "Transactions" },
-      { to: "/graph", label: "Intelligence Graph" },
-      { to: "/reconciliation", label: "Reconciliation" },
-      { to: "/economic", label: "Economic & Filings" },
-    ],
-  },
-  { group: "Data", items: [{ to: "/market-data", label: "Market Data" }, { to: "/data-quality", label: "Data Quality" }] },
-  {
-    group: "Portfolio & Risk",
+    group: "Research",
+    fixed: true,
     items: [
       { to: "/asset-research", label: "Asset Research" },
+      { to: "/compare", label: "Compare & Reports" },
+      { to: "/valuation", label: "Valuation" },
+      { to: "/reports", label: "Reports" },
+      { to: "/research", label: "Research Overview" },
+    ],
+  },
+  {
+    group: "Portfolio",
+    items: [
       { to: "/portfolio-lab", label: "Portfolio Lab" },
+      { to: "/xray", label: "Portfolio X-Ray" },
       { to: "/risk", label: "Risk Analytics" },
       { to: "/stress-testing", label: "Stress Testing" },
       { to: "/factors", label: "Factor Analytics" },
+      { to: "/transactions", label: "Transactions" },
+      { to: "/reconciliation", label: "Reconciliation" },
     ],
   },
   {
-    group: "Quant Research",
+    group: "Intelligence",
+    items: [
+      { to: "/intelligence", label: "Financial Intelligence" },
+      { to: "/connections", label: "Connections" },
+      { to: "/graph", label: "Intelligence Graph" },
+      { to: "/assistant", label: "Research Assistant" },
+    ],
+  },
+  {
+    group: "Quant",
     items: [
       { to: "/strategies", label: "Quant Strategies" },
       { to: "/backtesting", label: "Backtesting" },
@@ -55,21 +63,68 @@ export const NAV: { group: string; items: { to: string; label: string }[] }[] = 
       { to: "/regimes", label: "Regime Analysis" },
       { to: "/anomalies", label: "Anomaly Detection" },
       { to: "/experiments", label: "Research Experiments" },
-      { to: "/assistant", label: "Research Assistant" },
     ],
   },
-  { group: "Output", items: [{ to: "/reports", label: "Reports" }] },
   {
-    group: "Platform",
+    group: "Data",
     items: [
+      { to: "/market-data", label: "Market Data" },
+      { to: "/data-quality", label: "Data Quality" },
+      { to: "/economic", label: "Economic & Filings" },
       { to: "/lineage", label: "Data Lineage" },
+    ],
+  },
+  {
+    group: "System",
+    items: [
+      { to: "/settings", label: "Settings" },
+      { to: "/system", label: "System Health" },
       { to: "/audit", label: "Audit Log" },
       { to: "/developer", label: "Developer API" },
-      { to: "/system", label: "System Health" },
-      { to: "/settings", label: "Settings" },
     ],
   },
 ];
+
+const isActive = (to: string, path: string) => (to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`));
+
+/** The sidebar navigation. Folded groups keep their links out of the tab order. */
+function SideNav() {
+  const { t } = useT();
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("nexis.nav.open") ?? "[]") as string[]; } catch { return []; }
+  });
+  const current = NAV.find((g) => g.items.some((it) => isActive(it.to, pathname)))?.group;
+  const toggle = (g: string) => setOpen((o) => {
+    const next = o.includes(g) ? o.filter((x) => x !== g) : [...o, g];
+    try { localStorage.setItem("nexis.nav.open", JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  });
+  return (
+    <nav className="nav" aria-label="Main">
+      {NAV.map((g) => {
+        const expanded = !!g.fixed || open.includes(g.group) || current === g.group;
+        return (
+          <div key={g.group} className={`nav-sec ${expanded ? "open" : ""}`}>
+            {g.fixed ? <div className="nav-group">{t(g.group)}</div> : (
+              <button type="button" className="nav-group toggle" aria-expanded={expanded} onClick={() => toggle(g.group)} disabled={current === g.group}>
+                {t(g.group)}
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M3 2l3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            )}
+            <div className="nav-items" inert={!expanded}>
+              <div>
+                {g.items.map((it) => (
+                  <NavLink key={it.to} to={it.to} end={it.to === "/"} className={() => (isActive(it.to, pathname) ? "active" : "")}>{t(it.label)}</NavLink>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
 
 function Account() {
   const me = useMe();
@@ -150,7 +205,9 @@ function Notifications() {
   const cls: Record<string, string> = { error: "neg", warning: "", success: "pos", info: "" };
   return (
     <div className="bell" ref={ref} style={{ position: "relative" }}>
-      <button className="btn ghost" onClick={() => setOpen(!open)} aria-label={`Notifications, ${unread} unread`}>🔔</button>
+      <button className="icon-btn top-icon" onClick={() => setOpen(!open)} aria-label={`Notifications, ${unread} unread`} aria-expanded={open}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.6 4.8H2.4C2.8 10.8 4 9.5 4 6.5Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" /><path d="M6.5 13.3a1.6 1.6 0 0 0 3 0" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" /></svg>
+      </button>
       {unread > 0 && <span className="count">{unread > 99 ? "99+" : unread}</span>}
       {open && (
         <div className="popover right">
@@ -188,37 +245,48 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
   }, []);
+  // Each page gets its own title and description for browser tabs, bookmarks and search results.
+  useEffect(() => {
+    const path = decodeURIComponent(location.pathname);
+    const sym = /^\/(markets|valuation|finstagram\/s)\/([^/]+)/.exec(path);
+    const page = NAV.flatMap((g) => g.items).find((it) => (it.to === "/" ? path === "/" : path.startsWith(it.to)));
+    let title = "Nexis Finance — UAE stocks, bonds, AI financial advisor and Finstagram";
+    let desc = "Live prices, charts and analysis for every ADX and DFM stock, UAE bonds and sukuk, and global markets, plus an AI financial advisor and the Finstagram investor feed.";
+    if (sym && sym[1] === "markets") {
+      title = `${sym[2]} share price, chart and analysis · Nexis Finance`;
+      desc = `${sym[2]} live price, interactive chart, fundamentals, analyst ratings and latest news on Nexis Finance.`;
+    } else if (sym && sym[1] === "valuation") {
+      title = `${sym[2]} valuation — DCF and peer multiples · Nexis Finance`;
+      desc = `Discounted cash flow and peer-multiple valuation of ${sym[2]}, with a downloadable report.`;
+    } else if (sym) {
+      title = `${sym[2]} on Finstagram — posts and news · Nexis Finance`;
+    } else if (path.startsWith("/advisor")) {
+      title = "AI Financial Advisor — ask about any UAE or global stock · Nexis Finance";
+      desc = "Ask an AI financial advisor about Emaar, FAB, Aldar or any stock, bond or sukuk. It checks live prices, news and analyst ratings before it answers.";
+    } else if (path.startsWith("/finstagram")) {
+      title = "Finstagram — the investor feed · Nexis Finance";
+      desc = "Real market news, charts and videos from UAE and global sources. Like, save, comment and follow stocks and news pages.";
+    } else if (page && page.to !== "/") {
+      title = `${page.label} · Nexis Finance`;
+    }
+    document.title = title;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", desc);
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", `https://nexis-finance-five.vercel.app${location.pathname}`);
+  }, [location.pathname]);
   // The research-dataset picker only matters on the research pages, not on Home, Finstagram, markets or the advisor.
   const consumer = ["/finstagram", "/advisor", "/markets", "/compare", "/valuation", "/login"];
   const researchPage = location.pathname !== "/" && !consumer.some((p) => location.pathname.startsWith(p));
   const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, label: t(it.label), group: t(g.group) })));
-  let idx = 0;
   return (
     <div className="app">
       <div className={`scrim ${drawer ? "open" : ""}`} onClick={() => setDrawer(false)} aria-hidden />
       <aside className={`sidebar ${drawer ? "open" : ""}`} aria-label="Navigation">
-        <div className="brand">
-          <div className="brand-name"><img src="/favicon.svg" alt="" width={20} height={20} /> NEXIS FINANCE</div>
-          <div className="brand-sub">Quantitative Research · Portfolio Risk · Financial ML · Big Data</div>
-        </div>
-        <nav className="nav" aria-label="Main">
-          {NAV.map((g) => (
-            <div key={g.group}>
-              <div className="nav-group">{t(g.group)}</div>
-              {g.items.map((it) => {
-                idx += 1;
-                return (
-                  <NavLink key={it.to} to={it.to} end={it.to === "/"} className={({ isActive }) => (isActive ? "active" : "")}>
-                    <span className="nav-idx">{idx}</span>{t(it.label)}
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-        <div style={{ marginTop: "auto", padding: 12 }} className="xs muted">
-          Research software · not investment advice
-        </div>
+        <Link to="/" className="brand" aria-label="Nexis Finance home">
+          <img src="/favicon.svg" alt="" width={22} height={22} />
+          <span className="brand-name" dir="ltr">Nexis <span>Finance</span></span>
+        </Link>
+        <SideNav />
+        <div className="side-foot">{t("Research software · not investment advice")}</div>
       </aside>
       <div className="main">
         <header className="topbar">
@@ -238,13 +306,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <button className="search-trigger" onClick={() => setPalette(true)} aria-label="Open command palette">
             <span aria-hidden>⌕</span><span className="grow">{t("Search or jump to…")}</span><kbd className="hide-sm">Ctrl K</kbd>
           </button>
-          <Link to="/finstagram" className="top-pill finsta hide-sm" aria-label="Open Finstagram"><span className="top-pill-icon">F</span>{t("Finstagram")}</Link>
-          <Link to="/advisor" className="top-pill ai hide-sm" aria-label="Open the AI advisor"><span className="top-pill-icon">✦</span>{t("AI Advisor")}</Link>
+          <Link to="/finstagram" className={`top-link hide-sm ${location.pathname.startsWith("/finstagram") ? "on" : ""}`}><span className="top-link-mark" aria-hidden>F</span>{t("Finstagram")}</Link>
+          <Link to="/advisor" className={`top-link hide-sm ${location.pathname.startsWith("/advisor") ? "on" : ""}`}><span className="top-link-mark ai" aria-hidden>✦</span>{t("AI Advisor")}</Link>
           <Notifications />
           <Account />
-          <button className="btn ghost" aria-label="Toggle theme" title="Toggle theme"
+          <button className="icon-btn top-icon" aria-label={`Theme: ${settings.theme}`} title={`Theme: ${settings.theme}`}
             onClick={() => updateSettings({ theme: settings.theme === "dark" ? "light" : settings.theme === "light" ? "system" : "dark" })}>
-            {settings.theme === "dark" ? "☾" : settings.theme === "light" ? "☀" : "◐"}
+            {settings.theme === "dark"
+              ? <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" /></svg>
+              : settings.theme === "light"
+                ? <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.35" /><path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" /></svg>
+                : <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.35" /><path d="M8 2a6 6 0 0 0 0 12Z" fill="currentColor" /></svg>}
           </button>
         </header>
         <main className="content"><div key={location.pathname} className="route-enter">{children}</div></main>
