@@ -78,6 +78,14 @@ const AR: Record<string, string> = {
     "ابحث عن أي سهم في سوق أبوظبي أو دبي، أو سند إماراتي، أو أي سوق عالمي — أو اطرح سؤالًا بحثيًا. يتحقق المستشار من الأسعار المباشرة والأخبار والتقييمات، ويعرض خطواته.",
   "Search a ticker or ask a question — e.g. Compare FAB and Emirates NBD": "ابحث عن رمز أو اطرح سؤالًا — مثلًا: قارن بين أبوظبي الأول والإمارات دبي الوطني",
   // pulse
+  "Investor opinions from Bluesky, StockTwits and Nexis members": "آراء المستثمرين من بلوسكاي وستوكتويتس وأعضاء نكسس",
+  "Collecting posts from Bluesky, StockTwits and Nexis members…": "جارٍ جمع المنشورات من بلوسكاي وستوكتويتس وأعضاء نكسس…",
+  "Pick a stock, bond or crypto to read the latest public posts about it from Bluesky, StockTwits and Nexis members, with an AI summary of the arguments on each side. Every post links to the original and its author, and one click opens the live discussion on Reddit and X.":
+    "اختر سهمًا أو سندًا أو عملة رقمية لقراءة أحدث المنشورات العامة عنها من بلوسكاي وستوكتويتس وأعضاء نكسس، مع ملخص بالذكاء الاصطناعي لحجج كل طرف. كل منشور يرتبط بأصله وبصاحبه، وبنقرة واحدة تفتح النقاش المباشر على ريديت وإكس.",
+  "See the discussion on": "شاهد النقاش على", "Open on Bluesky": "افتح على بلوسكاي", "Open the post": "افتح المنشور", "Nexis members": "أعضاء نكسس",
+  "Open public API · every market, including the UAE": "واجهة عامة مفتوحة · كل الأسواق بما فيها الإمارات",
+  "Finstagram posts by members that tag the asset": "منشورات الأعضاء على فينستغرام التي تذكر الأصل",
+  "Open a ticker to read what investors say about it.": "افتح رمزًا لقراءة ما يقوله المستثمرون عنه.",
   "Waiting for Reddit to approve API access — Reddit posts appear once approved": "بانتظار موافقة ريديت على الوصول — تظهر منشورات ريديت بعد الموافقة",
   "Investor opinions": "آراء المستثمرين", "What Reddit, X and StockTwits are saying": "ماذا يقول ريديت وإكس وستوكتويتس",
   "Investor opinions from Reddit, X and StockTwits": "آراء المستثمرين من ريديت وإكس وستوكتويتس",

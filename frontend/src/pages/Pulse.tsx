@@ -6,8 +6,9 @@ import { useT } from "../i18n";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
 
-const SOURCE_LABEL: Record<string, string> = { reddit: "Reddit", x: "X", stocktwits: "StockTwits" };
-const OPEN_ON: Record<string, string> = { reddit: "Open on Reddit", x: "Open on X", stocktwits: "Open on StockTwits" };
+const SOURCE_LABEL: Record<string, string> = { bluesky: "Bluesky", nexis: "Nexis members", stocktwits: "StockTwits", reddit: "Reddit", x: "X" };
+const OPEN_ON: Record<string, string> = { bluesky: "Open on Bluesky", stocktwits: "Open on StockTwits", reddit: "Open on Reddit", x: "Open on X", nexis: "Open the post" };
+const MARK: Record<string, string> = { reddit: "r/", x: "𝕏", stocktwits: "$", bluesky: "b", nexis: "N" };
 const PICKS = ["EMAAR.AE", "FAB.AD", "ALDAR.AD", "EMIRATESNBD.AE", "NVDA", "TSLA", "AAPL", "BTC-USD"];
 
 function ago(iso: string | null | undefined, lang: string): string {
@@ -20,7 +21,7 @@ function ago(iso: string | null | undefined, lang: string): string {
 }
 
 function SourceMark({ source }: { source: string }) {
-  return <span className={`src-mark ${source}`} aria-hidden>{source === "reddit" ? "r/" : source === "x" ? "𝕏" : "$"}</span>;
+  return <span className={`src-mark ${source}`} aria-hidden>{MARK[source] ?? "•"}</span>;
 }
 
 /** Superscript citation numbers that jump to the post they refer to. */
@@ -87,14 +88,19 @@ function Synthesis({ symbol, total }: { symbol: string; total: number }) {
 function PostRow({ p, n, symbol }: { p: AnyObj; n: number | null; symbol: string }) {
   const { t, lang } = useT();
   const discuss = `$${symbol} ${p.title ? `"${p.title}"` : ""}\n\n${p.source === "reddit" ? "u/" : "@"}${p.author} on ${SOURCE_LABEL[p.source]}: ${p.url}\n\n`;
+  const internal = p.source === "nexis";
+  const handle = `${p.source === "reddit" ? "u/" : "@"}${p.author}`;
   return (
     <li id={`p-${p.id}`} className="ps-post">
       <div className="ps-post-head">
         {n !== null && <span className="ps-n num" title={t("Cited in the summary")}>{n}</span>}
         <SourceMark source={p.source} />
-        <a className="ps-author" href={p.author_url} target="_blank" rel="noreferrer noopener" title={`${t("Open")} ${p.author} ${t("on")} ${SOURCE_LABEL[p.source]}`}>
-          {p.source === "reddit" ? "u/" : "@"}{p.author}
-        </a>
+        {internal
+          ? <Link className="ps-author" to={p.author_url}>{handle}</Link>
+          : <a className="ps-author" href={p.author_url} target="_blank" rel="noreferrer noopener" title={`${t("Open")} ${p.author} ${t("on")} ${SOURCE_LABEL[p.source]}`}>{handle}</a>}
+        {internal && (p.linked ?? []).map((a: AnyObj) => (
+          <a key={a.provider} href={a.url} target="_blank" rel="noreferrer noopener" title={`${a.provider === "x" ? "@" : "u/"}${a.username} (verified)`}><SourceMark source={a.provider} /></a>
+        ))}
         {p.community && <span className="ps-meta">{p.community}</span>}
         <span className="ps-meta">{SOURCE_LABEL[p.source]}</span>
         <time className="ps-meta" dateTime={p.created_at}>{ago(p.created_at, lang)}</time>
@@ -105,8 +111,8 @@ function PostRow({ p, n, symbol }: { p: AnyObj; n: number | null; symbol: string
       <div className="ps-actions">
         {p.score !== null && p.score !== undefined && <span className="ps-meta num">{p.score.toLocaleString()} {p.source === "reddit" ? t("points") : t("likes")}</span>}
         {p.replies !== null && p.replies !== undefined && <span className="ps-meta num">{p.replies.toLocaleString()} {t("replies")}</span>}
-        <a href={p.url} target="_blank" rel="noreferrer noopener">{t(OPEN_ON[p.source])} ↗</a>
-        <Link to={`/finstagram?compose=${encodeURIComponent(discuss)}`}>{t("Discuss on Nexis")}</Link>
+        {internal ? <Link to={p.url}>{t(OPEN_ON[p.source])}</Link> : <a href={p.url} target="_blank" rel="noreferrer noopener">{t(OPEN_ON[p.source])} ↗</a>}
+        {!internal && <Link to={`/finstagram?compose=${encodeURIComponent(discuss)}`}>{t("Discuss on Nexis")}</Link>}
       </div>
     </li>
   );
@@ -122,6 +128,7 @@ function SourcesBar({ d }: { d: AnyObj }) {
           <span className="ps-src-name"><SourceMark source={k} />{SOURCE_LABEL[k]}</span>
           <span className="ps-src-v num">{v.ok ? v.count : "—"}</span>
           <span className="ps-src-note">{v.ok ? `${t("posts collected")} · ${v.via}` : v.error}</span>
+          {v.search_url && <a className="ps-src-out" href={v.search_url} target="_blank" rel="noreferrer noopener">{t("See the discussion on")} {SOURCE_LABEL[k]} ↗</a>}
         </div>
       ))}
       <div className="ps-src tags">
@@ -156,7 +163,7 @@ function LinkPrompt() {
 function AssetPulse({ symbol }: { symbol: string }) {
   const { t } = useT();
   const nav = useNavigate();
-  const [filter, setFilter] = useState<"all" | "reddit" | "x" | "stocktwits">("all");
+  const [filter, setFilter] = useState<string>("all");
   const q = useQuery({ queryKey: ["pulse", symbol], queryFn: () => api.get<AnyObj>(`/pulse/${encodeURIComponent(symbol)}`), staleTime: 5 * 60_000 });
   const syn = useQuery({ queryKey: ["pulse-ai", symbol], queryFn: () => api.get<AnyObj>(`/pulse/${encodeURIComponent(symbol)}/synthesis`), enabled: false });
   const d = q.data;
@@ -166,7 +173,7 @@ function AssetPulse({ symbol }: { symbol: string }) {
   return (
     <div className="hm ps">
       <header className="ps-head">
-        <div className="hm-eyebrow"><Link to="/pulse">{t("Nexis Pulse")}</Link><span>{t("Investor opinions from Reddit, X and StockTwits")}</span></div>
+        <div className="hm-eyebrow"><Link to="/pulse">{t("Nexis Pulse")}</Link><span>{t("Investor opinions from Bluesky, StockTwits and Nexis members")}</span></div>
         <div className="ps-title-row">
           <h1 dir="auto">{d?.name ?? symbol} <span className="mono ps-tk">{symbol}</span></h1>
           {quote?.price !== null && quote?.price !== undefined && (
@@ -178,7 +185,7 @@ function AssetPulse({ symbol }: { symbol: string }) {
         <p className="ps-warning">{t("These are opinions from public social media, not verified information. A lot of positive or negative talk is not evidence that a price will move.")}</p>
       </header>
 
-      {q.isLoading && <div className="ps-reading"><span className="rs-busy" aria-hidden /> {t("Collecting posts from Reddit, X and StockTwits…")}</div>}
+      {q.isLoading && <div className="ps-reading"><span className="rs-busy" aria-hidden /> {t("Collecting posts from Bluesky, StockTwits and Nexis members…")}</div>}
       {q.isError && <div className="hm-error">{errorMessage(q.error)} <button className="link-btn" onClick={() => q.refetch()}>{t("Retry")}</button></div>}
       {d && (
         <>
@@ -195,7 +202,7 @@ function AssetPulse({ symbol }: { symbol: string }) {
                   <span className="sec-sub">{t("Newest first · searched for")} {d.search_terms.map((x: string) => `“${x}”`).join(", ")}</span>
                 </div>
                 <div className="ps-filters" role="tablist">
-                  {(["all", "reddit", "x", "stocktwits"] as const).map((f) => {
+                  {(["all", ...Object.keys(d.sources).filter((k) => d.sources[k].count > 0)]).map((f) => {
                     const n = f === "all" ? d.items.length : d.items.filter((i: AnyObj) => i.source === f).length;
                     return <button key={f} role="tab" aria-selected={filter === f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{f === "all" ? t("All") : SOURCE_LABEL[f]} <span className="num">{n}</span></button>;
                   })}
@@ -232,7 +239,7 @@ function PulseHome() {
       <header className="ps-head">
         <div className="hm-eyebrow"><span>{t("Nexis Pulse")}</span></div>
         <h1>{t("What are investors saying?")}</h1>
-        <p className="hm-lede">{t("Pick a stock, bond or crypto to read the latest public posts about it from Reddit, X and StockTwits, with an AI summary of the arguments on each side. Every post links to the original and its author.")}</p>
+        <p className="hm-lede">{t("Pick a stock, bond or crypto to read the latest public posts about it from Bluesky, StockTwits and Nexis members, with an AI summary of the arguments on each side. Every post links to the original and its author, and one click opens the live discussion on Reddit and X.")}</p>
         <div className="ps-search wide"><SymbolSearch placeholder={t("Search a stock, bond or crypto…")} onPick={(s) => nav(`/pulse/${encodeURIComponent(s.symbol)}`)} /></div>
       </header>
       <section>
@@ -251,6 +258,8 @@ function PulseHome() {
                 {k === "reddit" && (v.official ? t("Official Reddit API") : v.pending ? t("Waiting for Reddit to approve API access — Reddit posts appear once approved") : t("Reddit's public search feed"))}
                 {k === "x" && (v.official ? t("X API") : t("Not connected yet — reading X needs an X API plan"))}
                 {k === "stocktwits" && t("Public stream · US-listed stocks and crypto")}
+                {k === "bluesky" && t("Open public API · every market, including the UAE")}
+                {k === "nexis" && t("Finstagram posts by members that tag the asset")}
               </span>
             </li>
           ))}

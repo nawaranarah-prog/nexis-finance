@@ -1,4 +1,4 @@
-"""Nexis Pulse: what investors are saying about an asset on Reddit, X and StockTwits.
+"""Nexis Pulse: what investors are saying about an asset on Bluesky, StockTwits, Nexis itself, Reddit and X.
 
 Everything shown comes from the sources' own APIs and links back to the original post and author:
 
@@ -6,6 +6,8 @@ Everything shown comes from the sources' own APIs and links back to the original
   Policy (``NEXIS_REDDIT_CLIENT_ID``/``SECRET``). Without approval Reddit is not read at all, unless
   ``NEXIS_REDDIT_PUBLIC_FEED`` is explicitly enabled.
 * X — recent search when ``NEXIS_X_BEARER_TOKEN`` is set (an X API plan with search access is required).
+* Bluesky — the open public search API (app.bsky.feed.searchPosts).
+* Nexis members — Finstagram posts by people (not news pages) that tag the asset.
 * StockTwits — the public symbol stream (US-listed tickers and crypto). Bullish/Bearish labels on StockTwits
   are tags the posters chose themselves.
 
@@ -31,13 +33,20 @@ from app.core.config import get_settings
 from app.core.errors import NexisError, ProviderError
 from app.services import llm, markets
 
+
+def _q(text: str) -> str:
+    from urllib.parse import quote
+
+    return quote(text, safe="")
+
+
 log = logging.getLogger(__name__)
 
 BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 API_UA = "web:nexis-finance:1.0 (by /u/nexisfinance)"
 TTL = timedelta(minutes=10)
 DISCLAIMER = (
-    "Posts are personal opinions from public social media, collected automatically and not verified by Nexis. "
+    "Posts are personal opinions from public social media and Nexis members, collected automatically and not verified by Nexis. "
     "Popularity and sentiment are not evidence that a price will rise or fall."
 )
 _NAME_NOISE = re.compile(
@@ -77,8 +86,10 @@ def subject(db: Session, symbol: str) -> dict[str, Any]:
 
 
 _MARKET_WORDS = re.compile(
-    r"\b(stocks?|shares?|dividends?|earnings|price|valuation|invest\w*|portfolio|buy|sell|hold|bullish|bearish|ipo|"
-    r"adx|dfm|nasdaq|nyse|market|ticker|analyst|target|rally|calls?|puts?|options)\b",
+    r"\b(stocks?|shares?|shareholders?|dividends?|earnings|revenue|profits?|quarterly|q[1-4]|guidance|share price|stock price|"
+    r"price target|valuation|invest(?:or|ors|ing|ment|ments|ed)?|portfolio|buy|buying|sell|selling|bullish|bearish|ipo|adx|dfm|"
+    r"nasdaq|nyse|stock market|ticker|analysts?|rally|call options|put options|trader|traders|trading|upgrade|downgrade|"
+    r"market cap|bonds?|sukuk|yields?|undervalued|overvalued|p/e|eps|short sellers?|shorting)\b|\d+(?:\.\d+)?%",
     re.I,
 )
 
@@ -93,7 +104,10 @@ def _mentions(text: str, subj: dict[str, Any]) -> bool:
     base = subj["base"]
     for t in subj["terms"]:
         if t == base:
-            if f"${base.lower()}" in low or (_has(base, low) and _MARKET_WORDS.search(low)):
+            # the ticker has to be written as a ticker: $FAB, or FAB in capitals next to market talk
+            if f"${base.lower()}" in low or (
+                re.search(rf"(?<![\w$]){re.escape(base)}(?!\w)", text) and _MARKET_WORDS.search(low)
+            ):
                 return True
         elif _has(t, low):
             return True
@@ -305,9 +319,96 @@ def stocktwits(subj: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
 # ------------------------------------------------------------------ collection
 
 
+# ------------------------------------------------------------------ Bluesky
+
+
+def bluesky(subj: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    """Latest public Bluesky posts for each search term (the AppView search is open to everyone)."""
+    queries = [
+        f'"{t}"' if " " in t else (f"${t}" if t == subj["base"] and subj["base"] != subj["short"] else t) for t in subj["terms"]
+    ]
+    seen: dict[str, dict[str, Any]] = {}
+    errors = []
+    for query in dict.fromkeys(queries):
+        try:
+            r = httpx.get(
+                "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts",
+                params={"q": query, "limit": 50, "sort": "latest"},
+                headers={"User-Agent": "NexisFinance/1.0 (+https://nexis-finance-five.vercel.app)", "Accept": "application/json"},
+                timeout=20,
+            )
+        except httpx.HTTPError as exc:
+            errors.append(exc.__class__.__name__)
+            continue
+        if r.status_code != 200:
+            errors.append(str(r.status_code))
+            continue
+        for post in r.json().get("posts", []):
+            a = post.get("author") or {}
+            rec = post.get("record") or {}
+            text = rec.get("text") or ""
+            handle = a.get("handle")
+            uri = post.get("uri", "")
+            # Pulse is about investor opinion: product chatter and property ads without market talk are left out
+            if not handle or not uri or uri in seen or not _mentions(text, subj) or not _MARKET_WORDS.search(text):
+                continue
+            seen[uri] = {
+                "source": "bluesky", "id": f"b-{uri.rsplit('/', 1)[-1]}", "url": f"https://bsky.app/profile/{handle}/post/{uri.rsplit('/', 1)[-1]}",
+                "author": handle, "author_url": f"https://bsky.app/profile/{handle}", "avatar": a.get("avatar"),
+                "title": None, "text": _clean(text), "community": None, "created_at": rec.get("createdAt") or post.get("indexedAt"),
+                "score": post.get("likeCount"), "replies": post.get("replyCount"), "tag": None,
+            }  # fmt: skip
+    if not seen and errors:
+        raise ProviderError(f"Bluesky unavailable ({', '.join(errors[:2])})")
+    return list(seen.values()), "Bluesky public API"
+
+
+# ------------------------------------------------------------------ Nexis members
+
+
+def nexis_members(db: Session, subj: dict[str, Any]) -> list[dict[str, Any]]:
+    """Finstagram posts by people (not the automated news pages) that tag this asset, from the last 30 days."""
+    from sqlalchemy import select
+
+    from app.db.base import utcnow
+    from app.models import Post, User
+    from app.services.auth import linked_accounts
+
+    since = utcnow() - timedelta(days=30)
+    rows = db.execute(
+        select(Post, User).join(User, User.id == Post.user_id)
+        .where(Post.hidden.is_(False), Post.created_at >= since, User.kind == "person", User.is_disabled.is_(False))
+        .order_by(Post.created_at.desc()).limit(400)
+    ).all()  # fmt: skip
+    out = []
+    for post, user in rows:
+        if subj["symbol"] not in (post.symbols or []):
+            continue
+        out.append({
+            "source": "nexis", "id": f"n-{post.id}", "url": f"/finstagram/p/{post.id}", "author": user.username,
+            "author_url": f"/finstagram/u/{user.username}", "avatar": None, "title": None, "text": _clean(post.body),
+            "community": "Finstagram", "created_at": post.created_at.isoformat() + "Z", "score": post.like_count,
+            "replies": post.comment_count, "tag": None, "linked": linked_accounts(db, user.id),
+        })  # fmt: skip
+    return out[:40]
+
+
+def search_links(subj: dict[str, Any]) -> dict[str, str]:
+    """Where to read the live discussion on sites Nexis doesn't read itself."""
+    terms = [f'"{t}"' if " " in t else t for t in subj["terms"]]
+    cash = f"${subj['base']}" if subj["base"] in subj["terms"] else None
+    return {
+        "reddit": "https://www.reddit.com/search/?sort=new&q=" + _q(" OR ".join(terms)),
+        "x": "https://x.com/search?f=live&q="
+        + _q(" OR ".join([*(t for t in terms if t != subj["base"]), *([cash] if cash else [])])),
+    }
+
+
 def sources_status() -> dict[str, dict[str, Any]]:
     s = get_settings()
     return {
+        "bluesky": {"label": "Bluesky", "official": True},
+        "nexis": {"label": "Nexis members", "official": True},
         "reddit": {
             "label": "Reddit",
             "official": bool(s.reddit_client_id and s.reddit_client_secret),
@@ -337,9 +438,10 @@ def collect(db: Session, symbol: str) -> dict[str, Any]:
         items: list[dict[str, Any]] = []
         report: dict[str, dict[str, Any]] = {}
         for key, fn in (
+            ("bluesky", lambda: bluesky(subj)),
+            ("stocktwits", lambda: stocktwits(subj)),
             ("reddit", lambda: _reddit_cached(db, subj)),
             ("x", lambda: x_posts(subj)),
-            ("stocktwits", lambda: stocktwits(subj)),
         ):
             try:
                 got, via = fn()
@@ -356,6 +458,16 @@ def collect(db: Session, symbol: str) -> dict[str, Any]:
         }
 
     value, meta = markets.cached(db, f"pulse:{subj['symbol']}", TTL, fetch)
+    # Nexis members are read fresh on every request, so a new post shows up straight away.
+    members = nexis_members(db, subj)
+    items = sorted(members + value["items"], key=lambda i: i.get("created_at") or "", reverse=True)[:140]
+    links = search_links(subj)
+    sources = {"bluesky": value["sources"].get("bluesky", {"ok": False, "count": 0, "error": "not collected yet"}),
+               "nexis": {"ok": True, "count": len(members), "via": "Finstagram posts by members"},
+               **{k: v for k, v in value["sources"].items() if k != "bluesky"}}  # fmt: skip
+    for k in ("reddit", "x"):
+        if k in sources:
+            sources[k] = {**sources[k], "search_url": links[k]}
     q = subj["quote"]
     return {
         "symbol": subj["symbol"],
@@ -363,6 +475,8 @@ def collect(db: Session, symbol: str) -> dict[str, Any]:
         "search_terms": subj["terms"],
         "quote": {k: q.get(k) for k in ("price", "change", "change_pct", "currency", "type", "exchange")} if q else None,
         **value,
+        "items": items,
+        "sources": sources,
         "fetched_at": meta["fetched_at"],
         "disclaimer": DISCLAIMER,
     }

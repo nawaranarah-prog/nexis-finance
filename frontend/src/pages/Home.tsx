@@ -292,7 +292,7 @@ function Pulse() {
       <ol className="pulse">
         {rows.map((r, i) => (
           <li key={r.symbol}>
-            <Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="pulse-row" title={t("What Reddit, X and StockTwits are saying")}>
+            <Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="pulse-row" title={t("What investors are saying")}>
               <span className="pulse-rank num">{i + 1}</span>
               <span className="pulse-name"><span className="mono">{r.symbol}</span><span className="wl-name">{r.name ?? ""}</span></span>
               <span className="pulse-bar" aria-hidden><span style={{ transform: `scaleX(${r.posts / max})` }} /></span>
@@ -301,7 +301,7 @@ function Pulse() {
           </li>
         ))}
       </ol>
-      <p className="hm-fine">{t("Number of Finstagram posts that mention each ticker, mostly from news pages — a measure of attention, not sentiment or a prediction. Open a ticker to read what people say about it on Reddit, X and StockTwits.")}</p>
+      <p className="hm-fine">{t("Number of Finstagram posts that mention each ticker, mostly from news pages — a measure of attention, not sentiment or a prediction. Open a ticker to read what investors say about it.")}</p>
     </section>
   );
 }

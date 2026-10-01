@@ -13,7 +13,7 @@
 .ps-reading { display: flex; align-items: center; gap: 10px; padding: 14px 0; font-size: 13px; color: var(--text-2); }
 
 /* source strip */
-.ps-sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.3fr); border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
+.ps-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
 .ps-src { display: flex; flex-direction: column; gap: 3px; padding: 11px 14px; border-inline-start: 1px solid var(--rule); min-width: 0; }
 .ps-src:first-child { border-inline-start: 0; padding-inline-start: 2px; }
 .ps-src-name { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--text-2); }
@@ -27,6 +27,10 @@
 .src-mark.reddit { background: #d93a00; }
 .src-mark.x { background: var(--text); color: var(--surface); font-size: 10.5px; }
 .src-mark.stocktwits { background: #1d6fd6; }
+.src-mark.bluesky { background: #1185fe; }
+.src-mark.nexis { background: var(--accent); }
+.ps-src-out { font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
+.ps-src-out:hover { color: var(--text); }
 
 .ps-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; }
 
@@ -102,8 +106,6 @@
 @media (max-width: 1100px) {
   .ps-grid { grid-template-columns: 1fr; }
   .ps-aside { position: static; }
-  .ps-sources { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .ps-src.tags { grid-column: 1 / -1; border-inline-start: 0; border-top: 1px solid var(--rule); padding-inline-start: 2px; }
 }
 @media (max-width: 720px) {
   .ps-sources { grid-template-columns: 1fr; }

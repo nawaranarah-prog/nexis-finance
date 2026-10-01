@@ -33,7 +33,19 @@ STOCKTWITS = {
 }  # fmt: skip
 
 
+BSKY = {
+    "posts": [
+        {"uri": "at://did:plc:abc/app.bsky.feed.post/3k1", "author": {"handle": "gulf.investor.bsky.social"},
+         "record": {"text": "Adding to my Emaar shares, the dividend looks safe", "createdAt": "2026-10-01T11:00:00Z"}, "likeCount": 4},
+        {"uri": "at://did:plc:def/app.bsky.feed.post/3k2", "author": {"handle": "agency.bsky.social"},
+         "record": {"text": "New villas by Emaar, call us today", "createdAt": "2026-10-01T10:30:00Z"}},
+    ]
+}  # fmt: skip
+
+
 def _fake_get(url, params=None, headers=None, timeout=None, follow_redirects=None):  # type: ignore[no-untyped-def]
+    if "bsky.app" in url:
+        return httpx.Response(200, json=BSKY if "emaar" in params["q"].lower() else {"posts": []})
     if "search.rss" in url:
         return httpx.Response(200, content=RSS.encode(), headers={"content-type": "application/atom+xml"})
     if "stocktwits.com" in url:
@@ -93,12 +105,18 @@ def test_collect_keeps_relevant_posts_links_authors_and_reports_sources(client, 
     assert d["sources"]["reddit"]["ok"] and d["sources"]["reddit"]["via"] == "Reddit public search feed"
     assert d["sources"]["x"]["ok"] is False and "X API plan" in d["sources"]["x"]["error"]
     assert d["sources"]["stocktwits"]["ok"] is False
+    d["items"] = [i for i in d["items"] if i["source"] != "nexis"]  # other tests post as members
     authors = [i["author"] for i in d["items"]]
-    assert authors == ["dubai_investor", "agent_k"]  # the pasta post is dropped
-    first = d["items"][0]
+    # the pasta post and the property ad without any market talk are dropped
+    assert authors == ["gulf.investor.bsky.social", "dubai_investor", "agent_k"]
+    b = d["items"][0]
+    assert b["url"] == "https://bsky.app/profile/gulf.investor.bsky.social/post/3k1" and b["author_url"].endswith("/gulf.investor.bsky.social")
+    assert d["sources"]["bluesky"]["count"] == 1 and d["sources"]["reddit"]["search_url"].startswith("https://www.reddit.com/search/")
+    assert d["sources"]["x"]["search_url"].startswith("https://x.com/search")
+    first = d["items"][1]
     assert first["author_url"] == "https://www.reddit.com/user/dubai_investor" and first["community"] == "r/UAEStocks"
     assert first["text"] == "Dividend should grow." and first["url"].startswith("https://www.reddit.com/r/UAEStocks/")
-    assert d["items"][1]["community"] is None  # a post on someone's own profile isn't a community
+    assert d["items"][2]["community"] is None  # a post on someone's own profile isn't a community
     assert "not verified" in d["disclaimer"]
 
     n = client.get("/api/pulse/NVDA").json()
@@ -219,5 +237,20 @@ def test_new_account_from_x_cannot_unlink_its_only_sign_in(client, monkeypatch):
     assert me["auth_provider"] == "x" and me["linked"][0]["username"] == "solo_x_user"
     blocked = client.delete("/api/auth/me/linked/x")
     assert blocked.status_code == 422 and "set a password" in blocked.json()["error"]["message"]
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+
+
+def test_nexis_members_appear_immediately(client, monkeypatch):
+    monkeypatch.setattr(pulse.httpx, "get", _fake_get)
+    monkeypatch.setattr(pulse.markets, "quotes", _quotes({"AMZN": "Amazon.com, Inc."}))
+    mail = f"member{random.randint(10000, 99999)}@example.com"
+    assert client.post("/api/auth/register", json={"email": mail, "password": "member-pass-1"}).status_code == 201
+    before = client.get("/api/pulse/AMZN").json()
+    assert before["sources"]["nexis"]["count"] == 0
+    assert client.post("/api/social/posts", data={"body": "I think $AMZN is cheap after the drop"}).status_code == 201
+    after = client.get("/api/pulse/AMZN").json()  # the rest is cached, members are read fresh
+    mine = [i for i in after["items"] if i["source"] == "nexis"]
+    assert len(mine) == 1 and mine[0]["url"].startswith("/finstagram/p/") and "cheap" in mine[0]["text"]
     client.post("/api/auth/logout")
     client.cookies.clear()
