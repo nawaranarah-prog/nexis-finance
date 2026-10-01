@@ -21,7 +21,7 @@ from app.core.config import get_settings
 from app.core.errors import AuthenticationRequired, ConflictError, ValidationFailed
 from app.db.base import utcnow
 from app.db.session import get_db
-from app.models import Follow, Post, User, UserSession
+from app.models import Follow, LinkedAccount, Post, User, UserSession
 from app.services import phone, ratelimit
 
 COOKIE = "nexis_session"
@@ -56,6 +56,7 @@ def serialize_user(db: Session, u: User, viewer: User | None = None, full: bool 
         "username": u.username,
         "display_name": u.display_name,
         "avatar_url": f"/api/social/media/{u.avatar_media_id}" if u.avatar_media_id else None,
+        "linked": linked_accounts(db, u.id),
     }
     if full:
         out |= {
@@ -191,10 +192,23 @@ def login(db: Session, request: Request, response: Response, identifier: str, pa
     return u
 
 
-def sign_in_external(db: Session, response: Response, provider: str, sub: str, email: str | None, name: str | None) -> User:
-    """Find or create the account for a verified Google/Apple identity and start a session."""
+def sign_in_external(
+    db: Session,
+    response: Response,
+    provider: str,
+    sub: str,
+    email: str | None,
+    name: str | None,
+    username: str | None = None,
+    avatar: str | None = None,
+) -> User:
+    """Find or create the account for a verified Google, Reddit or X identity and start a session."""
     key = f"{provider}:{sub}"
     u = db.scalars(select(User).where(User.provider_sub == key)).first()
+    if u is None and provider in ("reddit", "x"):
+        # Someone who linked this Reddit/X account to their Nexis account can sign in with it.
+        la = db.scalars(select(LinkedAccount).where(LinkedAccount.provider == provider, LinkedAccount.provider_user_id == sub)).first()
+        u = db.get(User, la.user_id) if la else None
     mail = (email or "").strip().lower() or None
     if u is None and mail:
         u = db.scalars(select(User).where(func.lower(User.email) == mail)).first()
@@ -213,9 +227,50 @@ def sign_in_external(db: Session, response: Response, provider: str, sub: str, e
         db.add(u)
     if u.is_disabled:
         raise AuthenticationRequired("this account is disabled")
+    db.flush()
+    if provider in ("reddit", "x") and username:
+        _upsert_link(db, u, provider, sub, username, avatar)
     db.commit()
     _start_session(db, u, response)
     return u
+
+
+# ------------------------------------------------------------------ linked Reddit / X identities
+
+
+def linked_accounts(db: Session, user_id: int) -> list[dict[str, Any]]:
+    from app.services.oauth import profile_url
+
+    rows = db.scalars(select(LinkedAccount).where(LinkedAccount.user_id == user_id).order_by(LinkedAccount.provider))
+    return [{"provider": a.provider, "username": a.username, "url": profile_url(a.provider, a.username)} for a in rows]
+
+
+def _upsert_link(db: Session, u: User, provider: str, sub: str, username: str, avatar: str | None) -> None:
+    other = db.scalars(select(LinkedAccount).where(LinkedAccount.provider == provider, LinkedAccount.provider_user_id == sub)).first()
+    if other is not None and other.user_id != u.id:
+        raise ConflictError(f"that {'Reddit' if provider == 'reddit' else 'X'} account is already linked to another Nexis account")
+    mine = db.scalars(select(LinkedAccount).where(LinkedAccount.user_id == u.id, LinkedAccount.provider == provider)).first()
+    if mine is None:
+        mine = LinkedAccount(user_id=u.id, provider=provider, provider_user_id=sub, username=username)
+        db.add(mine)
+    mine.provider_user_id, mine.username, mine.avatar_url = sub, username[:64], (avatar or None) and avatar[:500]
+
+
+def link_account(db: Session, u: User, provider: str, sub: str, username: str, avatar: str | None) -> None:
+    """Attach a verified Reddit/X identity to the signed-in account (replaces an earlier link for the same site)."""
+    _upsert_link(db, u, provider, sub, username, avatar)
+    db.commit()
+
+
+def unlink_account(db: Session, u: User, provider: str) -> None:
+    la = db.scalars(select(LinkedAccount).where(LinkedAccount.user_id == u.id, LinkedAccount.provider == provider)).first()
+    if la is None:
+        return
+    only_way_in = u.provider_sub == f"{provider}:{la.provider_user_id}" and not (u.password_hash or u.email or u.phone)
+    if only_way_in:
+        raise ValidationFailed("this is how you sign in — set a password or add an email in Settings before unlinking")
+    db.delete(la)
+    db.commit()
 
 
 def logout(db: Session, request: Request, response: Response) -> None:
@@ -289,6 +344,7 @@ def delete_account(db: Session, request: Request, response: Response, user: User
         db.execute(delete(Post).where(Post.id.in_(post_ids)))
     db.execute(delete(Follow).where((Follow.follower_id == user.id) | (Follow.followee_id == user.id)))
     db.execute(delete(Media).where(Media.user_id == user.id))
+    db.execute(delete(LinkedAccount).where(LinkedAccount.user_id == user.id))
     db.execute(delete(UserSession).where(UserSession.user_id == user.id))
     db.delete(user)
     db.commit()

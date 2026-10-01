@@ -60,6 +60,22 @@ const SOCIAL_LINKS: Record<string, { label: string; url: (h: string) => string }
 };
 
 type Gate = (why: string, fn: () => void) => void;
+/** Reddit / X accounts the person proved they own; each opens their profile on that site. */
+function LinkedBadges({ user }: { user: AnyObj }) {
+  const linked: AnyObj[] = user?.linked ?? [];
+  if (!linked.length) return null;
+  return (
+    <span className="linked">
+      {linked.map((a) => (
+        <a key={a.provider} href={a.url} target="_blank" rel="noreferrer noopener" title={`${a.provider === "x" ? "@" : "u/"}${a.username} on ${a.provider === "x" ? "X" : "Reddit"} (verified)`}
+          aria-label={`${a.username} on ${a.provider === "x" ? "X" : "Reddit"}`}>
+          <span className={`src-mark ${a.provider}`} aria-hidden>{a.provider === "x" ? "𝕏" : "r/"}</span>
+        </a>
+      ))}
+    </span>
+  );
+}
+
 function useGate(): { me: AnyObj | null; gate: Gate } {
   const me = useMe();
   const nav = useNavigate();
@@ -243,7 +259,7 @@ function Comments({ post, me, gate }: { post: AnyObj; me: AnyObj | null; gate: G
       {q.data?.length === 0 && <div className="xs muted">No comments yet — start the conversation.</div>}
       {q.data?.map((c) => (
         <div key={c.id} className="comment">
-          <Link to={`/finstagram/u/${c.author.username}`}><b>{c.author.username}</b></Link> <span dir="auto"><Rich text={c.body} /></span>
+          <Link to={`/finstagram/u/${c.author.username}`}><b>{c.author.username}</b></Link><LinkedBadges user={c.author} /> <span dir="auto"><Rich text={c.body} /></span>
           <span className="xs muted"> · {ago(c.created_at)}</span>
           {(c.is_mine || post.is_mine) && <button className="link-btn xs" onClick={async () => { await api.del(`/social/comments/${c.id}`); qc.invalidateQueries({ queryKey: ["social"] }); }}>delete</button>}
         </div>
@@ -324,6 +340,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
             {link?.source && <div className="xs muted ellipsis">{isPage ? `via ${link.source}` : link.source}</div>}
           </span>
         </Link>
+        <LinkedBadges user={post.author} />
         <div className="row" style={{ gap: 4 }}>
           {!post.is_mine && !following && <button className="link-btn follow-inline" onClick={follow}>{t("Follow")}</button>}
           <div className="post-more">
@@ -683,9 +700,15 @@ export function ProfilePage() {
   const u = prof.data!;
   const items: AnyObj[] = posts.data?.items ?? [];
   let extra: ReactNode = null;
-  if (Object.keys(u.links ?? {}).length > 0) {
+  if (Object.keys(u.links ?? {}).length > 0 || u.linked?.length) {
     extra = (
       <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+        {(u.linked as AnyObj[] ?? []).map((a) => (
+          <a key={`v-${a.provider}`} className="chip" href={a.url} target="_blank" rel="noreferrer noopener me" title="Linked by signing in — verified">
+            <span className={`src-mark ${a.provider}`} aria-hidden style={{ width: 14, height: 14, fontSize: 8, marginInlineEnd: 5 }}>{a.provider === "x" ? "𝕏" : "r/"}</span>
+            {a.provider === "x" ? "@" : "u/"}{a.username} · verified ↗
+          </a>
+        ))}
         {Object.entries(u.links as Record<string, string>).map(([k, h]) => SOCIAL_LINKS[k] && (
           <a key={k} className="chip" href={SOCIAL_LINKS[k].url(h)} target="_blank" rel="noreferrer noopener me">{SOCIAL_LINKS[k].label}{k !== "website" ? ` · @${h}` : ""} ↗</a>
         ))}

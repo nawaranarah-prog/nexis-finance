@@ -8,6 +8,7 @@ import { Empty, ErrorState, Loading } from "./components/ui";
 import { useWorkspace } from "./hooks/workspace";
 
 const Overview = lazy(() => import("./pages/Overview"));
+const Pulse = lazy(() => import("./pages/Pulse"));
 const MarketData = lazy(() => import("./pages/MarketData"));
 const DataQuality = lazy(() => import("./pages/DataQuality"));
 const AssetResearch = lazy(() => import("./pages/AssetResearch"));
@@ -123,6 +124,8 @@ export default function App() {
           <Route path="/markets" element={<Markets />} />
           <Route path="/markets/:symbol" element={<Instrument />} />
           <Route path="/advisor" element={<Advisor />} />
+          <Route path="/pulse" element={<Pulse />} />
+          <Route path="/pulse/:symbol" element={<Pulse />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/valuation" element={<Valuation />} />
           <Route path="/valuation/:symbol" element={<Valuation />} />

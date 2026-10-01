@@ -77,9 +77,19 @@ export default function Login() {
         <div className="login-card">
           <h2>{mode === "signin" ? t("Welcome back") : t("Create your account")}</h2>
           <p className="small text2">{mode === "signin" ? t("Sign in to post, save, follow and get a feed tuned to you.") : t("One account for the whole site — the advisor, reports and Finstagram.")}</p>
-          {providers.data?.google && (
+          {(providers.data?.google || providers.data?.reddit || providers.data?.x) && (
             <>
-              <button className="oauth-btn" onClick={google}><GoogleIcon /> {t("Continue with Google")}</button>
+              {providers.data?.google && <button className="oauth-btn" onClick={google}><GoogleIcon /> {t("Continue with Google")}</button>}
+              {providers.data?.reddit && (
+                <button className="oauth-btn" onClick={() => window.location.assign(`/api/auth/oauth/reddit/start?next=${encodeURIComponent(next)}`)}>
+                  <span className="src-mark reddit" aria-hidden>r/</span> {t("Continue with Reddit")}
+                </button>
+              )}
+              {providers.data?.x && (
+                <button className="oauth-btn" onClick={() => window.location.assign(`/api/auth/oauth/x/start?next=${encodeURIComponent(next)}`)}>
+                  <span className="src-mark x" aria-hidden>𝕏</span> {t("Continue with X")}
+                </button>
+              )}
               <div className="login-or"><span>or</span></div>
             </>
           )}

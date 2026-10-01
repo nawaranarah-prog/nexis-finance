@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
-from app.api.routes import connectivity, data, markets, portfolios, public_v1, reports, research, seo, social, system
+from app.api.routes import connectivity, data, markets, portfolios, public_v1, pulse, reports, research, seo, social, system
 from app.core.config import APP_VERSION, get_settings
 from app.core.errors import NexisError
 from app.core.logging import configure_logging, get_logger, log_event, request_metrics
@@ -129,5 +129,6 @@ for r in (
     markets.router,
     social.router,
     seo.router,
+    pulse.router,
 ):
     app.include_router(r, prefix="/api")

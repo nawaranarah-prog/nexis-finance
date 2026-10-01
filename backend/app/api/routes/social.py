@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import NexisError, ValidationFailed
+from app.core.errors import AuthenticationRequired, NexisError, ValidationFailed
 from app.db.session import get_db
 from app.models import User
 from app.services import auth, newsfeed, oauth, phone, social
@@ -124,12 +124,19 @@ def phone_verify(req: PhoneVerify, request: Request, response: Response, db: Ses
 
 
 @router.get("/auth/oauth/{provider}/start")
-def oauth_start(provider: str, request: Request, next: str = "/") -> Response:
+def oauth_start(
+    provider: str,
+    request: Request,
+    next: str = "/",
+    mode: Literal["signin", "link"] = "signin",
+    viewer: User | None = Depends(auth.optional_user),
+) -> Response:
     resp = RedirectResponse("/", status_code=302)
     try:
-        url = oauth.start(provider, request, resp, next)
+        url = oauth.start(provider, request, resp, next, mode, viewer.id if viewer else None)
     except NexisError as exc:
-        return RedirectResponse(f"/login?error={quote(exc.message)}", status_code=302)
+        back = "/settings" if mode == "link" else "/login"
+        return RedirectResponse(f"{back}?error={quote(exc.message)}", status_code=302)
     resp.headers["location"] = url
     return resp
 
@@ -137,12 +144,21 @@ def oauth_start(provider: str, request: Request, next: str = "/") -> Response:
 def _oauth_finish(
     provider: str, request: Request, db: Session, code: str | None, state: str | None, user: str | None
 ) -> Response:
+    linking = False
     try:
         ident = oauth.finish(provider, request, code, state, user)
+        linking = ident["mode"] == "link"
         resp = RedirectResponse(ident["next"], status_code=302)
-        auth.sign_in_external(db, resp, provider, ident["sub"], ident["email"], ident["name"])
+        if linking:
+            viewer = auth.optional_user(request, db)
+            if viewer is None or viewer.id != ident["user_id"]:
+                raise AuthenticationRequired("sign in to Nexis again, then link the account")
+            auth.link_account(db, viewer, provider, ident["sub"], ident["username"], ident["avatar"])
+            resp.headers["location"] = f"{ident['next']}?linked={provider}"
+        else:
+            auth.sign_in_external(db, resp, provider, ident["sub"], ident["email"], ident["name"], ident["username"], ident["avatar"])
     except NexisError as exc:
-        resp = RedirectResponse(f"/login?error={quote(exc.message)}", status_code=302)
+        resp = RedirectResponse(f"{'/settings' if linking else '/login'}?error={quote(exc.message)}", status_code=302)
     resp.delete_cookie(oauth.STATE_COOKIE, path="/api/auth/oauth")
     return resp
 
@@ -152,6 +168,12 @@ def oauth_callback_get(
     provider: str, request: Request, code: str | None = None, state: str | None = None, db: Session = Depends(get_db)
 ) -> Response:
     return _oauth_finish(provider, request, db, code, state, None)
+
+
+@router.delete("/auth/me/linked/{provider}", status_code=204)
+def unlink(provider: Literal["reddit", "x"], user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> Response:
+    auth.unlink_account(db, user, provider)
+    return Response(status_code=204)
 
 
 @router.post("/auth/logout", status_code=204)
@@ -269,7 +291,12 @@ def refresh_news(request: Request, db: Session = Depends(get_db)) -> dict[str, A
     """Imports new headlines when the last import is older than 20 minutes (also called by the daily cron)."""
     secret = get_settings().cron_secret
     forced = bool(secret) and request.headers.get("authorization") == f"Bearer {secret}"
-    return newsfeed.refresh(db, force=forced)
+    out = newsfeed.refresh(db, force=forced)
+    if forced:  # the daily cron also stores fresh Nexis Pulse posts for popular assets
+        from app.services import pulse
+
+        out["pulse"] = pulse.warm(db)
+    return out
 
 
 @router.get("/social/trending")

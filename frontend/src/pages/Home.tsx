@@ -287,12 +287,12 @@ function Pulse() {
   const max = Math.max(1, ...rows.map((r) => r.posts));
   return (
     <section className="hm-pulse">
-      <SectionHead title={t("Nexis Pulse")} sub={t("Most mentioned · 7 days")} to="/finstagram?mode=trending" cta={t("Trending")} />
+      <SectionHead title={t("Nexis Pulse")} sub={t("Most mentioned · 7 days")} to="/pulse" cta={t("Investor opinions")} />
       {q.isLoading && <div className="wire-skel"><span className="skel w80" /><span className="skel w60" /><span className="skel w70" /></div>}
       <ol className="pulse">
         {rows.map((r, i) => (
           <li key={r.symbol}>
-            <Link to={`/finstagram/s/${encodeURIComponent(r.symbol)}`} className="pulse-row">
+            <Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="pulse-row" title={t("What Reddit, X and StockTwits are saying")}>
               <span className="pulse-rank num">{i + 1}</span>
               <span className="pulse-name"><span className="mono">{r.symbol}</span><span className="wl-name">{r.name ?? ""}</span></span>
               <span className="pulse-bar" aria-hidden><span style={{ transform: `scaleX(${r.posts / max})` }} /></span>
@@ -301,7 +301,7 @@ function Pulse() {
           </li>
         ))}
       </ol>
-      <p className="hm-fine">{t("Number of Finstagram posts that mention each ticker, mostly from news pages. A measure of attention — not sentiment, and not a prediction. Investor-opinion analysis from other sources is not connected yet.")}</p>
+      <p className="hm-fine">{t("Number of Finstagram posts that mention each ticker, mostly from news pages — a measure of attention, not sentiment or a prediction. Open a ticker to read what people say about it on Reddit, X and StockTwits.")}</p>
     </section>
   );
 }

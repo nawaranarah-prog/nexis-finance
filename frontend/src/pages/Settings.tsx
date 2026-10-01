@@ -10,6 +10,52 @@ import { useT, type Lang } from "../i18n";
 import type { AnyObj } from "../types/api";
 import { pct } from "../utils/format";
 
+const LINKABLE = [
+  { id: "reddit", label: "Reddit", mark: "r/", prefix: "u/" },
+  { id: "x", label: "X", mark: "𝕏", prefix: "@" },
+] as const;
+
+/** Reddit and X identities the person has proved they own, shown next to their name on Nexis. */
+function LinkedAccounts({ user }: { user: AnyObj }) {
+  const { t } = useT();
+  const qc = useQueryClient();
+  const providers = useQuery({ queryKey: ["auth-providers"], queryFn: () => api.get<Record<string, boolean>>("/auth/providers"), staleTime: 600_000 });
+  const [busy, setBusy] = useState<string | null>(null);
+  const linked: AnyObj[] = user.linked ?? [];
+  const unlink = async (id: string) => {
+    setBusy(id);
+    try { await api.del(`/auth/me/linked/${id}`); await qc.invalidateQueries({ queryKey: ["me"] }); toast("success", t("Account unlinked")); }
+    catch (e) { toast("error", t("Couldn't unlink"), errorMessage(e)); }
+    finally { setBusy(null); }
+  };
+  return (
+    <Card title={t("Linked accounts")}>
+      <div className="stack" id="linked">
+        <div className="small text2">{t("Link Reddit or X to show your handle next to your name when you post and comment on Nexis, and to sign in with it. Nexis only reads your public username — it never posts for you.")}</div>
+        {LINKABLE.map((pv) => {
+          const mine = linked.find((a) => a.provider === pv.id);
+          const ready = providers.data?.[pv.id];
+          return (
+            <div key={pv.id} className="row-between linked-row">
+              <span className="row" style={{ gap: 10 }}>
+                <span className={`src-mark ${pv.id}`} aria-hidden>{pv.mark}</span>
+                <span>
+                  <b>{pv.label}</b>
+                  <div className="xs muted">{mine ? <a href={mine.url} target="_blank" rel="noreferrer noopener">{pv.prefix}{mine.username} ↗</a> : ready ? t("Not linked") : t("Not available yet — the site owner still needs to connect it")}</div>
+                </span>
+              </span>
+              {mine
+                ? <button className="btn sm" disabled={busy === pv.id} onClick={() => unlink(pv.id)}>{t("Unlink")}</button>
+                : <a className={`btn sm ${ready ? "primary" : "disabled"}`} aria-disabled={!ready}
+                    href={ready ? `/api/auth/oauth/${pv.id}/start?mode=link&next=/settings` : undefined}>{t("Link")} {pv.label}</a>}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function AccountSettings() {
   const { t, lang, setLang } = useT();
   const qc = useQueryClient();
@@ -99,6 +145,7 @@ function AccountSettings() {
           </Field>
         </div>
       </Card>
+      <LinkedAccounts user={u} />
       <Card title={t("Security")}>
         <form className="stack" onSubmit={(e) => { e.preventDefault(); savePassword(); }}>
           <div className="small text2">{u.has_password ? "Change the password you use to sign in." : "Your account signs in without a password. Add one to also sign in with your email or phone and a password."}</div>
@@ -137,6 +184,15 @@ function AccountSettings() {
 export default function Settings() {
   const { settings, updateSettings } = useWorkspace();
   const { t } = useT();
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const linked = q.get("linked");
+    const err = q.get("error");
+    if (linked) toast("success", `${linked === "x" ? "X" : "Reddit"} ${t("account linked")}`);
+    if (err) toast("error", t("Couldn't link the account"), err);
+    if (linked || err) window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    if (window.location.hash === "#linked") window.setTimeout(() => document.getElementById("linked")?.scrollIntoView({ block: "center" }), 300);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const cfg = useQuery({ queryKey: ["config"], queryFn: () => api.get<AnyObj>("/system/config"), staleTime: Infinity });
   return (
     <>

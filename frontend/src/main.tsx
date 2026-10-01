@@ -10,6 +10,7 @@ import "./styles.css";
 import "./styles-markets.css";
 import "./styles-social.css";
 import "./styles-home.css";
+import "./styles-pulse.css";
 
 const client = new QueryClient({
   defaultOptions: {

@@ -20,6 +20,7 @@ export const NAV: { group: string; fixed?: boolean; items: { to: string; label: 
       { to: "/markets", label: "Markets" },
       { to: "/finstagram", label: "Finstagram" },
       { to: "/advisor", label: "AI Advisor" },
+      { to: "/pulse", label: "Nexis Pulse" },
     ],
   },
   {
@@ -263,6 +264,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     } else if (path.startsWith("/advisor")) {
       title = "AI Financial Advisor — ask about any UAE or global stock · Nexis Finance";
       desc = "Ask an AI financial advisor about Emaar, FAB, Aldar or any stock, bond or sukuk. It checks live prices, news and analyst ratings before it answers.";
+    } else if (path.startsWith("/pulse/")) {
+      const s = path.split("/")[2];
+      title = `${s} — what investors are saying on Reddit, X and StockTwits · Nexis Pulse`;
+      desc = `Latest public posts about ${s} from Reddit, X and StockTwits, with an AI summary of the arguments for and against.`;
     } else if (path.startsWith("/finstagram")) {
       title = "Finstagram — the investor feed · Nexis Finance";
       desc = "Real market news, charts and videos from UAE and global sources. Like, save, comment and follow stocks and news pages.";
@@ -274,7 +279,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", `https://nexis-finance-five.vercel.app${location.pathname}`);
   }, [location.pathname]);
   // The research-dataset picker only matters on the research pages, not on Home, Finstagram, markets or the advisor.
-  const consumer = ["/finstagram", "/advisor", "/markets", "/compare", "/valuation", "/login"];
+  const consumer = ["/finstagram", "/advisor", "/pulse", "/markets", "/compare", "/valuation", "/login", "/settings"];
   const researchPage = location.pathname !== "/" && !consumer.some((p) => location.pathname.startsWith(p));
   const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, label: t(it.label), group: t(g.group) })));
   return (

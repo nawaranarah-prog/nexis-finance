@@ -53,6 +53,23 @@ class User(Base, TimestampMixin):
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
+class LinkedAccount(Base, TimestampMixin):
+    """A Reddit or X identity the person proved they own by signing in there. Only the public identity is kept, no tokens."""
+
+    __tablename__ = "linked_accounts"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_user_id", name="uq_linked_provider_user"),
+        UniqueConstraint("user_id", "provider", name="uq_linked_user_provider"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(12), nullable=False)
+    provider_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
+
+
 class UserSession(Base, TimestampMixin):
     __tablename__ = "user_sessions"
 
