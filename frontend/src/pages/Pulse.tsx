@@ -248,7 +248,7 @@ function PulseHome() {
             <li key={k}>
               <span className="ps-src-name"><SourceMark source={k} />{v.label}</span>
               <span className="ps-meta">
-                {k === "reddit" && (v.official ? t("Official Reddit API") : t("Reddit's public search feed — limited and sometimes refused"))}
+                {k === "reddit" && (v.official ? t("Official Reddit API") : v.pending ? t("Waiting for Reddit to approve API access — Reddit posts appear once approved") : t("Reddit's public search feed"))}
                 {k === "x" && (v.official ? t("X API") : t("Not connected yet — reading X needs an X API plan"))}
                 {k === "stocktwits" && t("Public stream · US-listed stocks and crypto")}
               </span>

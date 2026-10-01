@@ -66,7 +66,27 @@ def test_subject_terms_follow_how_people_write():
     assert pulse._mentions("First Abu Dhabi Bank reported earnings", fab)
 
 
+def _public_feed(monkeypatch):  # type: ignore[no-untyped-def]
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "reddit_public_feed", True)
+
+
+def test_reddit_is_not_read_without_approval(client, monkeypatch):
+    def no_network(*a, **k):  # type: ignore[no-untyped-def]
+        if "reddit.com" in str(a[0] if a else k.get("url")):
+            raise AssertionError("Reddit must not be contacted without approval")
+        return _fake_get(*a, **k)
+
+    monkeypatch.setattr(pulse.httpx, "get", no_network)
+    monkeypatch.setattr(pulse.markets, "quotes", _quotes({"MSFT": "Microsoft Corporation"}))
+    d = client.get("/api/pulse/MSFT").json()
+    assert d["sources"]["reddit"]["ok"] is False and "approve" in d["sources"]["reddit"]["error"]
+    assert client.get("/api/pulse/sources").json()["sources"]["reddit"]["pending"] is True
+
+
 def test_collect_keeps_relevant_posts_links_authors_and_reports_sources(client, monkeypatch):
+    _public_feed(monkeypatch)
     monkeypatch.setattr(pulse.httpx, "get", _fake_get)
     monkeypatch.setattr(pulse.markets, "quotes", _quotes({"EMAAR.AE": "Emaar Properties PJSC", "NVDA": "NVIDIA Corporation"}))
     d = client.get("/api/pulse/EMAAR.AE").json()

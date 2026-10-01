@@ -2,8 +2,9 @@
 
 Everything shown comes from the sources' own APIs and links back to the original post and author:
 
-* Reddit — the official API (app-only OAuth) when ``NEXIS_REDDIT_CLIENT_ID``/``SECRET`` are set; otherwise
-  Reddit's public search feed, which works but is rate-limited and may be refused from cloud servers.
+* Reddit — the official API (app-only OAuth) with an app Reddit has approved under its Responsible Builder
+  Policy (``NEXIS_REDDIT_CLIENT_ID``/``SECRET``). Without approval Reddit is not read at all, unless
+  ``NEXIS_REDDIT_PUBLIC_FEED`` is explicitly enabled.
 * X — recent search when ``NEXIS_X_BEARER_TOKEN`` is set (an X API plan with search access is required).
 * StockTwits — the public symbol stream (US-listed tickers and crypto). Bullish/Bearish labels on StockTwits
   are tags the posters chose themselves.
@@ -166,7 +167,9 @@ def reddit(db: Session, subj: dict[str, Any]) -> tuple[list[dict[str, Any]], str
                 "score": d.get("score"), "replies": d.get("num_comments"), "tag": None,
             })  # fmt: skip
         return out, "Reddit API"
-    # No app credentials: Reddit's public search feed (one retry when it asks us to slow down).
+    if not s.reddit_public_feed:
+        raise ProviderError("waiting for Reddit to approve API access — Reddit requires approval before its posts can be shown")
+    # Explicitly allowed: Reddit's public search feed (one retry when it asks us to slow down).
     for attempt in range(2):
         try:
             r = httpx.get(
@@ -305,7 +308,11 @@ def stocktwits(subj: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
 def sources_status() -> dict[str, dict[str, Any]]:
     s = get_settings()
     return {
-        "reddit": {"label": "Reddit", "official": bool(s.reddit_client_id and s.reddit_client_secret)},
+        "reddit": {
+            "label": "Reddit",
+            "official": bool(s.reddit_client_id and s.reddit_client_secret),
+            "pending": not (s.reddit_client_id and s.reddit_client_secret) and not s.reddit_public_feed,
+        },
         "x": {"label": "X", "official": bool(s.x_bearer_token)},
         "stocktwits": {"label": "StockTwits", "official": True},
     }

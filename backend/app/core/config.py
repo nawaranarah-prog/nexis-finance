@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # posts for Nexis Pulse through the official API. Redirect URI: {public_url}/api/auth/oauth/reddit/callback
     reddit_client_id: str | None = None
     reddit_client_secret: str | None = None
+    # Reading Reddit's public search feed without an approved API app. Off: since November 2025 Reddit's
+    # Responsible Builder Policy requires approval before using Reddit data, so only enable this with permission.
+    reddit_public_feed: bool = False
     # X app (developer.x.com, OAuth 2.0 confidential client): signs people in / links accounts.
     # Redirect URI: {public_url}/api/auth/oauth/x/callback
     x_client_id: str | None = None

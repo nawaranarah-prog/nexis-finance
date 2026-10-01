@@ -78,6 +78,7 @@ const AR: Record<string, string> = {
     "ابحث عن أي سهم في سوق أبوظبي أو دبي، أو سند إماراتي، أو أي سوق عالمي — أو اطرح سؤالًا بحثيًا. يتحقق المستشار من الأسعار المباشرة والأخبار والتقييمات، ويعرض خطواته.",
   "Search a ticker or ask a question — e.g. Compare FAB and Emirates NBD": "ابحث عن رمز أو اطرح سؤالًا — مثلًا: قارن بين أبوظبي الأول والإمارات دبي الوطني",
   // pulse
+  "Waiting for Reddit to approve API access — Reddit posts appear once approved": "بانتظار موافقة ريديت على الوصول — تظهر منشورات ريديت بعد الموافقة",
   "Investor opinions": "آراء المستثمرين", "What Reddit, X and StockTwits are saying": "ماذا يقول ريديت وإكس وستوكتويتس",
   "Investor opinions from Reddit, X and StockTwits": "آراء المستثمرين من ريديت وإكس وستوكتويتس",
   "What are investors saying?": "ماذا يقول المستثمرون؟", "What investors are saying": "ماذا يقول المستثمرون",
