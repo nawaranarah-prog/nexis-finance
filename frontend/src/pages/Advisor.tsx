@@ -193,7 +193,7 @@ export default function Advisor() {
                         <span key={sym} className="row" style={{ gap: 6 }}>
                           <Link className="chip" to={`/markets/${encodeURIComponent(sym)}`}>{sym} chart & details</Link>
                           <Link className="chip" to={`/compare?s=${encodeURIComponent(sym)}`}>compare</Link>
-                          <Link className="chip" to={`/finstagram/s/${encodeURIComponent(sym)}`}>Finstagram</Link>
+                          <Link className="chip" to={`/pulse/${encodeURIComponent(sym)}`}>Pulse</Link>
                         </span>
                       ))}
                     </div>

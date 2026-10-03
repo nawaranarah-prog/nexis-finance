@@ -64,6 +64,7 @@ class PasswordChange(_Base):
 
 class CommentIn(_Base):
     body: str = Field(min_length=1, max_length=1000)
+    parent_id: int | None = None
 
 
 class ReportIn(_Base):
@@ -291,12 +292,7 @@ def refresh_news(request: Request, db: Session = Depends(get_db)) -> dict[str, A
     """Imports new headlines when the last import is older than 20 minutes (also called by the daily cron)."""
     secret = get_settings().cron_secret
     forced = bool(secret) and request.headers.get("authorization") == f"Bearer {secret}"
-    out = newsfeed.refresh(db, force=forced)
-    if forced:  # the daily cron also stores fresh Nexis Pulse posts for popular assets
-        from app.services import pulse
-
-        out["pulse"] = pulse.warm(db)
-    return out
+    return newsfeed.refresh(db, force=forced)
 
 
 @router.get("/social/trending")
@@ -344,7 +340,7 @@ def list_comments(
 def add_comment(
     pid: int, req: CommentIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    return social.add_comment(db, pid, user, req.body)
+    return social.add_comment(db, pid, user, req.body, req.parent_id)
 
 
 @router.delete("/social/comments/{cid}", status_code=204)

@@ -10,17 +10,23 @@ import type { Notification } from "../types/api";
 import { dt } from "../utils/format";
 import { useT } from "../i18n";
 
-/** Every route in the app, grouped by task. Discover and Research stay open; the rest fold away until needed. */
+/** Every route in the app, grouped by task. Pulse, Markets and Research stay open; the rest fold away until needed. */
 export const NAV: { group: string; fixed?: boolean; items: { to: string; label: string }[] }[] = [
   {
-    group: "Discover",
+    group: "Nexis Pulse",
+    fixed: true,
+    items: [
+      { to: "/pulse", label: "Pulse" },
+      { to: "/finstagram", label: "Community" },
+    ],
+  },
+  {
+    group: "Markets",
     fixed: true,
     items: [
       { to: "/", label: "Home" },
-      { to: "/markets", label: "Markets" },
-      { to: "/finstagram", label: "Finstagram" },
+      { to: "/markets", label: "UAE & Global Markets" },
       { to: "/advisor", label: "AI Advisor" },
-      { to: "/pulse", label: "Nexis Pulse" },
     ],
   },
   {
@@ -173,8 +179,8 @@ function TabBar() {
   const tabs = [
     { to: "/", label: "Home", icon: "⌂" },
     { to: "/markets", label: "Markets", icon: "↗" },
-    { to: "/finstagram", label: "Finstagram", icon: "F", primary: true },
-    { to: "/advisor", label: "Advisor", icon: "✦" },
+    { to: "/pulse", label: "Pulse", icon: "P", primary: true },
+    { to: "/finstagram", label: "Community", icon: "≡" },
     { to: me ? `/finstagram/u/${me.username}` : "/login", label: me ? "Me" : "Sign in", icon: "◉" },
   ];
   return (
@@ -260,16 +266,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       title = `${sym[2]} valuation — DCF and peer multiples · Nexis Finance`;
       desc = `Discounted cash flow and peer-multiple valuation of ${sym[2]}, with a downloadable report.`;
     } else if (sym) {
-      title = `${sym[2]} on Finstagram — posts and news · Nexis Finance`;
+      title = `${sym[2]} in the Community — posts and news · Nexis Finance`;
     } else if (path.startsWith("/advisor")) {
       title = "AI Financial Advisor — ask about any UAE or global stock · Nexis Finance";
       desc = "Ask an AI financial advisor about Emaar, FAB, Aldar or any stock, bond or sukuk. It checks live prices, news and analyst ratings before it answers.";
+    } else if (path.startsWith("/pulse/d/")) {
+      title = "Discussion · Nexis Pulse";
     } else if (path.startsWith("/pulse/")) {
       const s = path.split("/")[2];
-      title = `${s} — what investors are saying on Reddit, X and StockTwits · Nexis Pulse`;
-      desc = `Latest public posts about ${s} from Reddit, X and StockTwits, with an AI summary of the arguments for and against.`;
+      title = `${s} — what investors are saying · Nexis Pulse`;
+      desc = `Nexis Pulse for ${s}: community sentiment, the bullish and bearish arguments, trending topics and the discussions behind them.`;
+    } else if (path === "/pulse") {
+      title = "Nexis Pulse — see what investors are saying";
+      desc = "Discussions about stocks, bonds and funds from Nexis members, with sentiment, trending topics and a Pulse score for every asset.";
     } else if (path.startsWith("/finstagram")) {
-      title = "Finstagram — the investor feed · Nexis Finance";
+      title = "Community · Nexis Finance";
       desc = "Real market news, charts and videos from UAE and global sources. Like, save, comment and follow stocks and news pages.";
     } else if (page && page.to !== "/") {
       title = `${page.label} · Nexis Finance`;
@@ -311,7 +322,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <button className="search-trigger" onClick={() => setPalette(true)} aria-label="Open command palette">
             <span aria-hidden>⌕</span><span className="grow">{t("Search or jump to…")}</span><kbd className="hide-sm">Ctrl K</kbd>
           </button>
-          <Link to="/finstagram" className={`top-link hide-sm ${location.pathname.startsWith("/finstagram") ? "on" : ""}`}><span className="top-link-mark" aria-hidden>F</span>{t("Finstagram")}</Link>
+          <Link to="/pulse" className={`top-link hide-sm ${location.pathname.startsWith("/pulse") ? "on" : ""}`}><span className="top-link-mark" aria-hidden>P</span>{t("Pulse")}</Link>
+          <Link to="/finstagram" className={`top-link hide-sm ${location.pathname.startsWith("/finstagram") ? "on" : ""}`}>{t("Community")}</Link>
           <Link to="/advisor" className={`top-link hide-sm ${location.pathname.startsWith("/advisor") ? "on" : ""}`}><span className="top-link-mark ai" aria-hidden>✦</span>{t("AI Advisor")}</Link>
           <Notifications />
           <Account />

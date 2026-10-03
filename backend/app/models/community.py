@@ -92,7 +92,7 @@ class Media(Base, TimestampMixin):
 
 class Post(Base, TimestampMixin):
     __tablename__ = "posts"
-    __table_args__ = (Index("ix_posts_created", "created_at"),)
+    __table_args__ = (Index("ix_posts_created", "created_at"), Index("ix_posts_asset_created", "asset", "created_at"))
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -111,6 +111,25 @@ class Post(Base, TimestampMixin):
     link_image: Mapped[str | None] = mapped_column(String(1500))
     # De-duplication key for automatically imported articles.
     external_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    # ---- Nexis Pulse discussion fields (a discussion is a post about one asset, with a title)
+    # Where the discussion comes from. Only "nexis" today; external sources get their own key later.
+    source: Mapped[str] = mapped_column(String(16), default="nexis", server_default="nexis", nullable=False)
+    asset: Mapped[str | None] = mapped_column(String(32))
+    asset_name: Mapped[str | None] = mapped_column(String(160))
+    title: Mapped[str | None] = mapped_column(String(160))
+    # What the author chose ("bullish" / "neutral" / "bearish"), kept apart from what the AI detected.
+    sentiment: Mapped[str | None] = mapped_column(String(8))
+    ai_sentiment: Mapped[str | None] = mapped_column(String(8))
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class PostTopic(Base):
+    """Topics a discussion is about (earnings, valuation, …), indexed for trending-topic counts."""
+
+    __tablename__ = "post_topics"
+
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
+    topic: Mapped[str] = mapped_column(String(32), primary_key=True, index=True)
 
 
 class Save(Base, TimestampMixin):
@@ -153,6 +172,8 @@ class Comment(Base, TimestampMixin):
     post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     body: Mapped[str] = mapped_column(String(1000), nullable=False)
+    # Replies point at the top-level comment they answer (one level deep).
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"), index=True)
 
 
 class Like(Base, TimestampMixin):

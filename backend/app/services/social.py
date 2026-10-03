@@ -121,6 +121,17 @@ def serialize_posts(db: Session, posts: list[Post], viewer: User | None) -> list
                 "saved_by_me": p.id in saved,
                 "is_mine": viewer is not None and viewer.id == p.user_id,
                 "created_at": p.created_at.isoformat() + "Z",
+                # Nexis Pulse discussion fields (null for ordinary community posts)
+                "discussion": {
+                    "asset": p.asset,
+                    "asset_name": p.asset_name,
+                    "title": p.title,
+                    "sentiment": p.sentiment,
+                    "ai_sentiment": p.ai_sentiment,
+                }
+                if p.asset and p.title
+                else None,
+                "source": p.source,
             }
         )
     return out
@@ -287,18 +298,23 @@ def comments(db: Session, pid: int, viewer: User | None) -> list[dict[str, Any]]
     authors = {u.id: u for u in db.scalars(select(User).where(User.id.in_({c.user_id for c in rows})))} if rows else {}
     return [
         {"id": c.id, "author": serialize_user(db, authors[c.user_id]), "body": c.body, "created_at": c.created_at.isoformat() + "Z",
-         "is_mine": viewer is not None and viewer.id == c.user_id}
+         "is_mine": viewer is not None and viewer.id == c.user_id, "parent_id": c.parent_id}
         for c in rows
     ]  # fmt: skip
 
 
-def add_comment(db: Session, pid: int, user: User, body: str) -> dict[str, Any]:
+def add_comment(db: Session, pid: int, user: User, body: str, parent_id: int | None = None) -> dict[str, Any]:
     ratelimit.hit(db, f"comment:{user.id}", 60)
     p = _get_post(db, pid)
     body = (body or "").strip()
     if not body or len(body) > 1000:
         raise ValidationFailed("comments must be 1–1,000 characters")
-    c = Comment(post_id=pid, user_id=user.id, body=body)
+    if parent_id is not None:
+        parent = db.get(Comment, parent_id)
+        if parent is None or parent.post_id != pid:
+            raise ValidationFailed("you can only reply to a comment on the same discussion")
+        parent_id = parent.parent_id or parent.id  # replies stay one level deep
+    c = Comment(post_id=pid, user_id=user.id, body=body, parent_id=parent_id)
     db.add(c)
     db.flush()
     p.comment_count = db.scalar(select(func.count(Comment.id)).where(Comment.post_id == pid)) or 0
@@ -309,6 +325,7 @@ def add_comment(db: Session, pid: int, user: User, body: str) -> dict[str, Any]:
         "body": c.body,
         "created_at": c.created_at.isoformat() + "Z",
         "is_mine": True,
+        "parent_id": c.parent_id,
     }
 
 

@@ -73,19 +73,14 @@ class Settings(BaseSettings):
     # Sign in with Google (enabled when both are set; see app/services/oauth.py).
     google_client_id: str | None = None
     google_client_secret: str | None = None
-    # Reddit app (reddit.com/prefs/apps, type "web app"): signs people in / links accounts, and reads public
-    # posts for Nexis Pulse through the official API. Redirect URI: {public_url}/api/auth/oauth/reddit/callback
+    # Reddit app (reddit.com/prefs/apps, type "web app"): optional sign-in / account linking only.
+    # Nexis Pulse does not read Reddit. Redirect URI: {public_url}/api/auth/oauth/reddit/callback
     reddit_client_id: str | None = None
     reddit_client_secret: str | None = None
-    # Reading Reddit's public search feed without an approved API app. Off: since November 2025 Reddit's
-    # Responsible Builder Policy requires approval before using Reddit data, so only enable this with permission.
-    reddit_public_feed: bool = False
     # X app (developer.x.com, OAuth 2.0 confidential client): signs people in / links accounts.
     # Redirect URI: {public_url}/api/auth/oauth/x/callback
     x_client_id: str | None = None
     x_client_secret: str | None = None
-    # X API bearer token for reading recent posts in Nexis Pulse (search needs a paid X API plan).
-    x_bearer_token: str | None = None
     # SMS one-time codes for phone sign-up/sign-in via Twilio Verify (optional; without them phone accounts use a password).
     twilio_account_sid: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_TWILIO_ACCOUNT_SID", "TWILIO_ACCOUNT_SID")

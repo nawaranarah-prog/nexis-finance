@@ -125,6 +125,7 @@ export default function App() {
           <Route path="/markets/:symbol" element={<Instrument />} />
           <Route path="/advisor" element={<Advisor />} />
           <Route path="/pulse" element={<Pulse />} />
+          <Route path="/pulse/d/:id" element={<Pulse />} />
           <Route path="/pulse/:symbol" element={<Pulse />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/valuation" element={<Valuation />} />

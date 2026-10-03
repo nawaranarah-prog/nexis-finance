@@ -77,7 +77,26 @@ const AR: Record<string, string> = {
   "Search any ADX or DFM share, UAE bond or global market — or ask a research question. The advisor checks live prices, news and valuations, and shows its working.":
     "ابحث عن أي سهم في سوق أبوظبي أو دبي، أو سند إماراتي، أو أي سوق عالمي — أو اطرح سؤالًا بحثيًا. يتحقق المستشار من الأسعار المباشرة والأخبار والتقييمات، ويعرض خطواته.",
   "Search a ticker or ask a question — e.g. Compare FAB and Emirates NBD": "ابحث عن رمز أو اطرح سؤالًا — مثلًا: قارن بين أبوظبي الأول والإمارات دبي الوطني",
-  // pulse
+  // pulse discussions
+  "Pulse": "النبض", "Community": "المجتمع", "Open Community": "افتح المجتمع", "News and posts from the Community": "أخبار ومنشورات من المجتمع",
+  "See what investors are saying.": "اعرف ماذا يقول المستثمرون.", "What investors on Nexis are saying": "ماذا يقول المستثمرون على نكسس",
+  "Every Pulse comes from discussions written by Nexis members — the arguments for and against, the topics people care about, and an overall sentiment score.":
+    "كل نبض مبني على نقاشات كتبها أعضاء نكسس — الحجج المؤيدة والمعارضة، والمواضيع التي تهم الناس، ومؤشر عام للمزاج.",
+  "Search an asset — Tesla, NVDA, Emirates NBD…": "ابحث عن أصل — تسلا، NVDA، الإمارات دبي الوطني…",
+  "No discussions yet": "لا توجد نقاشات بعد", "Start a discussion": "ابدأ نقاشًا", "New discussion": "نقاش جديد", "Start a discussion about any asset…": "ابدأ نقاشًا عن أي أصل…",
+  "What do you think about": "ما رأيك في", "Pulse unavailable": "النبض غير متاح", "Not enough discussion data yet.": "لا توجد بيانات نقاش كافية بعد.",
+  "Based on": "بناءً على", "discussions from the last": "نقاشًا خلال آخر", "days": "يومًا", "classified by AI": "صنّفها الذكاء الاصطناعي",
+  "Sentiment of Nexis discussions — not a price prediction, a probability of the price rising, or financial advice.":
+    "مزاج نقاشات نكسس — وليس توقعًا للسعر ولا احتمالًا لارتفاعه ولا نصيحة مالية.",
+  "Sentiment": "المزاج", "Neutral": "محايد", "Discussion volume": "حجم النقاش", "discussions": "نقاشات", "people": "أشخاص", "this week": "هذا الأسبوع",
+  "vs the previous week": "مقارنة بالأسبوع السابق", "Trending topics": "المواضيع الرائجة", "No topics tagged yet.": "لا مواضيع موسومة بعد.",
+  "Bullish arguments": "حجج متفائلة", "Bearish arguments": "حجج متشائمة", "No bullish arguments yet.": "لا حجج متفائلة بعد.", "No bearish arguments yet.": "لا حجج متشائمة بعد.",
+  "Summarise the discussion": "لخّص النقاش", "Discussion activity": "نشاط النقاش", "weeks": "أسابيع", "Newest": "الأحدث", "Most discussed": "الأكثر نقاشًا",
+  "Load more": "تحميل المزيد", "Title": "العنوان", "Your reasoning": "حجتك", "Your sentiment": "مزاجك", "optional": "اختياري", "Topics": "المواضيع", "up to": "حتى",
+  "Publish": "نشر", "Cancel": "إلغاء", "Comments": "التعليقات", "Comment": "تعليق", "Reply": "رد", "Edit": "تعديل", "edited": "معدّل",
+  "Trending discussions": "النقاشات الرائجة", "Recent discussions": "أحدث النقاشات", "Trending assets": "الأصول الرائجة", "Biggest sentiment changes": "أكبر تغيّرات المزاج",
+  "Discussion published": "تم نشر النقاش", "Nexis Community": "مجتمع نكسس", "Pulse discussion": "نقاش في النبض", "Open Pulse": "افتح النبض",
+  "Sign in to start a discussion. Reading is open to everyone.": "سجّل الدخول لبدء نقاش. القراءة متاحة للجميع.",
   "Investor opinions from Bluesky, StockTwits and Nexis members": "آراء المستثمرين من بلوسكاي وستوكتويتس وأعضاء نكسس",
   "Collecting posts from Bluesky, StockTwits and Nexis members…": "جارٍ جمع المنشورات من بلوسكاي وستوكتويتس وأعضاء نكسس…",
   "Pick a stock, bond or crypto to read the latest public posts about it from Bluesky, StockTwits and Nexis members, with an AI summary of the arguments on each side. Every post links to the original and its author, and one click opens the live discussion on Reddit and X.":

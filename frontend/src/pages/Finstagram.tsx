@@ -374,6 +374,20 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
       </div>
       <div className="post-likes">{likes.toLocaleString()} {likes === 1 ? t("like") : t("likes")}</div>
       <div className="post-body" dir="auto">
+        {post.discussion && (
+          <Link to={`/pulse/d/${post.id}`} className="post-discussion">
+            <span className="post-discussion-meta">
+              <span className="mono">{post.discussion.asset}</span>
+              {(post.discussion.sentiment || post.discussion.ai_sentiment) && (
+                <span className={`pl-sent ${post.discussion.sentiment || post.discussion.ai_sentiment} ${post.discussion.sentiment ? "" : "ai"}`}>
+                  {!post.discussion.sentiment && <span className="pl-sent-ai">AI</span>}{t(String(post.discussion.sentiment || post.discussion.ai_sentiment).replace(/^./, (c: string) => c.toUpperCase()))}
+                </span>
+              )}
+              <span className="xs muted">{t("Pulse discussion")}</span>
+            </span>
+            <b className="post-discussion-title">{post.discussion.title}</b>
+          </Link>
+        )}
         {headline && <div className="post-headline">{link ? <a href={link.url} target="_blank" rel="noreferrer noopener">{headline.replace(/^▶ /, "")}</a> : headline}</div>}
         {rest && <div className={long ? "clamp" : ""}>{!link && <Link to={`/finstagram/u/${post.author.username}`}><b>{post.author.username}</b></Link>} <Rich text={rest} /></div>}
         {long && <button className="link-btn xs" onClick={() => setExpanded(true)}>more</button>}
@@ -521,7 +535,7 @@ function TopBar() {
   const { me } = useGate();
   return (
     <div className="insta-top">
-      <Link to="/finstagram" className="insta-logo">Finstagram</Link>
+      <Link to="/finstagram" className="insta-logo">Community</Link>
       <SearchBar />
       {me && <Link to={`/finstagram/u/${me.username}`} aria-label="My profile"><Avatar user={me} size={30} /></Link>}
     </div>

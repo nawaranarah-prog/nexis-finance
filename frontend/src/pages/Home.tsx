@@ -173,7 +173,7 @@ function Wire() {
   };
   return (
     <section className="hm-wire">
-      <SectionHead title={t("Market wire")} sub={t("Latest on Finstagram")} to="/finstagram" cta={t("Open Finstagram")} />
+      <SectionHead title={t("Market wire")} sub={t("News and posts from the Community")} to="/finstagram" cta={t("Open Community")} />
       {feed.isLoading && <div className="wire-skel"><span className="skel lead" /><span className="skel w80" /><span className="skel w60" /><span className="skel w70" /></div>}
       {feed.isError && <div className="hm-error">{t("The feed could not be loaded")} — {errorMessage(feed.error)} <button className="link-btn" onClick={() => feed.refetch()}>{t("Retry")}</button></div>}
       {lead && (
@@ -280,28 +280,36 @@ function Watchlist() {
 }
 
 /** What Finstagram is talking about: mention counts only. Not sentiment, and not a signal. */
+/** Nexis Pulse on the homepage: the assets members discuss most, with their Pulse score. Real discussions only. */
 function Pulse() {
   const { t } = useT();
-  const q = useQuery({ queryKey: ["social", "trending"], queryFn: () => api.get<AnyObj>("/social/trending"), staleTime: 300_000 });
-  const rows: AnyObj[] = (q.data?.symbols ?? []).slice(0, 6);
-  const max = Math.max(1, ...rows.map((r) => r.posts));
+  const q = useQuery({ queryKey: ["pulse-discover"], queryFn: () => api.get<AnyObj>("/pulse/discover"), staleTime: 60_000 });
+  const d = q.data;
+  const rows: AnyObj[] = (d?.trending_assets?.length ? d.trending_assets : d?.most_discussed ?? []).slice(0, 6);
+  const max = Math.max(1, ...rows.map((r) => r.discussions));
   return (
     <section className="hm-pulse">
-      <SectionHead title={t("Nexis Pulse")} sub={t("Most mentioned · 7 days")} to="/pulse" cta={t("Investor opinions")} />
+      <SectionHead title={t("Nexis Pulse")} sub={d?.trending_assets?.length ? t("Most discussed · 7 days") : t("Most discussed · 30 days")} to="/pulse" cta={t("Open Pulse")} />
       {q.isLoading && <div className="wire-skel"><span className="skel w80" /><span className="skel w60" /><span className="skel w70" /></div>}
+      {d && !rows.length && (
+        <div className="hm-empty-state">
+          <p>{t("No discussions yet. Pulse shows what Nexis members think about an asset — start the first discussion and its sentiment appears here.")}</p>
+          <Link className="btn primary sm" to="/pulse">{t("Start a discussion")}</Link>
+        </div>
+      )}
       <ol className="pulse">
         {rows.map((r, i) => (
           <li key={r.symbol}>
-            <Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="pulse-row" title={t("What investors are saying")}>
+            <Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="pulse-row">
               <span className="pulse-rank num">{i + 1}</span>
               <span className="pulse-name"><span className="mono">{r.symbol}</span><span className="wl-name">{r.name ?? ""}</span></span>
-              <span className="pulse-bar" aria-hidden><span style={{ transform: `scaleX(${r.posts / max})` }} /></span>
-              <span className="pulse-n num">{r.posts}</span>
+              <span className="pulse-bar" aria-hidden><span style={{ transform: `scaleX(${r.discussions / max})` }} /></span>
+              <span className="pulse-n num" title={t("Pulse score")}>{r.score?.available ? r.score.value : "—"}</span>
             </Link>
           </li>
         ))}
       </ol>
-      <p className="hm-fine">{t("Number of Finstagram posts that mention each ticker, mostly from news pages — a measure of attention, not sentiment or a prediction. Open a ticker to read what investors say about it.")}</p>
+      {rows.length > 0 && <p className="hm-fine">{t("Bars show how many discussions; the number is the Pulse score (1–100) — the sentiment of those discussions, not a prediction. “—” means too few discussions to score.")}</p>}
     </section>
   );
 }
