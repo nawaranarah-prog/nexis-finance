@@ -79,10 +79,10 @@ def test_seed_is_idempotent_and_correctly_attributed(client, db, monkeypatch):
     # the member's discussion is untouched and still a community discussion
     again = client.get(f"/api/pulse/discussions/{mine['id']}").json()
     assert again == {**again, "title": mine["title"], "body": mine["body"], "sentiment": "bullish"}
-    assert again["source"] == {"key": "nexis", "label": "Nexis Community", "editorial": False}
+    assert again["source"] == {"key": "nexis", "label": "Nexis Community", "editorial": False, "generated": False}
 
     seeded = client.get(f"/api/pulse/discussions/{rows[0].id}").json()
-    assert seeded["source"] == {"key": "research", "label": "Nexis Research", "editorial": True}
+    assert seeded["source"] == {"key": "research", "label": "Nexis Research", "editorial": True, "generated": False}
     assert seeded["author"]["username"] == "nexis.research" and seeded["author"]["display_name"] == "Nexis Research"
     client.post("/api/auth/logout")
     client.cookies.clear()

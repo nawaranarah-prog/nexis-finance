@@ -6,7 +6,7 @@ import { Avatar, useMe } from "../components/market";
 import CommandPalette from "../components/CommandPalette";
 import { Toaster } from "../components/toast";
 import { useWorkspace } from "../hooks/workspace";
-import type { Notification } from "../types/api";
+import type { AnyObj, Notification } from "../types/api";
 import { dt } from "../utils/format";
 import { useT } from "../i18n";
 
@@ -18,6 +18,15 @@ export const NAV: { group: string; fixed?: boolean; items: { to: string; label: 
     items: [
       { to: "/pulse", label: "Pulse" },
       { to: "/finstagram", label: "Community" },
+    ],
+  },
+  {
+    group: "You",
+    fixed: true,
+    items: [
+      { to: "/portfolio", label: "Portfolio" },
+      { to: "/portfolio?tab=watchlist", label: "Watchlist" },
+      { to: "/notifications", label: "Notifications" },
     ],
   },
   {
@@ -92,16 +101,21 @@ export const NAV: { group: string; fixed?: boolean; items: { to: string; label: 
   },
 ];
 
-const isActive = (to: string, path: string) => (to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`));
+const isActive = (to: string, path: string, search = "") => {
+  const [p, q] = to.split("?");
+  if (q) return path === p && search.includes(q);
+  if (p === "/portfolio") return path === p && !search.includes("tab=watchlist");
+  return p === "/" ? path === "/" : path === p || path.startsWith(`${p}/`);
+};
 
 /** The sidebar navigation. Folded groups keep their links out of the tab order. */
 function SideNav() {
   const { t } = useT();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [open, setOpen] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("nexis.nav.open") ?? "[]") as string[]; } catch { return []; }
   });
-  const current = NAV.find((g) => g.items.some((it) => isActive(it.to, pathname)))?.group;
+  const current = NAV.find((g) => g.items.some((it) => isActive(it.to, pathname, search)))?.group;
   const toggle = (g: string) => setOpen((o) => {
     const next = o.includes(g) ? o.filter((x) => x !== g) : [...o, g];
     try { localStorage.setItem("nexis.nav.open", JSON.stringify(next)); } catch { /* storage unavailable */ }
@@ -122,7 +136,7 @@ function SideNav() {
             <div className="nav-items" inert={!expanded}>
               <div>
                 {g.items.map((it) => (
-                  <NavLink key={it.to} to={it.to} end={it.to === "/"} className={() => (isActive(it.to, pathname) ? "active" : "")}>{t(it.label)}</NavLink>
+                  <NavLink key={it.to} to={it.to} end={it.to === "/"} className={() => (isActive(it.to, pathname, search) ? "active" : "")}>{t(it.label)}</NavLink>
                 ))}
               </div>
             </div>
@@ -180,7 +194,7 @@ function TabBar() {
     { to: "/", label: "Home", icon: "⌂" },
     { to: "/markets", label: "Markets", icon: "↗" },
     { to: "/pulse", label: "Pulse", icon: "P", primary: true },
-    { to: "/finstagram", label: "Community", icon: "≡" },
+    { to: "/portfolio", label: "Portfolio", icon: "◧" },
     { to: me ? `/finstagram/u/${me.username}` : "/login", label: me ? "Me" : "Sign in", icon: "◉" },
   ];
   return (
@@ -195,7 +209,65 @@ function TabBar() {
   );
 }
 
+/** Signed in: the member's own alerts. Signed out: the workspace's system notifications, as before. */
 function Notifications() {
+  const me = useMe().data?.user;
+  return me ? <PersonalBell /> : <SystemBell />;
+}
+
+function PersonalBell() {
+  const { t, lang } = useT();
+  const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const ref = useRef<HTMLDivElement>(null);
+  const q = useQuery({ queryKey: ["my-unread"], queryFn: () => api.get<AnyObj>("/me/notifications", { }), refetchInterval: 60_000 });
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const unread = q.data?.unread ?? 0;
+  const items: AnyObj[] = (q.data?.items ?? []).slice(0, 6);
+  const markAll = async () => { await api.post("/me/notifications/read", {}); qc.invalidateQueries({ queryKey: ["my-unread"] }); qc.invalidateQueries({ queryKey: ["my-notifications"] }); };
+  const go = async (n: AnyObj) => {
+    setOpen(false);
+    if (!n.read) { await api.post("/me/notifications/read", { ids: [n.id] }).catch(() => undefined); qc.invalidateQueries({ queryKey: ["my-unread"] }); }
+    nav(n.link || "/notifications");
+  };
+  return (
+    <div className="bell" ref={ref} style={{ position: "relative" }}>
+      <button className="icon-btn top-icon" onClick={() => setOpen(!open)} aria-label={`${t("Notifications")}, ${unread} ${t("unread")}`} aria-expanded={open}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.6 4.8H2.4C2.8 10.8 4 9.5 4 6.5Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" /><path d="M6.5 13.3a1.6 1.6 0 0 0 3 0" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" /></svg>
+      </button>
+      {unread > 0 && <span className="count">{unread > 99 ? "99+" : unread}</span>}
+      {open && (
+        <div className="popover right">
+          <div className="row-between" style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
+            <b>{t("Notifications")}</b>
+            <button className="btn sm ghost" onClick={markAll} disabled={!unread}>{t("Mark all read")}</button>
+          </div>
+          {items.map((n) => (
+            <button key={n.id} type="button" className={`notif personal ${n.read ? "" : "unread"}`} onClick={() => go(n)}>
+              <span className="row-between"><b className="ellipsis" dir="auto">{n.symbol ? <span className="mono">{n.symbol} · </span> : null}{n.title}</b><span className="xs muted">{agoShort(n.created_at, lang)}</span></span>
+              {n.source_name && <span className="xs muted">{n.source_name}</span>}
+            </button>
+          ))}
+          {q.data && items.length === 0 && <div className="state">{t("Nothing yet. Track assets to get alerts about them.")}</div>}
+          <Link to="/notifications" className="notif-all" onClick={() => setOpen(false)}>{t("All notifications and settings")} →</Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function agoShort(iso: string, lang: string): string {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto", style: "narrow" });
+  return s < 3600 ? rtf.format(-Math.max(1, Math.floor(s / 60)), "minute") : s < 86400 ? rtf.format(-Math.floor(s / 3600), "hour") : rtf.format(-Math.floor(s / 86400), "day");
+}
+
+function SystemBell() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const nav = useNavigate();
@@ -270,15 +342,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     } else if (path.startsWith("/advisor")) {
       title = "AI Financial Advisor — ask about any UAE or global stock · Nexis Finance";
       desc = "Ask an AI financial advisor about Emaar, FAB, Aldar or any stock, bond or sukuk. It checks live prices, news and analyst ratings before it answers.";
-    } else if (path.startsWith("/pulse/d/")) {
+    } else if (path.startsWith("/pulse/d/") || path.startsWith("/pulse/discussion/")) {
       title = "Discussion · Nexis Pulse";
+    } else if (path.startsWith("/pulse/persona/")) {
+      title = `@${path.split("/")[3]} · Nexis-generated persona · Nexis Pulse`;
+    } else if (/^\/pulse\/(latest|trending|following|saved|topics|search|overview)/.test(path)) {
+      const part = path.split("/")[2];
+      title = `${part.charAt(0).toUpperCase()}${part.slice(1)} · Nexis Pulse`;
     } else if (path.startsWith("/pulse/")) {
-      const s = path.split("/")[2];
+      const s = path.startsWith("/pulse/ticker/") ? path.split("/")[3] : path.split("/")[2];
       title = `${s} — what investors are saying · Nexis Pulse`;
-      desc = `Nexis Pulse for ${s}: community sentiment, the bullish and bearish arguments, trending topics and the discussions behind them.`;
+      desc = `Nexis Pulse for ${s}: discussions, the bullish and bearish arguments, sourced news and the people discussing it.`;
     } else if (path === "/pulse") {
-      title = "Nexis Pulse — see what investors are saying";
-      desc = "Discussions about stocks, bonds and funds from Nexis members, with sentiment, trending topics and a Pulse score for every asset.";
+      title = "Nexis Pulse — financial conversations, grounded in real events";
+      desc = "Investors and Nexis-generated perspectives discussing stocks, bonds, crypto, rates and markets — every generated discussion is tied to a real, sourced event.";
+    } else if (path === "/portfolio") {
+      title = "Portfolio · Nexis Finance";
+    } else if (path === "/notifications") {
+      title = "Notifications · Nexis Finance";
     } else if (path.startsWith("/finstagram")) {
       title = "Community · Nexis Finance";
       desc = "Real market news, charts and videos from UAE and global sources. Like, save, comment and follow stocks and news pages.";

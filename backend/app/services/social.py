@@ -292,13 +292,17 @@ def toggle_like(db: Session, pid: int, user: User) -> dict[str, Any]:
     return {"liked": liked, "like_count": p.like_count}
 
 
+MAX_DEPTH = 4
+
+
 def comments(db: Session, pid: int, viewer: User | None) -> list[dict[str, Any]]:
     _get_post(db, pid)
-    rows = list(db.scalars(select(Comment).where(Comment.post_id == pid).order_by(Comment.id).limit(300)))
+    rows = list(db.scalars(select(Comment).where(Comment.post_id == pid).order_by(Comment.created_at, Comment.id).limit(500)))
     authors = {u.id: u for u in db.scalars(select(User).where(User.id.in_({c.user_id for c in rows})))} if rows else {}
     return [
-        {"id": c.id, "author": serialize_user(db, authors[c.user_id]), "body": c.body, "created_at": c.created_at.isoformat() + "Z",
-         "is_mine": viewer is not None and viewer.id == c.user_id, "parent_id": c.parent_id}
+        {"id": c.id, "author": serialize_user(db, authors[c.user_id]) | {"kind": authors[c.user_id].kind}, "body": c.body,
+         "created_at": c.created_at.isoformat() + "Z", "is_mine": viewer is not None and viewer.id == c.user_id,
+         "parent_id": c.parent_id, "generated": c.generated}
         for c in rows
     ]  # fmt: skip
 
@@ -313,19 +317,31 @@ def add_comment(db: Session, pid: int, user: User, body: str, parent_id: int | N
         parent = db.get(Comment, parent_id)
         if parent is None or parent.post_id != pid:
             raise ValidationFailed("you can only reply to a comment on the same discussion")
-        parent_id = parent.parent_id or parent.id  # replies stay one level deep
+        # Threads nest up to MAX_DEPTH levels; a reply to a deeper comment joins its level-MAX_DEPTH ancestor.
+        chain = [parent]
+        while chain[-1].parent_id is not None and len(chain) < 50:
+            nxt = db.get(Comment, chain[-1].parent_id)
+            if nxt is None:
+                break
+            chain.append(nxt)
+        depth = len(chain)  # 1 = replying to a top-level comment
+        parent_id = parent.id if depth < MAX_DEPTH else chain[depth - MAX_DEPTH + 1].id
     c = Comment(post_id=pid, user_id=user.id, body=body, parent_id=parent_id)
     db.add(c)
     db.flush()
     p.comment_count = db.scalar(select(func.count(Comment.id)).where(Comment.post_id == pid)) or 0
     db.commit()
+    from app.services import alerts
+
+    alerts.notify_reply(db, c)
     return {
         "id": c.id,
-        "author": serialize_user(db, user),
+        "author": serialize_user(db, user) | {"kind": user.kind},
         "body": c.body,
         "created_at": c.created_at.isoformat() + "Z",
         "is_mine": True,
         "parent_id": c.parent_id,
+        "generated": False,
     }
 
 

@@ -72,12 +72,12 @@ def _models(raw: str) -> list[str]:
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
-def _targets() -> list[dict[str, Any]]:
-    """Every configured (provider, model) pair, strongest first."""
+def _targets(models: list[str] | None = None) -> list[dict[str, Any]]:
+    """Every configured (provider, model) pair, strongest first. ``models`` overrides the model list."""
     s = get_settings()
     out: list[dict[str, Any]] = []
     if s.llm_api_key:
-        for m in _models(s.llm_model):
+        for m in models or _models(s.llm_model):
             out.append(
                 {"provider": "custom", "url": (s.llm_base_url or GATEWAY_URL).rstrip("/"), "key": s.llm_api_key, "model": m}
             )
@@ -89,7 +89,7 @@ def _targets() -> list[dict[str, Any]]:
                 out.append({"provider": p["name"], "url": p["url"], "key": key, "model": m})
     token = os.environ.get("AI_GATEWAY_API_KEY") or _request_oidc.get() or os.environ.get("VERCEL_OIDC_TOKEN")
     if token:
-        for m in _models(s.llm_model):
+        for m in models or _models(s.llm_model):
             out.append({"provider": "Vercel AI Gateway", "url": GATEWAY_URL, "key": token, "model": m})
     now = time.time()
     return [t for t in out if _cooldown.get(f"{t['provider']}:{t['model']}", 0) < now] or out
@@ -153,10 +153,14 @@ def _no_targets() -> LLMUnavailable:
 
 
 def chat(
-    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, max_tokens: int = 1800, temperature: float = 0.3
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
+    max_tokens: int = 1800,
+    temperature: float = 0.3,
+    models: list[str] | None = None,
 ) -> dict[str, Any]:
     """One chat-completions call (first provider that answers); returns the assistant message."""
-    targets = _targets()
+    targets = _targets(models)
     if not targets:
         raise _no_targets()
     errors: list[str] = []

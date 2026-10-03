@@ -7,105 +7,12 @@ import { toast } from "../components/toast";
 import { useT } from "../i18n";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
-
-type Sentiment = "bullish" | "neutral" | "bearish";
-const SENTIMENTS: Sentiment[] = ["bullish", "neutral", "bearish"];
-const SENTIMENT_LABEL: Record<Sentiment, string> = { bullish: "Bullish", neutral: "Neutral", bearish: "Bearish" };
-
-function ago(iso: string | null | undefined, lang: string): string {
-  if (!iso) return "";
-  const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto", style: "short" });
-  if (s < 60) return rtf.format(0, "minute");
-  if (s < 3600) return rtf.format(-Math.floor(s / 60), "minute");
-  if (s < 86400) return rtf.format(-Math.floor(s / 3600), "hour");
-  if (s < 86400 * 30) return rtf.format(-Math.floor(s / 86400), "day");
-  return new Date(iso).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
+import {
+  ago, AuthorLink, discussionUrl, DiscussionRow, Disclosure, LikeButton, Official, SaveButton, ScoreBlock, SENTIMENT_LABEL, SENTIMENTS,
+  SentimentTag, tickerUrl, TrackBar, type Sentiment,
+} from "../components/pulseParts";
 
 const useMeta = () => useQuery({ queryKey: ["pulse-meta"], queryFn: () => api.get<AnyObj>("/pulse/meta"), staleTime: 3600_000 });
-
-// ------------------------------------------------------------------ small pieces
-
-function SentimentTag({ value, ai }: { value: string | null | undefined; ai?: boolean }) {
-  const { t } = useT();
-  if (!value) return null;
-  return (
-    <span className={`pl-sent ${value} ${ai ? "ai" : ""}`} title={ai ? t("Detected by AI from the text — the author didn't choose one") : t("Chosen by the author")}>
-      {ai && <span className="pl-sent-ai">AI</span>}{t(SENTIMENT_LABEL[value as Sentiment] ?? value)}
-    </span>
-  );
-}
-
-/** Marks content published by the official Nexis Research account. */
-function Official() {
-  const { t } = useT();
-  return <span className="pl-official" title={t("Editorial analysis by the Nexis Research team — not a member opinion")}>{t("Official")}</span>;
-}
-
-function ScoreBlock({ score, compact }: { score: AnyObj | null | undefined; compact?: boolean }) {
-  const { t } = useT();
-  if (!score?.available) return <span className={`pl-score na ${compact ? "compact" : ""}`}>{compact ? "—" : t("Pulse unavailable")}</span>;
-  const tone = score.value > 60 ? "pos" : score.value <= 40 ? "neg" : "mid";
-  return (
-    <span className={`pl-score ${tone} ${compact ? "compact" : ""}`}>
-      <span className="pl-score-v num">{score.value}</span>{!compact && <span className="pl-score-of">/ 100</span>}
-      {!compact && <span className="pl-score-l">{t(score.label)}</span>}
-    </span>
-  );
-}
-
-function LikeButton({ d }: { d: AnyObj }) {
-  const { t } = useT();
-  const me = useMe().data?.user;
-  const nav = useNavigate();
-  const [liked, setLiked] = useState<boolean>(d.liked_by_me);
-  const [n, setN] = useState<number>(d.like_count);
-  useEffect(() => { setLiked(d.liked_by_me); setN(d.like_count); }, [d.liked_by_me, d.like_count]);
-  const toggle = async () => {
-    if (!me) { nav(`/login?next=${encodeURIComponent(window.location.pathname)}`); return; }
-    setLiked(!liked); setN(n + (liked ? -1 : 1));
-    try { const r = await api.post<AnyObj>(`/social/posts/${d.id}/like`); setLiked(r.liked); setN(r.like_count); }
-    catch (e) { setLiked(liked); setN(n); toast("error", t("Couldn't save your like"), errorMessage(e)); }
-  };
-  return (
-    <button type="button" className={`pl-like ${liked ? "on" : ""}`} aria-pressed={liked} onClick={toggle} aria-label={liked ? t("Unlike") : t("Like")}>
-      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><path d="M8 13.6 2.7 8.5A3.2 3.2 0 0 1 8 4.3a3.2 3.2 0 0 1 5.3 4.2Z" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
-      <span className="num">{n}</span>
-    </button>
-  );
-}
-
-/** One discussion in a list: sentiment, title, an excerpt and who said it. */
-function DiscussionRow({ d, showAsset }: { d: AnyObj; showAsset?: boolean }) {
-  const { t, lang } = useT();
-  return (
-    <li className={`pl-row ${d.source.editorial ? "editorial" : ""}`}>
-      <div className="pl-row-main">
-        <div className="pl-row-meta">
-          {showAsset && <Link className="mono pl-asset" to={`/pulse/${encodeURIComponent(d.asset)}`}>{d.asset}</Link>}
-          <SentimentTag value={d.sentiment} />
-          {!d.sentiment && <SentimentTag value={d.ai_sentiment} ai />}
-          {d.topics.map((tp: AnyObj) => <span key={tp.key} className="pl-topic">{t(tp.label)}</span>)}
-        </div>
-        <Link className="pl-row-title" to={`/pulse/d/${d.id}`} dir="auto">{d.title}</Link>
-        <p className="pl-row-body" dir="auto">{d.body}</p>
-        <div className="pl-row-foot">
-          <Link to={`/finstagram/u/${d.author.username}`} className="pl-author">{d.author.display_name || d.author.username}</Link>
-          {d.source.editorial && <Official />}
-          <time dateTime={d.created_at}>{ago(d.created_at, lang)}</time>
-          <span className="pl-src">{t(d.source.label)}</span>
-          <span className="grow" />
-          <LikeButton d={d} />
-          <Link to={`/pulse/d/${d.id}#comments`} className="pl-comments" aria-label={`${d.comment_count} ${t("comments")}`}>
-            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
-            <span className="num">{d.comment_count}</span>
-          </Link>
-        </div>
-      </div>
-    </li>
-  );
-}
 
 // ------------------------------------------------------------------ composer
 
@@ -195,7 +102,7 @@ function Composer({ symbol, initial, onDone, onCancel }: { symbol?: string; init
   );
 }
 
-function ComposeToggle({ symbol, name, onPublished }: { symbol?: string; name?: string; onPublished: (d: AnyObj) => void }) {
+export function ComposeToggle({ symbol, name, onPublished }: { symbol?: string; name?: string; onPublished: (d: AnyObj) => void }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   if (!open) {
@@ -255,7 +162,7 @@ function Summary({ symbol, total }: { symbol: string; total: number }) {
   const [asked, setAsked] = useState(false);
   const q = useQuery({ queryKey: ["pulse-summary", symbol, total], queryFn: () => api.get<AnyObj>(`/pulse/assets/${encodeURIComponent(symbol)}/summary`), enabled: asked && total >= 2, staleTime: 30 * 60_000, retry: 0 });
   const s = q.data;
-  const ref = (ids: number[]) => ids.length ? <span className="refs">{ids.map((id) => <Link key={id} to={`/pulse/d/${id}`} title={s?.titles?.[String(id)]}>↗</Link>)}</span> : null;
+  const ref = (ids: number[]) => ids.length ? <span className="refs">{ids.map((id) => <Link key={id} to={discussionUrl(id)} title={s?.titles?.[String(id)]}>↗</Link>)}</span> : null;
   return (
     <section className="pl-section pl-ai">
       <div className="sec-head"><h2>{t("AI summary")}</h2><span className="sec-sub">{s?.available ? `${t("of")} ${s.discussions_used} ${t("discussions")}${s.model ? ` · ${String(s.model).replace(/^\w+\//, "")}` : ""}` : t("generated on request")}</span></div>
@@ -288,7 +195,7 @@ function Arguments({ side, items }: { side: "bullish" | "bearish"; items: AnyObj
         <ol>
           {items.map((d) => (
             <li key={d.id}>
-              <Link to={`/pulse/d/${d.id}`} dir="auto">{d.title}</Link>
+              <Link to={discussionUrl(d.id)} dir="auto">{d.title}</Link>
               <span className="pl-args-meta">{d.author.display_name || d.author.username} · <span className="num">{d.like_count}</span> {d.like_count === 1 ? t("like") : t("likes")} · <span className="num">{d.comment_count}</span> {d.comment_count === 1 ? t("comment") : t("comments")}{!d.sentiment && ` · ${t("AI-classified")}`}</span>
             </li>
           ))}
@@ -335,6 +242,47 @@ function DiscussionList({ symbol, topic, topicLabel, onTopic }: { symbol: string
   );
 }
 
+/** Real developments for an asset, with their sources. */
+function AssetNews({ symbol }: { symbol: string }) {
+  const { t, lang } = useT();
+  const q = useQuery({ queryKey: ["pulse-events", symbol], queryFn: () => api.get<AnyObj>("/pulse/events", { symbol }), staleTime: 300_000 });
+  const items: AnyObj[] = q.data?.items ?? [];
+  return (
+    <section className="pl-section">
+      <div className="sec-head"><h2>{t("Related news")}</h2><span className="sec-sub">{t("with sources")}</span></div>
+      {q.isLoading && <div className="wire-skel"><span className="skel w80" /><span className="skel w60" /></div>}
+      {!q.isLoading && !items.length && <p className="pl-empty-line">{t("No sourced developments in the last 30 days.")}</p>}
+      <ul className="pl-news">
+        {items.slice(0, 6).map((e) => (
+          <li key={e.id}>
+            {e.url && /^https?:/.test(e.url) ? <a href={e.url} target="_blank" rel="noreferrer noopener" dir="auto">{e.title}</a> : <span dir="auto">{e.title}</span>}
+            <span className="pl-news-meta">{e.publisher || e.provider_label} · <time dateTime={e.published_at}>{ago(e.published_at, lang)}</time></span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Who is discussing an asset: members, Nexis Research and Nexis-generated personas, labelled. */
+function Voices({ voices }: { voices: AnyObj[] }) {
+  const { t } = useT();
+  if (!voices.length) return null;
+  return (
+    <section className="pl-section">
+      <div className="sec-head"><h2>{t("Who's discussing")}</h2><span className="sec-sub">30 {t("days")}</span></div>
+      <ul className="pl-voices">
+        {voices.map((v) => (
+          <li key={v.username}>
+            <AuthorLink author={v} />
+            <span className="xs muted">{v.label || (v.kind === "editorial" ? t("Nexis Research") : t("Member"))} · <span className="num">{v.contributions}</span></span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function AssetPulse({ symbol }: { symbol: string }) {
   const { t } = useT();
   const qc = useQueryClient();
@@ -360,7 +308,10 @@ function AssetPulse({ symbol }: { symbol: string }) {
             <Link className="sec-link" to={`/markets/${encodeURIComponent(symbol)}`}>{t("Chart, fundamentals and news")} <span aria-hidden>→</span></Link>
           </div>
         </div>
-        <div className="pl-switch"><SymbolSearch compact placeholder={t("Another asset…")} onPick={(s) => nav(`/pulse/${encodeURIComponent(s.symbol)}`)} /></div>
+        <div className="pl-ticker-actions">
+          <TrackBar symbol={symbol} />
+          <div className="pl-switch"><SymbolSearch compact placeholder={t("Another asset…")} onPick={(s) => nav(tickerUrl(s.symbol))} /></div>
+        </div>
       </header>
 
       {!d ? <div className="wire-skel"><span className="skel lead" /><span className="skel w80" /></div> : (
@@ -388,6 +339,11 @@ function AssetPulse({ symbol }: { symbol: string }) {
             <div className="pl-panel-cell">
               <div className="pl-mini-h">{t("Member sentiment")}</div>
               <SentimentBar share={d.sentiment.share} counts={d.sentiment.counts} />
+              {d.generated?.sentiment?.share && (
+                <p className="pl-research-split xs">
+                  <span className="muted">{t("AI perspectives")}:</span> {SENTIMENTS.map((s) => <span key={s} className={s}>{d.generated.sentiment.counts[s]} {t(SENTIMENT_LABEL[s]).toLowerCase()}</span>)}
+                </p>
+              )}
               {d.research.sentiment.share && (
                 <p className="pl-research-split xs">
                   <span className="muted">{t("Nexis Research")}:</span> {SENTIMENTS.map((s) => <span key={s} className={s}>{d.research.sentiment.counts[s]} {t(SENTIMENT_LABEL[s]).toLowerCase()}</span>)}
@@ -418,11 +374,13 @@ function AssetPulse({ symbol }: { symbol: string }) {
             <div className="pl-main">
               <section className="pl-section">
                 <div className="sec-head"><h2>{t("What investors are saying")}</h2><span className="sec-sub">{t("Members and Nexis Research")}</span></div>
-                <ComposeToggle symbol={symbol} name={d.name} onPublished={(x) => { refresh(); toast("success", t("Discussion published")); nav(`/pulse/d/${x.id}`); }} />
+                <ComposeToggle symbol={symbol} name={d.name} onPublished={(x) => { refresh(); toast("success", t("Discussion published")); nav(discussionUrl(x.id)); }} />
                 <DiscussionList symbol={symbol} topic={topic} topicLabel={topic ? topicLabel[topic] ?? topic : ""} onTopic={setTopic} />
               </section>
             </div>
             <aside className="pl-side">
+              <AssetNews symbol={symbol} />
+              <Voices voices={d.voices ?? []} />
               <Arguments side="bullish" items={d.arguments.bullish} />
               <Arguments side="bearish" items={d.arguments.bearish} />
               <Summary symbol={symbol} total={d.total_discussions} />
@@ -441,6 +399,25 @@ function AssetPulse({ symbol }: { symbol: string }) {
 
 // ------------------------------------------------------------------ discussion page
 
+type CNode = AnyObj & { children: CNode[] };
+
+function buildTree(all: AnyObj[]): CNode[] {
+  const byId = new Map<number, CNode>(all.map((c) => [c.id, { ...c, children: [] }]));
+  const roots: CNode[] = [];
+  for (const c of byId.values()) {
+    const parent = c.parent_id ? byId.get(c.parent_id) : undefined;
+    if (parent) parent.children.push(c);
+    else roots.push(c);
+  }
+  return roots;
+}
+
+/** @handles in a comment become links. */
+function WithMentions({ text }: { text: string }) {
+  const parts = text.split(/(@[a-z0-9_.]{3,30})/gi);
+  return <>{parts.map((p, i) => (/^@[a-z0-9_.]{3,30}$/i.test(p) ? <span key={i} className="pl-mention">{p}</span> : p))}</>;
+}
+
 function Comments({ id, count }: { id: number; count: number }) {
   const { t, lang } = useT();
   const me = useMe().data?.user;
@@ -451,8 +428,7 @@ function Comments({ id, count }: { id: number; count: number }) {
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const all: AnyObj[] = q.data ?? [];
-  const top = all.filter((c) => !c.parent_id);
-  const replies = (pid: number) => all.filter((c) => c.parent_id === pid);
+  const tree = useMemo(() => buildTree(all), [all]);
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim() || busy) return;
@@ -469,39 +445,54 @@ function Comments({ id, count }: { id: number; count: number }) {
     try { await api.del(`/social/comments/${cid}`); qc.invalidateQueries({ queryKey: ["pulse-comments", id] }); qc.invalidateQueries({ queryKey: ["pulse-discussion", id] }); }
     catch (x) { toast("error", t("Couldn't delete the comment"), errorMessage(x)); }
   };
-  const Item = ({ c }: { c: AnyObj }) => (
-    <div className="pl-c">
-      <div className="pl-c-head">
-        <Link to={`/finstagram/u/${c.author.username}`} className="pl-author">{c.author.display_name || c.author.username}</Link>
-        <time dateTime={c.created_at}>{ago(c.created_at, lang)}</time>
+  const Node = ({ c, depth }: { c: CNode; depth: number }) => (
+    <div className={`pl-c-wrap depth-${Math.min(depth, 4)}`} id={`c${c.id}`}>
+      <div className={`pl-c ${c.generated ? "generated" : ""}`}>
+        <div className="pl-c-head">
+          <AuthorLink author={c.author} />
+          <time dateTime={c.created_at}>{ago(c.created_at, lang)}</time>
+        </div>
+        <p className="pl-c-body" dir="auto"><WithMentions text={c.body} /></p>
+        <div className="pl-c-actions">
+          {me && <button type="button" className="link-btn xs" onClick={() => { setReplyTo(c); box.current?.focus(); box.current?.scrollIntoView({ block: "center" }); }}>{t("Reply")}</button>}
+          {c.is_mine && <button type="button" className="link-btn xs neg" onClick={() => remove(c.id)}>{t("Delete")}</button>}
+        </div>
       </div>
-      <p className="pl-c-body" dir="auto">{c.body}</p>
-      <div className="pl-c-actions">
-        {me && <button type="button" className="link-btn xs" onClick={() => { setReplyTo(c.parent_id ? all.find((x) => x.id === c.parent_id) ?? c : c); box.current?.focus(); }}>{t("Reply")}</button>}
-        {c.is_mine && <button type="button" className="link-btn xs neg" onClick={() => remove(c.id)}>{t("Delete")}</button>}
-      </div>
+      {c.children.length > 0 && <div className="pl-replies">{c.children.map((k) => <Node key={k.id} c={k} depth={depth + 1} />)}</div>}
     </div>
   );
   return (
     <section className="pl-section" id="comments">
-      <div className="sec-head"><h2>{t("Comments")}</h2><span className="sec-sub num">{count}</span></div>
+      <div className="sec-head"><h2>{t("Discussion")}</h2><span className="sec-sub num">{count} {count === 1 ? t("reply") : t("replies")}</span></div>
+      {q.isLoading && <div className="wire-skel"><span className="skel w70" /><span className="skel w60" /></div>}
+      <div className="pl-thread">{tree.map((c) => <Node key={c.id} c={c} depth={1} />)}</div>
+      {!q.isLoading && !all.length && <p className="pl-empty-line">{t("No replies yet.")}</p>}
       {me ? (
         <form className="pl-c-form" onSubmit={send}>
           {replyTo && <div className="xs muted">{t("Replying to")} <b>{replyTo.author.display_name || replyTo.author.username}</b> <button type="button" className="link-btn xs" onClick={() => setReplyTo(null)}>{t("Cancel")}</button></div>}
-          <textarea ref={box} className="input" rows={2} maxLength={1000} dir="auto" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("Add to the discussion…")} />
+          <textarea ref={box} className="input" rows={2} maxLength={1000} dir="auto" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("Add your view…")} />
           <div className="row" style={{ justifyContent: "flex-end" }}><button className="btn primary sm" disabled={!text.trim() || busy}>{busy ? "…" : replyTo ? t("Reply") : t("Comment")}</button></div>
         </form>
-      ) : <div className="pl-compose-gate"><span>{t("Sign in to comment.")}</span><Link className="btn sm" to={`/login?next=${encodeURIComponent(window.location.pathname)}`}>{t("Sign in")}</Link></div>}
-      {q.isLoading && <div className="wire-skel"><span className="skel w70" /><span className="skel w60" /></div>}
-      <div className="pl-thread">
-        {top.map((c) => (
-          <div key={c.id} className="pl-c-wrap">
-            <Item c={c} />
-            {replies(c.id).length > 0 && <div className="pl-replies">{replies(c.id).map((r) => <Item key={r.id} c={r} />)}</div>}
-          </div>
-        ))}
+      ) : <div className="pl-compose-gate"><span>{t("Sign in to join the discussion.")}</span><Link className="btn sm" to={`/login?next=${encodeURIComponent(window.location.pathname)}`}>{t("Sign in")}</Link></div>}
+    </section>
+  );
+}
+
+function SourceBlock({ d }: { d: AnyObj }) {
+  const { t, lang } = useT();
+  const e = d.event;
+  if (!e) return null;
+  const external = e.url && /^https?:/.test(e.url);
+  return (
+    <section className="pl-facts" aria-label={t("Source")}>
+      <div className="pl-facts-h"><span className="pl-facts-k">{t("What happened")}</span><span className="xs muted">{t("Verified source")}</span></div>
+      <p className="pl-facts-title" dir="auto">{e.title}</p>
+      {e.summary && <p className="pl-facts-sum" dir="auto">{e.summary}</p>}
+      <div className="pl-facts-meta">
+        {external ? <a href={e.url} target="_blank" rel="noreferrer noopener">{e.publisher || e.provider_label} ↗</a> : e.url ? <Link to={e.url}>{e.publisher}</Link> : <span>{e.publisher || e.provider_label}</span>}
+        <time dateTime={e.published_at}>{new Date(e.published_at).toLocaleString(lang === "ar" ? "ar-AE" : "en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
+        {e.assets?.map((a: string) => <Link key={a} className="mono" to={tickerUrl(a)}>{a}</Link>)}
       </div>
-      {!q.isLoading && !all.length && <p className="pl-empty-line">{t("No comments yet.")}</p>}
     </section>
   );
 }
@@ -512,52 +503,80 @@ function DiscussionPage({ id }: { id: number }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const q = useQuery({ queryKey: ["pulse-discussion", id], queryFn: () => api.get<AnyObj>(`/pulse/discussions/${id}`) });
+  const rel = useQuery({ queryKey: ["pulse-related", id], queryFn: () => api.get<AnyObj[]>(`/pulse/discussions/${id}/related`), staleTime: 60_000 });
   const d = q.data;
-  useEffect(() => { if (d && window.location.hash === "#comments") window.setTimeout(() => document.getElementById("comments")?.scrollIntoView({ block: "start" }), 200); }, [d]);
+  useEffect(() => {
+    if (!d) return;
+    const hash = window.location.hash;
+    if (hash) window.setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" }), 250);
+  }, [d]);
   if (q.isError) return <div className="hm pl"><div className="hm-error">{errorMessage(q.error)}</div><Link to="/pulse" className="sec-link">{t("Back to Nexis Pulse")} →</Link></div>;
   if (!d) return <div className="hm pl"><div className="wire-skel"><span className="skel w60" /><span className="skel w80" /><span className="skel w70" /></div></div>;
   const remove = async () => {
     if (!window.confirm(t("Delete this discussion? Its comments and likes are removed too."))) return;
     try {
       await api.del(`/pulse/discussions/${id}`);
-      qc.invalidateQueries({ queryKey: ["pulse-asset", d.asset] }); qc.invalidateQueries({ queryKey: ["pulse-list"] }); qc.invalidateQueries({ queryKey: ["pulse-discover"] });
-      toast("success", t("Discussion deleted")); nav(`/pulse/${encodeURIComponent(d.asset)}`);
+      qc.invalidateQueries({ queryKey: ["pulse-asset", d.asset] }); qc.invalidateQueries({ queryKey: ["pulse-list"] }); qc.invalidateQueries({ queryKey: ["pulse-feed"] });
+      toast("success", t("Discussion deleted")); nav(tickerUrl(d.asset));
     } catch (x) { toast("error", t("Couldn't delete"), errorMessage(x)); }
   };
+  const note = d.source.generated
+    ? t("Generated by Nexis: the opening post and replies are written by AI personas reacting to the source above. They are interpretations, not facts, and they can be wrong. Not financial advice.")
+    : d.source.editorial
+      ? t("Editorial analysis by the Nexis Research team. It is not a member opinion, it does not count toward the community Pulse score, and it is not financial advice.")
+      : t("A personal opinion from a Nexis member, not verified by Nexis and not financial advice.");
   return (
     <div className="hm pl pl-detail">
-      <div className="hm-eyebrow"><Link to="/pulse">{t("Nexis Pulse")}</Link><Link to={`/pulse/${encodeURIComponent(d.asset)}`} className="mono">{d.asset}</Link><span>{d.asset_name}</span></div>
-      {editing ? (
-        <Composer initial={d} onCancel={() => setEditing(false)} onDone={(x) => { qc.setQueryData(["pulse-discussion", id], x); qc.invalidateQueries({ queryKey: ["pulse-asset", d.asset] }); qc.invalidateQueries({ queryKey: ["pulse-list"] }); setEditing(false); toast("success", t("Changes saved")); }} />
-      ) : (
-        <article className="pl-article">
-          <div className="pl-row-meta">
-            <SentimentTag value={d.sentiment} />
-            {d.ai_sentiment && (d.sentiment ? d.ai_sentiment !== d.sentiment : true) && <SentimentTag value={d.ai_sentiment} ai />}
-            {d.topics.map((tp: AnyObj) => <span key={tp.key} className="pl-topic">{t(tp.label)}</span>)}
-          </div>
-          <h1 dir="auto">{d.title}</h1>
-          <div className="pl-byline">
-            <Link to={`/finstagram/u/${d.author.username}`} className="pl-author">{d.author.display_name || d.author.username}</Link>
-            {d.source.editorial && <Official />}
-            <span className="muted">@{d.author.username}</span>
-            <time dateTime={d.created_at}>{ago(d.created_at, lang)}</time>
-            {d.edited_at && <span className="muted">· {t("edited")}</span>}
-            <span className="pl-src">{t(d.source.label)}</span>
-          </div>
-          <div className="pl-article-body" dir="auto">{d.body}</div>
-          <div className="pl-article-actions">
-            <LikeButton d={d} />
-            <span className="grow" />
-            <Link className="sec-link" to={`/pulse/${encodeURIComponent(d.asset)}`}>{t("See the Pulse for")} {d.asset} <span aria-hidden>→</span></Link>
-            {d.is_mine && <><button type="button" className="btn sm" onClick={() => setEditing(true)}>{t("Edit")}</button><button type="button" className="btn sm danger" onClick={remove}>{t("Delete")}</button></>}
-          </div>
-          <p className="hm-fine">{d.source.editorial
-            ? t("Editorial analysis by the Nexis Research team. It is not a member opinion, it does not count toward the community Pulse score, and it is not financial advice.")
-            : t("A personal opinion from a Nexis member, not verified by Nexis and not financial advice.")}</p>
-        </article>
-      )}
-      <Comments id={id} count={d.comment_count} />
+      <div className="hm-eyebrow"><Link to="/pulse">{t("Nexis Pulse")}</Link><Link to={tickerUrl(d.asset)} className="mono">{d.asset}</Link><span>{d.asset_name}</span></div>
+      <div className="pl-detail-grid">
+        <div className="pl-detail-main">
+          {editing ? (
+            <Composer initial={d} onCancel={() => setEditing(false)} onDone={(x) => { qc.setQueryData(["pulse-discussion", id], x); qc.invalidateQueries({ queryKey: ["pulse-asset", d.asset] }); qc.invalidateQueries({ queryKey: ["pulse-list"] }); setEditing(false); toast("success", t("Changes saved")); }} />
+          ) : (
+            <article className={`pl-article ${d.source.generated ? "generated" : ""}`}>
+              <div className="pl-row-meta">
+                <SentimentTag value={d.sentiment} />
+                {d.ai_sentiment && (d.sentiment ? d.ai_sentiment !== d.sentiment : true) && <SentimentTag value={d.ai_sentiment} ai />}
+                {d.topics.map((tp: AnyObj) => <span key={tp.key} className="pl-topic">{t(tp.label)}</span>)}
+                <span className="pl-src-tag">{t(d.source.label)}</span>
+              </div>
+              <h1 dir="auto">{d.title}</h1>
+              <SourceBlock d={d} />
+              {d.source.generated && <div className="pl-interp-h">{t("Perspectives")} <span className="xs muted">· {t("interpretation, written by AI personas")}</span></div>}
+              <div className="pl-byline">
+                <AuthorLink author={d.author} />
+                <span className="muted">@{d.author.username}</span>
+                <time dateTime={d.created_at}>{ago(d.created_at, lang)}</time>
+                {d.edited_at && <span className="muted">· {t("edited")}</span>}
+              </div>
+              <div className="pl-article-body" dir="auto"><WithMentions text={d.body} /></div>
+              <div className="pl-article-actions">
+                <LikeButton d={d} />
+                <SaveButton d={d} />
+                <span className="grow" />
+                {d.is_mine && <><button type="button" className="btn sm" onClick={() => setEditing(true)}>{t("Edit")}</button><button type="button" className="btn sm danger" onClick={remove}>{t("Delete")}</button></>}
+              </div>
+              <p className="hm-fine">{note}</p>
+              {d.source.generated && <p className="pl-uncertainty"><b>{t("Uncertainty")}</b> {t("The facts are limited to what the source reports. Views here may be early, incomplete or wrong; check the original source before relying on any of it.")}</p>}
+            </article>
+          )}
+          <Comments id={id} count={d.comment_count} />
+        </div>
+        <aside className="pl-side">
+          <section className="pl-section">
+            <div className="sec-head"><h2 className="mono">{d.asset}</h2><span className="sec-sub">{d.asset_name}</span></div>
+            <TrackBar symbol={d.asset} />
+            <Link className="sec-link" to={tickerUrl(d.asset)}>{t("All discussions about")} {d.asset} <span aria-hidden>→</span></Link>
+          </section>
+          {(rel.data ?? []).length > 0 && (
+            <section className="pl-section">
+              <div className="sec-head"><h2>{t("Related discussions")}</h2></div>
+              <ol className="pl-list compact">{(rel.data ?? []).map((x) => <DiscussionRow key={x.id} d={x} />)}</ol>
+            </section>
+          )}
+          <Disclosure compact />
+        </aside>
+      </div>
     </div>
   );
 }
@@ -573,7 +592,7 @@ function AssetTable({ rows, empty, metric }: { rows: AnyObj[]; empty: string; me
       <tbody>
         {rows.map((r) => (
           <tr key={r.symbol}>
-            <td><Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="wl-asset"><span className="mono wl-tk">{r.symbol}</span><span className="wl-name">{r.name}</span></Link></td>
+            <td><Link to={tickerUrl(r.symbol)} className="wl-asset"><span className="mono wl-tk">{r.symbol}</span><span className="wl-name">{r.name}</span></Link></td>
             <td className="r num">{r.discussions}</td>
             <td className="r"><ScoreBlock score={r.score} compact /></td>
             <td className="r"><ScoreBlock score={r.research_view} compact /></td>
@@ -584,7 +603,7 @@ function AssetTable({ rows, empty, metric }: { rows: AnyObj[]; empty: string; me
   );
 }
 
-function PulseDiscover() {
+export function PulseDiscover() {
   const { t } = useT();
   const nav = useNavigate();
   const qc = useQueryClient();
@@ -598,7 +617,7 @@ function PulseDiscover() {
           {d && !empty && <span className="num">{d.totals.discussions} {t("discussions")} · {d.totals.assets} {t("assets")} · {d.totals.research_discussions} {t("by Nexis Research")}{d.totals.community_discussions > 0 && <> · {d.totals.community_discussions} {t("by")} {d.totals.participants} {d.totals.participants === 1 ? t("member") : t("members")}</>}</span>}</div>
         <h1>{t("See what investors are saying.")}</h1>
         <p className="hm-lede">{t("Discussions by Nexis members and the Nexis Research team — the arguments for and against and the topics people care about. The community Pulse score is built from member discussions only.")}</p>
-        <div className="pl-switch wide"><SymbolSearch placeholder={t("Search an asset — Tesla, NVDA, Emirates NBD…")} onPick={(s) => nav(`/pulse/${encodeURIComponent(s.symbol)}`)} /></div>
+        <div className="pl-switch wide"><SymbolSearch placeholder={t("Search an asset — Tesla, NVDA, Emirates NBD…")} onPick={(s) => nav(tickerUrl(s.symbol))} /></div>
       </header>
       {q.isError && <div className="hm-error">{errorMessage(q.error)} <button className="link-btn" onClick={() => q.refetch()}>{t("Retry")}</button></div>}
       {!d && !q.isError && <div className="wire-skel"><span className="skel lead" /><span className="skel w80" /></div>}
@@ -606,14 +625,14 @@ function PulseDiscover() {
         <section className="pl-empty">
           <h2>{t("No discussions yet")}</h2>
           <p>{t("Pulse is built only from what members write, so it starts empty. Pick an asset you follow, share your view and why, and mark whether you're bullish, neutral or bearish. Once a few people have weighed in, its Pulse score, sentiment and trending topics appear.")}</p>
-          <ComposeToggle onPublished={(x) => { qc.invalidateQueries({ queryKey: ["pulse-discover"] }); nav(`/pulse/d/${x.id}`); }} />
+          <ComposeToggle onPublished={(x) => { qc.invalidateQueries({ queryKey: ["pulse-discover"] }); nav(discussionUrl(x.id)); }} />
         </section>
       )}
       {d && !empty && (
         <div className="pl-grid">
           <div className="pl-main">
             <section className="pl-section">
-              <ComposeToggle onPublished={(x) => { qc.invalidateQueries({ queryKey: ["pulse-discover"] }); toast("success", t("Discussion published")); nav(`/pulse/d/${x.id}`); }} />
+              <ComposeToggle onPublished={(x) => { qc.invalidateQueries({ queryKey: ["pulse-discover"] }); toast("success", t("Discussion published")); nav(discussionUrl(x.id)); }} />
             </section>
             {d.trending_discussions.length > 0 && (
               <section className="pl-section">
@@ -641,7 +660,7 @@ function PulseDiscover() {
                 <table className="pl-table"><tbody>
                   {d.sentiment_changes.map((r: AnyObj) => (
                     <tr key={r.symbol}>
-                      <td><Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="wl-asset"><span className="mono wl-tk">{r.symbol}</span><span className="wl-name">{r.name}</span></Link></td>
+                      <td><Link to={tickerUrl(r.symbol)} className="wl-asset"><span className="mono wl-tk">{r.symbol}</span><span className="wl-name">{r.name}</span></Link></td>
                       <td className="r num">{r.from} → {r.to}</td>
                       <td className={`r num ${r.change > 0 ? "pos" : "neg"}`}>{r.change > 0 ? "+" : ""}{r.change}</td>
                     </tr>

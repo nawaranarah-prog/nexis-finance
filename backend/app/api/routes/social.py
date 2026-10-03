@@ -157,7 +157,9 @@ def _oauth_finish(
             auth.link_account(db, viewer, provider, ident["sub"], ident["username"], ident["avatar"])
             resp.headers["location"] = f"{ident['next']}?linked={provider}"
         else:
-            auth.sign_in_external(db, resp, provider, ident["sub"], ident["email"], ident["name"], ident["username"], ident["avatar"])
+            auth.sign_in_external(
+                db, resp, provider, ident["sub"], ident["email"], ident["name"], ident["username"], ident["avatar"]
+            )
     except NexisError as exc:
         resp = RedirectResponse(f"{'/settings' if linking else '/login'}?error={quote(exc.message)}", status_code=302)
     resp.delete_cookie(oauth.STATE_COOKIE, path="/api/auth/oauth")
@@ -292,7 +294,13 @@ def refresh_news(request: Request, db: Session = Depends(get_db)) -> dict[str, A
     """Imports new headlines when the last import is older than 20 minutes (also called by the daily cron)."""
     secret = get_settings().cron_secret
     forced = bool(secret) and request.headers.get("authorization") == f"Bearer {secret}"
-    return newsfeed.refresh(db, force=forced)
+    out = newsfeed.refresh(db, force=forced)
+    if forced:  # the daily cron also advances Pulse and prepares digests
+        from app.services import alerts, pulse_engine
+
+        out["pulse"] = pulse_engine.tick(db, max_threads=4, force=True)
+        out["digests"] = alerts.run_digests(db)
+    return out
 
 
 @router.get("/social/trending")

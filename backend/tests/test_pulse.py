@@ -82,9 +82,12 @@ def test_full_pulse_flow(client, markets_ok):
         client, symbol, title="Data-centre demand still accelerating", sentiment="bullish", topics=["earnings", "ai"]
     ).json()
     assert a1["asset"] == "NVDA" and a1["asset_name"] == "NVIDIA Corporation" and a1["sentiment"] == "bullish"
-    assert a1["source"] == {"key": "nexis", "label": "Nexis Community", "editorial": False} and [
-        t["key"] for t in a1["topics"]
-    ] == ["earnings", "ai"]
+    assert a1["source"] | {"generated": False} == {
+        "key": "nexis",
+        "label": "Nexis Community",
+        "editorial": False,
+        "generated": False,
+    } and [t["key"] for t in a1["topics"]] == ["earnings", "ai"]
     script = "<script>alert(1)</script> margins look stretched compared with history"
     a2 = _new(
         client, symbol, title="Valuation already prices in perfection", body=script, sentiment="bearish", topics=["valuation"]
@@ -105,7 +108,7 @@ def test_full_pulse_flow(client, markets_ok):
     nested = client.post(
         f"/api/social/posts/{a1['id']}/comments", json={"body": "Reply to reply", "parent_id": reply["id"]}
     ).json()
-    assert reply["parent_id"] == top["id"] and nested["parent_id"] == top["id"]  # one level deep
+    assert reply["parent_id"] == top["id"] and nested["parent_id"] == reply["id"]  # threads nest
     wrong = client.post(f"/api/social/posts/{a2['id']}/comments", json={"body": "x", "parent_id": top["id"]})
     assert wrong.status_code == 422
     d = client.get(f"/api/pulse/discussions/{a1['id']}").json()

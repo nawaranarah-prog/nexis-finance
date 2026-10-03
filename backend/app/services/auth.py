@@ -207,7 +207,9 @@ def sign_in_external(
     u = db.scalars(select(User).where(User.provider_sub == key)).first()
     if u is None and provider in ("reddit", "x"):
         # Someone who linked this Reddit/X account to their Nexis account can sign in with it.
-        la = db.scalars(select(LinkedAccount).where(LinkedAccount.provider == provider, LinkedAccount.provider_user_id == sub)).first()
+        la = db.scalars(
+            select(LinkedAccount).where(LinkedAccount.provider == provider, LinkedAccount.provider_user_id == sub)
+        ).first()
         u = db.get(User, la.user_id) if la else None
     mail = (email or "").strip().lower() or None
     if u is None and mail:
@@ -246,9 +248,13 @@ def linked_accounts(db: Session, user_id: int) -> list[dict[str, Any]]:
 
 
 def _upsert_link(db: Session, u: User, provider: str, sub: str, username: str, avatar: str | None) -> None:
-    other = db.scalars(select(LinkedAccount).where(LinkedAccount.provider == provider, LinkedAccount.provider_user_id == sub)).first()
+    other = db.scalars(
+        select(LinkedAccount).where(LinkedAccount.provider == provider, LinkedAccount.provider_user_id == sub)
+    ).first()
     if other is not None and other.user_id != u.id:
-        raise ConflictError(f"that {'Reddit' if provider == 'reddit' else 'X'} account is already linked to another Nexis account")
+        raise ConflictError(
+            f"that {'Reddit' if provider == 'reddit' else 'X'} account is already linked to another Nexis account"
+        )
     mine = db.scalars(select(LinkedAccount).where(LinkedAccount.user_id == u.id, LinkedAccount.provider == provider)).first()
     if mine is None:
         mine = LinkedAccount(user_id=u.id, provider=provider, provider_user_id=sub, username=username)

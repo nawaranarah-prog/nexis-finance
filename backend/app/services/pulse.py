@@ -23,8 +23,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import Forbidden, NexisError, NotFoundError, ProviderError, ValidationFailed
 from app.db.base import utcnow
-from app.models import Like, Post, PostTopic, User
-from app.services import llm, markets, pulse_score, pulse_sources, ratelimit
+from app.models import Comment, Like, Persona, Post, PostTopic, Save, SourceEvent, User
+from app.services import events, llm, markets, pulse_score, pulse_sources, ratelimit
 from app.services.auth import serialize_user
 
 TOPICS: dict[str, str] = {
@@ -63,6 +63,7 @@ def _from(sources: tuple[str, ...] | None):  # type: ignore[no-untyped-def]
 
 COMMUNITY = pulse_sources.COMMUNITY
 EDITORIAL = pulse_sources.EDITORIAL
+GENERATED = pulse_sources.GENERATED
 
 
 # The sentiment used for statistics: what the author chose, otherwise what the AI detected.
@@ -119,12 +120,30 @@ def _excerpt(body: str, n: int = 240) -> str:
     return one if len(one) <= n else one[: n - 1].rstrip() + "…"
 
 
-def serialize(db: Session, posts: list[Post], viewer: User | None, full: bool = False) -> list[dict[str, Any]]:
+def serialize(
+    db: Session, posts: list[Post], viewer: User | None, full: bool = False, preview: bool = False
+) -> list[dict[str, Any]]:
     if not posts:
         return []
     ids = [p.id for p in posts]
     authors = {u.id: u for u in db.scalars(select(User).where(User.id.in_({p.user_id for p in posts})))}
     liked = set(db.scalars(select(Like.post_id).where(Like.post_id.in_(ids), Like.user_id == viewer.id))) if viewer else set()
+    saved = set(db.scalars(select(Save.post_id).where(Save.post_id.in_(ids), Save.user_id == viewer.id))) if viewer else set()
+    evs = {e.id: e for e in db.scalars(select(SourceEvent).where(SourceEvent.id.in_({p.event_id for p in posts if p.event_id})))}
+    last: dict[int, dict[str, Any]] = {}
+    if preview:
+        latest = (
+            select(Comment.post_id, func.max(Comment.id).label("cid"))
+            .where(Comment.post_id.in_(ids))
+            .group_by(Comment.post_id)
+            .subquery()
+        )
+        rows = db.execute(
+            select(Comment, User).join(latest, Comment.id == latest.c.cid).join(User, User.id == Comment.user_id)
+        ).all()
+        for c, u in rows:
+            last[c.post_id] = {"author": serialize_user(db, u) | {"kind": u.kind}, "body": _excerpt(c.body, 160),
+                               "created_at": c.created_at.isoformat() + "Z", "generated": c.generated}  # fmt: skip
     topics: dict[int, list[str]] = {}
     for pid, topic in db.execute(select(PostTopic.post_id, PostTopic.topic).where(PostTopic.post_id.in_(ids))):
         topics.setdefault(pid, []).append(topic)
@@ -137,8 +156,10 @@ def serialize(db: Session, posts: list[Post], viewer: User | None, full: bool = 
             "sentiment": p.sentiment, "ai_sentiment": p.ai_sentiment,
             "topics": [{"key": t, "label": TOPICS.get(t, t)} for t in sorted(topics.get(p.id, []), key=lambda t: order.index(t) if t in order else 99)],
             "source": {"key": p.source, "label": pulse_sources.label(p.source),
-                       "editorial": p.source in EDITORIAL},
-            "author": serialize_user(db, authors[p.user_id]),
+                       "editorial": p.source in EDITORIAL, "generated": p.source in GENERATED},
+            "author": serialize_user(db, authors[p.user_id]) | {"kind": authors[p.user_id].kind},
+            "event": events.serialize(evs[p.event_id]) if p.event_id in evs else None,
+            "last_reply": last.get(p.id), "saved_by_me": p.id in saved,
             "like_count": p.like_count, "comment_count": p.comment_count, "liked_by_me": p.id in liked,
             "is_mine": viewer is not None and viewer.id == p.user_id,
             "created_at": p.created_at.isoformat() + "Z", "edited_at": p.edited_at.isoformat() + "Z" if p.edited_at else None,
@@ -243,6 +264,8 @@ def listing(
         q = q.where(_from(COMMUNITY))
     elif source == "research":
         q = q.where(_from(EDITORIAL))
+    elif source == "generated":
+        q = q.where(_from(GENERATED))
     if sort == "top":
         offset = int(cursor) if cursor and cursor.isdigit() else 0
         q = q.where(Post.created_at >= utcnow() - SCORE_WINDOW).order_by(
@@ -348,6 +371,8 @@ def asset(db: Session, symbol: str, viewer: User | None) -> dict[str, Any]:
     sym = markets.clean_symbol(symbol)
     recent = _counts(db, sym, utcnow() - SCORE_WINDOW)
     research_recent = _counts(db, sym, utcnow() - SCORE_WINDOW, sources=EDITORIAL)
+    generated_recent = _counts(db, sym, utcnow() - SCORE_WINDOW, sources=GENERATED)
+    generated_total = db.scalar(select(func.count(Post.id)).where(_is_discussion(), _from(GENERATED), Post.asset == sym)) or 0
     ai_read = (
         db.scalar(
             select(func.count(Post.id)).where(
@@ -380,7 +405,7 @@ def asset(db: Session, symbol: str, viewer: User | None) -> dict[str, Any]:
         if q
         else None,
         "total_discussions": total,
-        "community_discussions": total - research_total,
+        "community_discussions": total - research_total - generated_total,
         "research_discussions": research_total,
         "participants": participants,
         "score": pulse_score.score(recent) | {"window_days": SCORE_WINDOW.days, "ai_classified": ai_read},
@@ -394,6 +419,11 @@ def asset(db: Session, symbol: str, viewer: User | None) -> dict[str, Any]:
         "volume": _volume(db, sym),
         "topics": _topic_counts(db, sym),
         "history": history if sum(1 for h in history if h["total"]) >= 2 else None,
+        "generated": {
+            "discussions": generated_total,
+            "sentiment": {"counts": generated_recent, "share": _share(generated_recent)},
+        },
+        "voices": _voices(db, sym),
         "arguments": {"bullish": _arguments(db, sym, "bullish", viewer), "bearish": _arguments(db, sym, "bearish", viewer)},
         "sources": pulse_sources.describe(),
         "disclaimer": DISCLAIMER,
@@ -595,3 +625,151 @@ def summary(db: Session, symbol: str) -> dict[str, Any]:
         "titles": {str(p.id): p.title for p in posts},
         "generated_at": meta["fetched_at"],
     }
+
+
+# ------------------------------------------------------------------ feed, search, people
+
+
+def _voices(db: Session, symbol: str, limit: int = 8) -> list[dict[str, Any]]:
+    """Who is discussing an asset: authors of discussions and comments in the last 30 days."""
+    since = utcnow() - timedelta(days=30)
+    ids = select(Post.id).where(_is_discussion(), Post.asset == symbol)
+    counts: dict[int, int] = {}
+    for uid, n in db.execute(
+        select(Post.user_id, func.count(Post.id)).where(Post.id.in_(ids), Post.created_at >= since).group_by(Post.user_id)
+    ):
+        counts[uid] = counts.get(uid, 0) + n
+    for uid, n in db.execute(
+        select(Comment.user_id, func.count(Comment.id))
+        .where(Comment.post_id.in_(ids), Comment.created_at >= since)
+        .group_by(Comment.user_id)
+    ):
+        counts[uid] = counts.get(uid, 0) + n
+    top = sorted(counts.items(), key=lambda kv: -kv[1])[:limit]
+    users = {u.id: u for u in db.scalars(select(User).where(User.id.in_([u for u, _ in top])))}
+    labels = {
+        p.user_id: p.traits.get("label") for p in db.scalars(select(Persona).where(Persona.user_id.in_([u for u, _ in top])))
+    }
+    return [
+        serialize_user(db, users[u]) | {"kind": users[u].kind, "label": labels.get(u), "contributions": n}
+        for u, n in top
+        if u in users
+    ]
+
+
+def feed(
+    db: Session,
+    viewer: User | None,
+    mode: str = "latest",
+    topic: str | None = None,
+    source: str | None = None,
+    cursor: str | None = None,
+    limit: int = 15,
+) -> dict[str, Any]:
+    """The Pulse feed across every source, with a preview of the latest reply."""
+    limit = max(1, min(limit, 40))
+    q = _discussions()
+    if topic:
+        _topics([topic])
+        q = q.where(Post.id.in_(select(PostTopic.post_id).where(PostTopic.topic == topic)))
+    if source in ("community", "research", "generated"):
+        q = q.where(_from({"community": COMMUNITY, "research": EDITORIAL, "generated": GENERATED}[source]))
+    if mode == "following":
+        if viewer is None:
+            return {"items": [], "next": None, "needs_sign_in": True}
+        from app.models import Follow, TopicFollow, UserHolding
+
+        syms = set(db.scalars(select(TopicFollow.value).where(TopicFollow.user_id == viewer.id, TopicFollow.kind == "symbol")))
+        syms |= set(db.scalars(select(UserHolding.symbol).where(UserHolding.user_id == viewer.id)))
+        people = select(Follow.followee_id).where(Follow.follower_id == viewer.id)
+        q = q.where(or_(Post.asset.in_(syms or {"-"}), Post.user_id.in_(people)))
+    elif mode == "saved":
+        if viewer is None:
+            return {"items": [], "next": None, "needs_sign_in": True}
+        q = q.where(Post.id.in_(select(Save.post_id).where(Save.user_id == viewer.id)))
+    if mode == "trending":
+        now = utcnow()
+        pool = list(db.scalars(q.where(Post.created_at >= now - timedelta(days=5)).order_by(Post.created_at.desc()).limit(400)))
+
+        def heat(p: Post) -> float:
+            hours = max(1.0, (now - p.created_at).total_seconds() / 3600)
+            return (1 + p.like_count * 3 + p.comment_count) / (hours + 3) ** 0.7
+
+        pool.sort(key=heat, reverse=True)
+        offset = int(cursor) if cursor and cursor.isdigit() else 0
+        page = pool[offset : offset + limit]
+        nxt = str(offset + limit) if len(pool) > offset + limit else None
+        return {"items": serialize(db, page, viewer, preview=True), "next": nxt}
+    if cursor and re.fullmatch(r"\d+\.\d+", cursor):
+        us, last_id = (int(x) for x in cursor.split("."))
+        at = datetime(1970, 1, 1) + timedelta(microseconds=us)
+        q = q.where(or_(Post.created_at < at, and_(Post.created_at == at, Post.id < last_id)))
+    rows = list(db.scalars(q.order_by(Post.created_at.desc(), Post.id.desc()).limit(limit + 1)))
+    last = rows[limit - 1] if len(rows) > limit else None
+    nxt = f"{(last.created_at - datetime(1970, 1, 1)) // timedelta(microseconds=1)}.{last.id}" if last else None
+    return {"items": serialize(db, rows[:limit], viewer, preview=True), "next": nxt}
+
+
+def search(db: Session, viewer: User | None, q: str) -> dict[str, Any]:
+    term = q.strip()
+    if len(term) < 2:
+        return {"assets": [], "discussions": [], "topics": [], "people": []}
+    like = f"%{term.lower()}%"
+    try:
+        assets = markets.search(db, term)[:6]
+    except NexisError:
+        assets = []
+    discussed = list(db.execute(
+        select(Post.asset, func.max(Post.asset_name), func.count(Post.id)).where(_is_discussion(), or_(func.lower(Post.asset).like(like), func.lower(Post.asset_name).like(like)))
+        .group_by(Post.asset).order_by(func.count(Post.id).desc()).limit(6)
+    ).all())  # fmt: skip
+    disc = list(db.scalars(_discussions().where(or_(func.lower(Post.title).like(like), func.lower(Post.body).like(like), func.lower(Post.asset).like(like)))
+                           .order_by(Post.created_at.desc()).limit(12)))  # fmt: skip
+    topics = [{"key": k, "label": v} for k, v in TOPICS.items() if term.lower() in v.lower() or term.lower() == k]
+    people = list(db.scalars(select(User).where(User.kind.in_(["person", "persona", "editorial"]), User.is_disabled.is_(False),
+                                                or_(func.lower(User.username).like(like), func.lower(User.display_name).like(like), func.lower(User.bio).like(like)))
+                             .limit(8)))  # fmt: skip
+    return {
+        "assets": [
+            {"symbol": a["symbol"], "name": a.get("name"), "type": a.get("type"), "exchange": a.get("exchange")} for a in assets
+        ],
+        "discussed_assets": [{"symbol": a, "name": n or a, "discussions": c} for a, n, c in discussed],
+        "discussions": serialize(db, disc, viewer),
+        "topics": topics,
+        "people": [serialize_user(db, u) | {"kind": u.kind, "bio": u.bio} for u in people],
+    }
+
+
+def persona_profile(db: Session, username: str, viewer: User | None) -> dict[str, Any]:
+    u = db.scalars(select(User).where(User.username == username.lower(), User.kind == "persona")).first()
+    if u is None:
+        raise NotFoundError("persona not found")
+    p = db.scalars(select(Persona).where(Persona.user_id == u.id)).first()
+    from app.services import personas as personas_svc
+
+    comments = list(db.execute(select(Comment, Post).join(Post, Post.id == Comment.post_id).where(Comment.user_id == u.id, Post.hidden.is_(False))
+                               .order_by(Comment.created_at.desc()).limit(10)).all())  # fmt: skip
+    return {
+        "user": serialize_user(db, u) | {"kind": u.kind, "bio": u.bio},
+        "profile": personas_svc.public(p) if p else None,
+        "generated": True,
+        "discussions": listing(db, viewer, author=u.username, limit=10)["items"],
+        "recent_comments": [
+            {
+                "id": c.id,
+                "body": _excerpt(c.body, 220),
+                "created_at": c.created_at.isoformat() + "Z",
+                "discussion": {"id": post.id, "title": post.title, "asset": post.asset},
+            }
+            for c, post in comments
+        ],
+        "assets": sorted((p.memory or {}).keys())[:12] if p else [],
+    }
+
+
+def related(db: Session, pid: int, viewer: User | None, limit: int = 4) -> list[dict[str, Any]]:
+    p = _get(db, pid)
+    rows = list(
+        db.scalars(_discussions().where(Post.asset == p.asset, Post.id != p.id).order_by(Post.created_at.desc()).limit(limit))
+    )
+    return serialize(db, rows, viewer)

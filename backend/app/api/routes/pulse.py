@@ -108,3 +108,64 @@ def summary(symbol: str, request: Request, db: Session = Depends(get_db)) -> dic
 @router.get("/pulse/users/{username}")
 def user(username: str, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     return pulse.user_activity(db, username, viewer)
+
+
+# ------------------------------------------------------------------ feed, search, people, events, engine
+
+
+@router.get("/pulse/feed")
+def feed(
+    mode: Literal["latest", "trending", "following", "saved"] = "latest",
+    topic: str | None = Query(default=None, max_length=32),
+    source: Literal["community", "research", "generated"] | None = None,
+    cursor: str | None = Query(default=None, max_length=40),
+    limit: int = Query(default=15, ge=1, le=40),
+    viewer: User | None = Depends(auth.optional_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return pulse.feed(db, viewer, mode, topic, source, cursor, limit)
+
+
+@router.get("/pulse/search")
+def search(
+    q: str = Query(min_length=1, max_length=80), viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    return pulse.search(db, viewer, q)
+
+
+@router.get("/pulse/events")
+def market_events(symbol: str | None = Query(default=None, max_length=32), db: Session = Depends(get_db)) -> dict[str, Any]:
+    from app.services import events
+
+    rows = events.recent(db, [symbol.upper()], days=30, limit=12) if symbol else events.important(db, limit=8)
+    return {"items": [events.serialize(e) for e in rows], "providers": [p.__dict__ for p in events.PROVIDERS.values()]}
+
+
+@router.get("/pulse/personas/{username}")
+def persona(username: str, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return pulse.persona_profile(db, username, viewer)
+
+
+@router.get("/pulse/discussions/{pid}/related")
+def related(pid: int, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    return pulse.related(db, pid, viewer)
+
+
+@router.get("/pulse/engine")
+def engine_status(db: Session = Depends(get_db)) -> dict[str, Any]:
+    from app.services import pulse_engine
+
+    return pulse_engine.status(db)
+
+
+@router.post("/pulse/engine/tick")
+def engine_tick(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Advance Pulse: anyone may nudge it (throttled, at most one thread); the cron secret runs a larger batch."""
+    from app.core.config import get_settings
+    from app.services import pulse_engine
+
+    secret = get_settings().cron_secret
+    trusted = bool(secret) and request.headers.get("authorization") == f"Bearer {secret}"
+    if not trusted:
+        ratelimit.hit(db, f"pulse-tick:{ratelimit.client_ip(request)}", 20)
+    return pulse_engine.tick(db, max_threads=4 if trusted else 1, force=trusted)

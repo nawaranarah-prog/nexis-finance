@@ -9,6 +9,13 @@ import { useWorkspace } from "./hooks/workspace";
 
 const Overview = lazy(() => import("./pages/Overview"));
 const Pulse = lazy(() => import("./pages/Pulse"));
+const PulseOverview = lazy(() => import("./pages/Pulse").then((m) => ({ default: m.PulseDiscover })));
+const PulseHome = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PulseHome })));
+const PulseTopic = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PulseTopic })));
+const PulseSearch = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PulseSearch })));
+const PersonaPage = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PersonaPage })));
+const Portfolio = lazy(() => import("./pages/Portfolio"));
+const NotificationsPage = lazy(() => import("./pages/Notifications"));
 const MarketData = lazy(() => import("./pages/MarketData"));
 const DataQuality = lazy(() => import("./pages/DataQuality"));
 const AssetResearch = lazy(() => import("./pages/AssetResearch"));
@@ -124,9 +131,22 @@ export default function App() {
           <Route path="/markets" element={<Markets />} />
           <Route path="/markets/:symbol" element={<Instrument />} />
           <Route path="/advisor" element={<Advisor />} />
-          <Route path="/pulse" element={<Pulse />} />
+          <Route path="/pulse" element={<PulseHome mode="trending" />} />
+          <Route path="/pulse/latest" element={<PulseHome mode="latest" />} />
+          <Route path="/pulse/trending" element={<PulseHome mode="trending" />} />
+          <Route path="/pulse/following" element={<PulseHome mode="following" />} />
+          <Route path="/pulse/saved" element={<PulseHome mode="saved" />} />
+          <Route path="/pulse/topics" element={<PulseTopic />} />
+          <Route path="/pulse/topics/:topic" element={<PulseTopic />} />
+          <Route path="/pulse/search" element={<PulseSearch />} />
+          <Route path="/pulse/overview" element={<PulseOverview />} />
+          <Route path="/pulse/persona/:username" element={<PersonaPage />} />
+          <Route path="/pulse/discussion/:id" element={<Pulse />} />
+          <Route path="/pulse/ticker/:symbol" element={<Pulse />} />
           <Route path="/pulse/d/:id" element={<Pulse />} />
           <Route path="/pulse/:symbol" element={<Pulse />} />
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/valuation" element={<Valuation />} />
           <Route path="/valuation/:symbol" element={<Valuation />} />

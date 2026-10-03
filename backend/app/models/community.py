@@ -121,6 +121,8 @@ class Post(Base, TimestampMixin):
     sentiment: Mapped[str | None] = mapped_column(String(8))
     ai_sentiment: Mapped[str | None] = mapped_column(String(8))
     edited_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # The real event a Nexis-generated discussion is about (null for member posts).
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("source_events.id", ondelete="SET NULL"), index=True)
 
 
 class PostTopic(Base):
@@ -172,8 +174,10 @@ class Comment(Base, TimestampMixin):
     post_id: Mapped[int] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     body: Mapped[str] = mapped_column(String(1000), nullable=False)
-    # Replies point at the top-level comment they answer (one level deep).
+    # The comment this replies to (threads nest a few levels deep).
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"), index=True)
+    # Written by a Nexis-generated persona rather than a member.
+    generated: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
 
 class Like(Base, TimestampMixin):

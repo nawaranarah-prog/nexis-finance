@@ -92,6 +92,15 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("NEXIS_TWILIO_VERIFY_SID", "TWILIO_VERIFY_SERVICE_SID")
     )
 
+    # Nexis Pulse generated discussions. They use the AI client above (no extra service); these limits keep
+    # usage inside free tiers. A thread costs two model calls, a follow-up one.
+    pulse_model: str = "openai/gpt-4.1-mini,openai/gpt-4.1"
+    pulse_daily_threads: int = 16
+    pulse_tick_minutes: int = 40
+    pulse_personas: int = 100
+    # Email delivery for digests (not connected; digests are prepared and kept until a provider is added).
+    email_provider: str | None = None
+
     # Abuse protection for public endpoints (per client IP, per hour).
     advisor_requests_per_hour: int = 20
     posts_per_hour: int = 12

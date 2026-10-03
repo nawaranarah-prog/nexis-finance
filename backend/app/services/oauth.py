@@ -108,7 +108,9 @@ def start(
     nxt = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/"
     response.set_cookie(
         STATE_COOKIE,
-        _sign({"p": provider, "s": state, "n": nonce, "v": verifier, "next": nxt, "m": mode, "u": user_id, "exp": time.time() + 600}),
+        _sign(
+            {"p": provider, "s": state, "n": nonce, "v": verifier, "next": nxt, "m": mode, "u": user_id, "exp": time.time() + 600}
+        ),
         max_age=600,
         httponly=True,
         secure=s.env != "development",

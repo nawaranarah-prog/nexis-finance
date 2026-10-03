@@ -34,6 +34,15 @@ from app.models.connectivity import (
     WebhookDelivery,
     WebhookEndpoint,
 )
+from app.models.intelligence import (
+    AlertRule,
+    DigestRecord,
+    NotificationPreference,
+    Persona,
+    SourceEvent,
+    UserHolding,
+    UserNotification,
+)
 from app.models.market import Asset, DataQualityIssue, DataQualityRun, Dataset, IngestionRun, MarketData
 from app.models.ops import Job, Notification, Report
 from app.models.portfolio import Portfolio, PortfolioPosition, PortfolioReturn, RiskMetric, StressTest
@@ -49,6 +58,7 @@ from app.models.research import (
 
 __all__ = [
     "Account",
+    "AlertRule",
     "Anomaly",
     "ApiKey",
     "Asset",
@@ -61,6 +71,7 @@ __all__ = [
     "DataQualityIssue",
     "DataQualityRun",
     "Dataset",
+    "DigestRecord",
     "EconomicObservation",
     "EconomicSeries",
     "Experiment",
@@ -79,6 +90,8 @@ __all__ = [
     "MarketData",
     "Media",
     "Notification",
+    "NotificationPreference",
+    "Persona",
     "Portfolio",
     "PortfolioPosition",
     "PortfolioReturn",
@@ -89,6 +102,7 @@ __all__ = [
     "Report",
     "RiskMetric",
     "Save",
+    "SourceEvent",
     "SourceRecord",
     "Strategy",
     "StressTest",
@@ -96,6 +110,8 @@ __all__ = [
     "TopicFollow",
     "Transaction",
     "User",
+    "UserHolding",
+    "UserNotification",
     "UserSession",
     "WebhookDelivery",
     "WebhookEndpoint",
