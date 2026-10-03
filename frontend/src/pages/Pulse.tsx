@@ -37,6 +37,12 @@ function SentimentTag({ value, ai }: { value: string | null | undefined; ai?: bo
   );
 }
 
+/** Marks content published by the official Nexis Research account. */
+function Official() {
+  const { t } = useT();
+  return <span className="pl-official" title={t("Editorial analysis by the Nexis Research team — not a member opinion")}>{t("Official")}</span>;
+}
+
 function ScoreBlock({ score, compact }: { score: AnyObj | null | undefined; compact?: boolean }) {
   const { t } = useT();
   if (!score?.available) return <span className={`pl-score na ${compact ? "compact" : ""}`}>{compact ? "—" : t("Pulse unavailable")}</span>;
@@ -74,7 +80,7 @@ function LikeButton({ d }: { d: AnyObj }) {
 function DiscussionRow({ d, showAsset }: { d: AnyObj; showAsset?: boolean }) {
   const { t, lang } = useT();
   return (
-    <li className="pl-row">
+    <li className={`pl-row ${d.source.editorial ? "editorial" : ""}`}>
       <div className="pl-row-main">
         <div className="pl-row-meta">
           {showAsset && <Link className="mono pl-asset" to={`/pulse/${encodeURIComponent(d.asset)}`}>{d.asset}</Link>}
@@ -86,6 +92,7 @@ function DiscussionRow({ d, showAsset }: { d: AnyObj; showAsset?: boolean }) {
         <p className="pl-row-body" dir="auto">{d.body}</p>
         <div className="pl-row-foot">
           <Link to={`/finstagram/u/${d.author.username}`} className="pl-author">{d.author.display_name || d.author.username}</Link>
+          {d.source.editorial && <Official />}
           <time dateTime={d.created_at}>{ago(d.created_at, lang)}</time>
           <span className="pl-src">{t(d.source.label)}</span>
           <span className="grow" />
@@ -232,11 +239,13 @@ function Activity({ history }: { history: AnyObj[] | null }) {
           <div key={h.week_start} className="pl-week" title={`${h.week_start}: ${h.total} ${t("discussions")}${h.score ? ` · Pulse ${h.score}` : ""}`}>
             <div className="pl-week-stack" style={{ height: `${(h.total / max) * 100}%` }}>
               {(["bearish", "neutral", "bullish", "unclassified"] as const).map((s) => h.counts[s] ? <span key={s} className={s} style={{ flexGrow: h.counts[s] }} /> : null)}
+              {h.research > 0 && <span className="research" style={{ flexGrow: h.research }} />}
             </div>
           </div>
         ))}
       </div>
       <div className="pl-activity-axis"><span>{history[0].week_start}</span><span>{t("this week")}</span></div>
+      <div className="pl-activity-legend xs"><span><i className="bullish" />{t("Bullish")}</span><span><i className="neutral" />{t("Neutral")}</span><span><i className="bearish" />{t("Bearish")}</span><span><i className="research" />{t("Nexis Research")}</span></div>
     </div>
   );
 }
@@ -293,9 +302,10 @@ function DiscussionList({ symbol, topic, topicLabel, onTopic }: { symbol: string
   const { t } = useT();
   const [sort, setSort] = useState<"new" | "top">("new");
   const [sentiment, setSentiment] = useState<Sentiment | null>(null);
+  const [source, setSource] = useState<"community" | "research" | null>(null);
   const q = useInfiniteQuery({
-    queryKey: ["pulse-list", symbol, sort, sentiment, topic],
-    queryFn: ({ pageParam }) => api.get<AnyObj>("/pulse/discussions", { symbol, sort, ...(sentiment ? { sentiment } : {}), ...(topic ? { topic } : {}), ...(pageParam ? { cursor: pageParam } : {}), limit: 15 }),
+    queryKey: ["pulse-list", symbol, sort, sentiment, topic, source],
+    queryFn: ({ pageParam }) => api.get<AnyObj>("/pulse/discussions", { symbol, sort, ...(sentiment ? { sentiment } : {}), ...(topic ? { topic } : {}), ...(source ? { source } : {}), ...(pageParam ? { cursor: pageParam } : {}), limit: 15 }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next ?? null,
   });
@@ -309,12 +319,17 @@ function DiscussionList({ symbol, topic, topicLabel, onTopic }: { symbol: string
         <div className="pl-seg small" role="group" aria-label={t("Sentiment")}>
           {SENTIMENTS.map((s) => <button key={s} type="button" aria-pressed={sentiment === s} className={`${s} ${sentiment === s ? "on" : ""}`} onClick={() => setSentiment(sentiment === s ? null : s)}>{t(SENTIMENT_LABEL[s])}</button>)}
         </div>
+        <div className="pl-seg small" role="group" aria-label={t("Who wrote it")}>
+          {([["community", t("Members")], ["research", t("Nexis Research")]] as const).map(([k, label]) => (
+            <button key={k} type="button" aria-pressed={source === k} className={source === k ? "on" : ""} onClick={() => setSource(source === k ? null : k)}>{label}</button>
+          ))}
+        </div>
         {topic && <button type="button" className="pl-topic on" onClick={() => onTopic(null)}>{t("Topic")}: {t(topicLabel)} ×</button>}
       </div>
       {q.isLoading && <div className="wire-skel"><span className="skel w80" /><span className="skel w60" /><span className="skel w70" /></div>}
       {q.isError && <div className="hm-error">{errorMessage(q.error)} <button className="link-btn" onClick={() => q.refetch()}>{t("Retry")}</button></div>}
       <ol className="pl-list">{items.map((d) => <DiscussionRow key={d.id} d={d} />)}</ol>
-      {!q.isLoading && !items.length && <p className="pl-empty-line">{sentiment || topic ? t("No discussions match these filters.") : t("No discussions yet — yours can be the first.")}</p>}
+      {!q.isLoading && !items.length && <p className="pl-empty-line">{sentiment || topic || source ? t("No discussions match these filters.") : t("No discussions yet — yours can be the first.")}</p>}
       {q.hasNextPage && <button type="button" className="btn sm pl-more" disabled={q.isFetchingNextPage} onClick={() => q.fetchNextPage()}>{q.isFetchingNextPage ? "…" : t("Load more")}</button>}
     </div>
   );
@@ -352,24 +367,39 @@ function AssetPulse({ symbol }: { symbol: string }) {
         <>
           <section className="pl-panel" aria-label={t("Nexis Pulse")}>
             <div className="pl-panel-score">
-              <div className="pl-mini-h">{t("Nexis Pulse")}</div>
+              <div className="pl-mini-h">{t("Community Pulse")}</div>
               <ScoreBlock score={d.score} />
               <p className="pl-basis">
                 {d.score.available
-                  ? <>{t("Based on")} <b className="num">{d.score.basis}</b> {t("discussions from the last")} {d.score.window_days} {t("days")}{d.score.ai_classified ? ` · ${d.score.ai_classified} ${t("classified by AI")}` : ""}</>
-                  : <>{t("Not enough discussion data yet.")} {t("A score needs at least")} {d.score.minimum} {t("discussions with a sentiment; there")} {d.score.basis === 1 ? t("is") : t("are")} <b className="num">{d.score.basis}</b>.</>}
+                  ? <>{t("Based on")} <b className="num">{d.score.basis}</b> {t("member discussions from the last")} {d.score.window_days} {t("days")}{d.score.ai_classified ? ` · ${d.score.ai_classified} ${t("classified by AI")}` : ""}</>
+                  : <>{t("Not enough member discussions yet.")} {t("A community score needs at least")} {d.score.minimum} {t("member discussions with a sentiment; there")} {d.score.basis === 1 ? t("is") : t("are")} <b className="num">{d.score.basis}</b>.</>}
               </p>
-              <p className="pl-disclaimer">{t("Sentiment of Nexis discussions — not a price prediction, a probability of the price rising, or financial advice.")}</p>
+              <p className="pl-disclaimer">{t("Sentiment of Nexis member discussions — not a price prediction, a probability of the price rising, or financial advice.")}</p>
+              {d.research.discussions > 0 && (
+                <div className="pl-research-view">
+                  <span className="pl-research-h"><Official /> {t("Nexis Research view")}</span>
+                  {d.research.view.available
+                    ? <span className="pl-research-v"><b className="num">{d.research.view.value}</b> / 100 · {t(d.research.view.label)}</span>
+                    : <span className="pl-research-v">{SENTIMENTS.map((s) => `${d.research.sentiment.counts[s]} ${t(SENTIMENT_LABEL[s]).toLowerCase()}`).join(" · ")}</span>}
+                  <span className="xs muted">{t("From")} {d.research.discussions} {t("editorial discussions — the research team's stance, kept separate from community sentiment.")}</span>
+                </div>
+              )}
             </div>
             <div className="pl-panel-cell">
-              <div className="pl-mini-h">{t("Sentiment")}</div>
+              <div className="pl-mini-h">{t("Member sentiment")}</div>
               <SentimentBar share={d.sentiment.share} counts={d.sentiment.counts} />
+              {d.research.sentiment.share && (
+                <p className="pl-research-split xs">
+                  <span className="muted">{t("Nexis Research")}:</span> {SENTIMENTS.map((s) => <span key={s} className={s}>{d.research.sentiment.counts[s]} {t(SENTIMENT_LABEL[s]).toLowerCase()}</span>)}
+                </p>
+              )}
               {d.sentiment.counts.unclassified > 0 && <p className="xs muted">{d.sentiment.counts.unclassified} {t("without a sentiment")}</p>}
             </div>
             <div className="pl-panel-cell">
               <div className="pl-mini-h">{t("Discussion volume")}</div>
               <div className="pl-stat"><b className="num">{d.total_discussions}</b> <span>{d.total_discussions === 1 ? t("discussion") : t("discussions")}</span></div>
-              <div className="pl-stat small"><span className="num">{d.participants}</span> {d.participants === 1 ? t("person") : t("people")} · <span className="num">{vol.last_7_days}</span> {t("this week")}</div>
+              <div className="pl-stat small"><span className="num">{d.community_discussions}</span> {t("by members")} · <span className="num">{d.research_discussions}</span> {t("by Nexis Research")}</div>
+              <div className="pl-stat small"><span className="num">{d.participants}</span> {d.participants === 1 ? t("member") : t("members")} · <span className="num">{vol.last_7_days}</span> {t("this week")}</div>
               {vol.change_pct !== null
                 ? <div className={`pl-delta ${vol.change_pct >= 0 ? "pos" : "neg"}`}><span className="num">{vol.change_pct > 0 ? "+" : ""}{vol.change_pct}%</span> {t("vs the previous week")}</div>
                 : <div className="xs muted">{vol.last_7_days ? t("No discussions the week before to compare with") : ""}</div>}
@@ -387,7 +417,7 @@ function AssetPulse({ symbol }: { symbol: string }) {
           <div className="pl-grid">
             <div className="pl-main">
               <section className="pl-section">
-                <div className="sec-head"><h2>{t("What investors are saying")}</h2><span className="sec-sub">{t("Nexis Community")}</span></div>
+                <div className="sec-head"><h2>{t("What investors are saying")}</h2><span className="sec-sub">{t("Members and Nexis Research")}</span></div>
                 <ComposeToggle symbol={symbol} name={d.name} onPublished={(x) => { refresh(); toast("success", t("Discussion published")); nav(`/pulse/d/${x.id}`); }} />
                 <DiscussionList symbol={symbol} topic={topic} topicLabel={topic ? topicLabel[topic] ?? topic : ""} onTopic={setTopic} />
               </section>
@@ -509,6 +539,7 @@ function DiscussionPage({ id }: { id: number }) {
           <h1 dir="auto">{d.title}</h1>
           <div className="pl-byline">
             <Link to={`/finstagram/u/${d.author.username}`} className="pl-author">{d.author.display_name || d.author.username}</Link>
+            {d.source.editorial && <Official />}
             <span className="muted">@{d.author.username}</span>
             <time dateTime={d.created_at}>{ago(d.created_at, lang)}</time>
             {d.edited_at && <span className="muted">· {t("edited")}</span>}
@@ -521,7 +552,9 @@ function DiscussionPage({ id }: { id: number }) {
             <Link className="sec-link" to={`/pulse/${encodeURIComponent(d.asset)}`}>{t("See the Pulse for")} {d.asset} <span aria-hidden>→</span></Link>
             {d.is_mine && <><button type="button" className="btn sm" onClick={() => setEditing(true)}>{t("Edit")}</button><button type="button" className="btn sm danger" onClick={remove}>{t("Delete")}</button></>}
           </div>
-          <p className="hm-fine">{t("A personal opinion from a Nexis member, not verified by Nexis and not financial advice.")}</p>
+          <p className="hm-fine">{d.source.editorial
+            ? t("Editorial analysis by the Nexis Research team. It is not a member opinion, it does not count toward the community Pulse score, and it is not financial advice.")
+            : t("A personal opinion from a Nexis member, not verified by Nexis and not financial advice.")}</p>
         </article>
       )}
       <Comments id={id} count={d.comment_count} />
@@ -536,13 +569,14 @@ function AssetTable({ rows, empty, metric }: { rows: AnyObj[]; empty: string; me
   if (!rows.length) return <p className="pl-empty-line">{empty}</p>;
   return (
     <table className="pl-table">
-      <thead><tr><th>{t("Asset")}</th><th className="r">{metric}</th><th className="r">{t("Pulse")}</th></tr></thead>
+      <thead><tr><th>{t("Asset")}</th><th className="r">{metric}</th><th className="r" title={t("Community Pulse from member discussions")}>{t("Pulse")}</th><th className="r" title={t("Nexis Research view — editorial, not community sentiment")}>{t("Research")}</th></tr></thead>
       <tbody>
         {rows.map((r) => (
           <tr key={r.symbol}>
             <td><Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="wl-asset"><span className="mono wl-tk">{r.symbol}</span><span className="wl-name">{r.name}</span></Link></td>
             <td className="r num">{r.discussions}</td>
             <td className="r"><ScoreBlock score={r.score} compact /></td>
+            <td className="r"><ScoreBlock score={r.research_view} compact /></td>
           </tr>
         ))}
       </tbody>
@@ -561,9 +595,9 @@ function PulseDiscover() {
     <div className="hm pl">
       <header className="pl-head">
         <div className="hm-eyebrow"><span>{t("Nexis Pulse")}</span>
-          {d && !empty && <span className="num">{d.totals.discussions} {t("discussions")} · {d.totals.assets} {t("assets")} · {d.totals.participants} {t("people")}</span>}</div>
+          {d && !empty && <span className="num">{d.totals.discussions} {t("discussions")} · {d.totals.assets} {t("assets")} · {d.totals.research_discussions} {t("by Nexis Research")}{d.totals.community_discussions > 0 && <> · {d.totals.community_discussions} {t("by")} {d.totals.participants} {d.totals.participants === 1 ? t("member") : t("members")}</>}</span>}</div>
         <h1>{t("See what investors are saying.")}</h1>
-        <p className="hm-lede">{t("Every Pulse comes from discussions written by Nexis members — the arguments for and against, the topics people care about, and an overall sentiment score.")}</p>
+        <p className="hm-lede">{t("Discussions by Nexis members and the Nexis Research team — the arguments for and against and the topics people care about. The community Pulse score is built from member discussions only.")}</p>
         <div className="pl-switch wide"><SymbolSearch placeholder={t("Search an asset — Tesla, NVDA, Emirates NBD…")} onPick={(s) => nav(`/pulse/${encodeURIComponent(s.symbol)}`)} /></div>
       </header>
       {q.isError && <div className="hm-error">{errorMessage(q.error)} <button className="link-btn" onClick={() => q.refetch()}>{t("Retry")}</button></div>}

@@ -142,7 +142,7 @@ function SearchBar() {
           {res?.accounts.map((u: AnyObj) => (
             <button key={u.id} className="isr-row" onMouseDown={(e) => { e.preventDefault(); go(`/finstagram/u/${u.username}`); }}>
               <Avatar user={u} size={30} />
-              <span className="grow"><b>{u.username}</b>{u.kind === "page" && <span className="page-badge">News page</span>}<span className="xs muted"> · {u.display_name}</span></span>
+              <span className="grow"><b>{u.username}</b>{u.kind === "page" && <span className="page-badge">News page</span>}{u.kind === "editorial" && <span className="page-badge">Nexis Research · Official</span>}<span className="xs muted"> · {u.display_name}</span></span>
             </button>
           ))}
           {res?.tags.length > 0 && <div className="isr-head">{tr("Hashtags")}</div>}
@@ -336,6 +336,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
           <Avatar user={post.author} size={34} />
           <span style={{ minWidth: 0 }}>
             <b>{post.author.username}</b>{isPage && <span className="page-badge" title="Automated news page">✓ {t("News page")}</span>}
+            {post.author.kind === "editorial" && <span className="page-badge" title="Official Nexis Research account">✓ {t("Nexis Research · Official")}</span>}
             <span className="xs muted"> · {ago(post.created_at)}</span>
             {link?.source && <div className="xs muted ellipsis">{isPage ? `via ${link.source}` : link.source}</div>}
           </span>
@@ -739,6 +740,7 @@ export function ProfilePage() {
             <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
               <h2 style={{ margin: 0 }}>{u.username}</h2>
               {u.kind === "page" && <span className="page-badge">✓ News page</span>}
+              {u.kind === "editorial" && <span className="page-badge">✓ Nexis Research · Official</span>}
               {u.is_me ? <><button className="btn sm" onClick={() => setEdit(true)}>Edit profile</button><button className="btn sm" onClick={logout}>Sign out</button></>
                 : <button className={`btn sm ${u.followed_by_me ? "" : "primary"}`} onClick={follow}>{u.followed_by_me ? "Following" : "Follow"}</button>}
             </div>

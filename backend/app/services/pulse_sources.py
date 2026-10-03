@@ -1,41 +1,37 @@
 """Where Nexis Pulse discussions come from.
 
-Every discussion row carries a ``source`` key. Today the only source is the Nexis community itself.
-A permitted external source (for example an approved X or Reddit integration, or news) would be added by
-writing a class with the same interface, registering it in ``SOURCES``, and storing its items with its own
-key — the scoring, topics and pages work on the stored rows and don't change.
+Every discussion row carries a ``source`` key:
+
+* ``nexis`` — **Nexis Community**: written by members. Only these count toward the community Pulse score and
+  sentiment.
+* ``research`` — **Nexis Research**: editorial discussions by the official Nexis Research account. They appear in
+  lists and topics with their own label and form a separate "research view", never community sentiment.
+
+A permitted external source would be added by writing a class with the same attributes, registering it in
+``SOURCES`` and storing its items under its own key; scoring and pages work on the stored rows.
 """
 
 from __future__ import annotations
 
-from typing import Protocol
-
-from sqlalchemy import Select
-
-from app.models import Post
+from dataclasses import dataclass
 
 
-class DiscussionSource(Protocol):
+@dataclass(frozen=True)
+class DiscussionSource:
     key: str
     label: str
-    # True when people write the discussions on Nexis; False for imported sources.
-    native: bool
-
-    def restrict(self, query: Select) -> Select:
-        """Limit a query over posts to this source's discussions."""
-        ...
+    # Written by members, so it counts toward the community Pulse score.
+    community: bool
+    # Published by Nexis itself (editorial), shown with an official label.
+    editorial: bool
 
 
-class NexisSource:
-    key = "nexis"
-    label = "Nexis Community"
-    native = True
+NEXIS_COMMUNITY = DiscussionSource(key="nexis", label="Nexis Community", community=True, editorial=False)
+NEXIS_RESEARCH = DiscussionSource(key="research", label="Nexis Research", community=False, editorial=True)
 
-    def restrict(self, query: Select) -> Select:
-        return query.where(Post.source == self.key)
-
-
-SOURCES: dict[str, DiscussionSource] = {s.key: s for s in (NexisSource(),)}
+SOURCES: dict[str, DiscussionSource] = {s.key: s for s in (NEXIS_COMMUNITY, NEXIS_RESEARCH)}
+COMMUNITY: tuple[str, ...] = tuple(k for k, s in SOURCES.items() if s.community)
+EDITORIAL: tuple[str, ...] = tuple(k for k, s in SOURCES.items() if s.editorial)
 
 
 def label(key: str) -> str:
@@ -44,4 +40,4 @@ def label(key: str) -> str:
 
 
 def describe() -> list[dict[str, object]]:
-    return [{"key": s.key, "label": s.label, "native": s.native} for s in SOURCES.values()]
+    return [{"key": s.key, "label": s.label, "community": s.community, "editorial": s.editorial} for s in SOURCES.values()]

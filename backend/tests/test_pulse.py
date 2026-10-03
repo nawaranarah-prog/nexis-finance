@@ -11,7 +11,12 @@ from app.services import llm, pulse, pulse_score
 
 
 def _quotes(db, syms):  # type: ignore[no-untyped-def]
-    names = {"TSLA": "Tesla, Inc.", "NVDA": "NVIDIA Corporation", "EMIRATESNBD.AE": "Emirates NBD Bank PJSC"}
+    names = {
+        "TSLA": "Tesla, Inc.",
+        "NFLX": "Netflix, Inc.",
+        "NVDA": "NVIDIA Corporation",
+        "EMIRATESNBD.AE": "Emirates NBD Bank PJSC",
+    }
     return [
         {"symbol": s, "name": names[s], "price": 250.0, "change_pct": 0.01, "currency": "USD", "type": "equity"}
         for s in syms
@@ -77,7 +82,9 @@ def test_full_pulse_flow(client, markets_ok):
         client, symbol, title="Data-centre demand still accelerating", sentiment="bullish", topics=["earnings", "ai"]
     ).json()
     assert a1["asset"] == "NVDA" and a1["asset_name"] == "NVIDIA Corporation" and a1["sentiment"] == "bullish"
-    assert a1["source"] == {"key": "nexis", "label": "Nexis Community"} and [t["key"] for t in a1["topics"]] == ["earnings", "ai"]
+    assert a1["source"] == {"key": "nexis", "label": "Nexis Community", "editorial": False} and [
+        t["key"] for t in a1["topics"]
+    ] == ["earnings", "ai"]
     script = "<script>alert(1)</script> margins look stretched compared with history"
     a2 = _new(
         client, symbol, title="Valuation already prices in perfection", body=script, sentiment="bearish", topics=["valuation"]
@@ -175,14 +182,14 @@ def test_no_score_without_enough_discussions(client, markets_ok):
 
 def test_ai_summary_cites_discussions_and_keeps_ai_sentiment_separate(client, markets_ok, monkeypatch):
     _account(client, "summ")
-    one = _new(client, "TSLA", title="Margins are recovering faster than expected", sentiment="bullish").json()
-    two = _new(client, "TSLA", title="Competition in China is a real threat").json()  # author chose nothing
+    one = _new(client, "NFLX", title="Margins are recovering faster than expected", sentiment="bullish").json()
+    two = _new(client, "NFLX", title="Competition in China is a real threat").json()  # author chose nothing
 
     def unavailable(*a, **k):  # type: ignore[no-untyped-def]
         raise llm.LLMUnavailable("no key")
 
     monkeypatch.setattr(llm, "chat", unavailable)
-    off = client.get("/api/pulse/assets/TSLA/summary").json()
+    off = client.get("/api/pulse/assets/NFLX/summary").json()
     assert off["available"] is False and "unavailable" in off["reason"]
 
     seen = {}
@@ -196,7 +203,7 @@ def test_ai_summary_cites_discussions_and_keeps_ai_sentiment_separate(client, ma
         return {"content": "```json\n" + json.dumps(out) + "\n```", "_model": "test-model"}
 
     monkeypatch.setattr(llm, "chat", fake_chat)
-    s = client.get("/api/pulse/assets/TSLA/summary").json()
+    s = client.get("/api/pulse/assets/NFLX/summary").json()
     assert s["available"] and s["summary"] == "Members are split." and s["model"] == "test-model"
     assert s["themes"][0]["refs"] == [one["id"]]  # numbers become discussion ids; a made-up number is dropped
     assert s["bear"][0]["refs"] == [two["id"]] and s["titles"][str(two["id"])] == two["title"]

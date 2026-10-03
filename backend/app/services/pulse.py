@@ -4,6 +4,9 @@ A discussion is a community post that is about one asset and has a title (``Post
 so likes, comments, saves, reports and the Community feed all work on it unchanged. Everything this module
 reports — scores, percentages, volume changes, topics, arguments — is calculated from stored discussions;
 when there isn't enough data it says so instead of showing a number.
+
+The community Pulse score and sentiment use member discussions only (``pulse_sources.COMMUNITY``). Nexis Research
+editorial discussions are listed alongside them with their own label and summarised as a separate research view.
 """
 
 from __future__ import annotations
@@ -11,10 +14,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -51,6 +54,15 @@ def _is_discussion():  # type: ignore[no-untyped-def]
 
 def _discussions() -> Select:
     return select(Post).where(_is_discussion())
+
+
+def _from(sources: tuple[str, ...] | None):  # type: ignore[no-untyped-def]
+    """Restrict to some sources; ``None`` keeps every source."""
+    return Post.source.in_(list(sources)) if sources is not None else Post.id.is_not(None)
+
+
+COMMUNITY = pulse_sources.COMMUNITY
+EDITORIAL = pulse_sources.EDITORIAL
 
 
 # The sentiment used for statistics: what the author chose, otherwise what the AI detected.
@@ -124,7 +136,8 @@ def serialize(db: Session, posts: list[Post], viewer: User | None, full: bool = 
             "body": p.body if full else _excerpt(p.body), "truncated": not full and len(p.body) > 240,
             "sentiment": p.sentiment, "ai_sentiment": p.ai_sentiment,
             "topics": [{"key": t, "label": TOPICS.get(t, t)} for t in sorted(topics.get(p.id, []), key=lambda t: order.index(t) if t in order else 99)],
-            "source": {"key": p.source, "label": pulse_sources.label(p.source)},
+            "source": {"key": p.source, "label": pulse_sources.label(p.source),
+                       "editorial": p.source in EDITORIAL},
             "author": serialize_user(db, authors[p.user_id]),
             "like_count": p.like_count, "comment_count": p.comment_count, "liked_by_me": p.id in liked,
             "is_mine": viewer is not None and viewer.id == p.user_id,
@@ -212,6 +225,7 @@ def listing(
     author: str | None = None,
     cursor: str | None = None,
     limit: int = 20,
+    source: str | None = None,
 ) -> dict[str, Any]:
     """One page of discussions. ``new`` pages by id; ``top`` (most engagement, last 90 days) pages by offset."""
     limit = max(1, min(limit, 50))
@@ -225,6 +239,10 @@ def listing(
         q = q.where(Post.id.in_(select(PostTopic.post_id).where(PostTopic.topic == topic)))
     if author:
         q = q.join(User, User.id == Post.user_id).where(User.username == author.lower())
+    if source == "community":
+        q = q.where(_from(COMMUNITY))
+    elif source == "research":
+        q = q.where(_from(EDITORIAL))
     if sort == "top":
         offset = int(cursor) if cursor and cursor.isdigit() else 0
         q = q.where(Post.created_at >= utcnow() - SCORE_WINDOW).order_by(
@@ -233,10 +251,15 @@ def listing(
         rows = list(db.scalars(q.offset(offset).limit(limit + 1)))
         nxt = str(offset + limit) if len(rows) > limit else None
     else:
-        if cursor and cursor.isdigit():
-            q = q.where(Post.id < int(cursor))
-        rows = list(db.scalars(q.order_by(Post.id.desc()).limit(limit + 1)))
-        nxt = str(rows[limit - 1].id) if len(rows) > limit else None
+        # Newest by publication time (Nexis Research items are back-dated, so ids don't follow time).
+        # The cursor is "<epoch-microseconds>.<id>" of the last row on the previous page.
+        if cursor and re.fullmatch(r"\d+\.\d+", cursor):
+            us, last_id = (int(x) for x in cursor.split("."))
+            at = datetime(1970, 1, 1) + timedelta(microseconds=us)
+            q = q.where(or_(Post.created_at < at, and_(Post.created_at == at, Post.id < last_id)))
+        rows = list(db.scalars(q.order_by(Post.created_at.desc(), Post.id.desc()).limit(limit + 1)))
+        last = rows[limit - 1] if len(rows) > limit else None
+        nxt = f"{(last.created_at - datetime(1970, 1, 1)) // timedelta(microseconds=1)}.{last.id}" if last else None
     return {"items": serialize(db, rows[:limit], viewer), "next": nxt}
 
 
@@ -247,8 +270,10 @@ def _blank() -> dict[str, int]:
     return {s: 0 for s in SENTIMENTS} | {"unclassified": 0}
 
 
-def _counts(db: Session, symbol: str | None, since: Any = None, until: Any = None) -> dict[str, int]:
-    q = select(_effective(), func.count(Post.id)).where(_is_discussion())
+def _counts(
+    db: Session, symbol: str | None, since: Any = None, until: Any = None, sources: tuple[str, ...] | None = COMMUNITY
+) -> dict[str, int]:
+    q = select(_effective(), func.count(Post.id)).where(_is_discussion(), _from(sources))
     if symbol:
         q = q.where(Post.asset == symbol)
     if since is not None:
@@ -292,14 +317,19 @@ def _topic_counts(db: Session, symbol: str | None, days: int = 30, limit: int = 
 def _history(db: Session, symbol: str, weeks: int = 12) -> list[dict[str, Any]]:
     now = utcnow()
     start = now - timedelta(weeks=weeks)
-    q = select(Post.created_at, _effective()).where(_is_discussion(), Post.asset == symbol, Post.created_at >= start)
+    q = select(Post.created_at, _effective(), Post.source).where(_is_discussion(), Post.asset == symbol, Post.created_at >= start)
     buckets = [_blank() for _ in range(weeks)]
-    for created, eff in db.execute(q):
+    research = [0] * weeks
+    for created, eff, src in db.execute(q):
         i = min(weeks - 1, int((created - start).total_seconds() // (7 * 86400)))
-        buckets[i][eff if eff in SENTIMENTS else "unclassified"] += 1
+        if src in COMMUNITY:
+            buckets[i][eff if eff in SENTIMENTS else "unclassified"] += 1
+        else:
+            research[i] += 1
+    # ``counts`` and ``score`` are community only; ``research`` counts Nexis Research discussions that week.
     return [
-        {"week_start": (start + timedelta(weeks=i)).date().isoformat(), "counts": b, "total": sum(b.values()),
-         "score": pulse_score.score(b)["value"]}
+        {"week_start": (start + timedelta(weeks=i)).date().isoformat(), "counts": b, "research": research[i],
+         "total": sum(b.values()) + research[i], "score": pulse_score.score(b)["value"]}
         for i, b in enumerate(buckets)
     ]  # fmt: skip
 
@@ -317,10 +347,12 @@ def _arguments(db: Session, symbol: str, side: str, viewer: User | None, limit: 
 def asset(db: Session, symbol: str, viewer: User | None) -> dict[str, Any]:
     sym = markets.clean_symbol(symbol)
     recent = _counts(db, sym, utcnow() - SCORE_WINDOW)
+    research_recent = _counts(db, sym, utcnow() - SCORE_WINDOW, sources=EDITORIAL)
     ai_read = (
         db.scalar(
             select(func.count(Post.id)).where(
                 _is_discussion(),
+                _from(COMMUNITY),
                 Post.asset == sym,
                 Post.created_at >= utcnow() - SCORE_WINDOW,
                 Post.sentiment.is_(None),
@@ -330,7 +362,11 @@ def asset(db: Session, symbol: str, viewer: User | None) -> dict[str, Any]:
         or 0
     )
     total = db.scalar(select(func.count(Post.id)).where(_is_discussion(), Post.asset == sym)) or 0
-    participants = db.scalar(select(func.count(func.distinct(Post.user_id))).where(_is_discussion(), Post.asset == sym)) or 0
+    research_total = db.scalar(select(func.count(Post.id)).where(_is_discussion(), _from(EDITORIAL), Post.asset == sym)) or 0
+    participants = (
+        db.scalar(select(func.count(func.distinct(Post.user_id))).where(_is_discussion(), _from(COMMUNITY), Post.asset == sym))
+        or 0
+    )
     try:
         q = (markets.quotes(db, [sym]) or [None])[0]
     except NexisError:
@@ -344,9 +380,17 @@ def asset(db: Session, symbol: str, viewer: User | None) -> dict[str, Any]:
         if q
         else None,
         "total_discussions": total,
+        "community_discussions": total - research_total,
+        "research_discussions": research_total,
         "participants": participants,
         "score": pulse_score.score(recent) | {"window_days": SCORE_WINDOW.days, "ai_classified": ai_read},
         "sentiment": {"counts": recent, "share": _share(recent)},
+        # Nexis Research's own stance: editorial, shown separately and never mixed into community sentiment.
+        "research": {
+            "discussions": research_total,
+            "sentiment": {"counts": research_recent, "share": _share(research_recent)},
+            "view": pulse_score.score(research_recent),
+        },
         "volume": _volume(db, sym),
         "topics": _topic_counts(db, sym),
         "history": history if sum(1 for h in history if h["total"]) >= 2 else None,
@@ -356,8 +400,8 @@ def asset(db: Session, symbol: str, viewer: User | None) -> dict[str, Any]:
     }
 
 
-def _per_asset(db: Session, since: Any, until: Any = None) -> dict[str, dict[str, int]]:
-    q = select(Post.asset, _effective(), func.count(Post.id)).where(_is_discussion(), Post.created_at >= since)
+def _per_asset(db: Session, since: Any, until: Any = None, sources: tuple[str, ...] | None = None) -> dict[str, dict[str, int]]:
+    q = select(Post.asset, _effective(), func.count(Post.id)).where(_is_discussion(), _from(sources), Post.created_at >= since)
     if until is not None:
         q = q.where(Post.created_at < until)
     out: dict[str, dict[str, int]] = {}
@@ -371,7 +415,9 @@ def discover(db: Session, viewer: User | None) -> dict[str, Any]:
     totals = {
         "discussions": db.scalar(select(func.count(Post.id)).where(_is_discussion())) or 0,
         "assets": db.scalar(select(func.count(func.distinct(Post.asset))).where(_is_discussion())) or 0,
-        "participants": db.scalar(select(func.count(func.distinct(Post.user_id))).where(_is_discussion())) or 0,
+        "community_discussions": db.scalar(select(func.count(Post.id)).where(_is_discussion(), _from(COMMUNITY))) or 0,
+        "research_discussions": db.scalar(select(func.count(Post.id)).where(_is_discussion(), _from(EDITORIAL))) or 0,
+        "participants": db.scalar(select(func.count(func.distinct(Post.user_id))).where(_is_discussion(), _from(COMMUNITY))) or 0,
     }
     empty = {
         "trending_assets": [],
@@ -385,15 +431,18 @@ def discover(db: Session, viewer: User | None) -> dict[str, Any]:
         return {"totals": totals, **empty, "disclaimer": DISCLAIMER}
 
     names = dict(db.execute(select(Post.asset, func.max(Post.asset_name)).where(_is_discussion()).group_by(Post.asset)).all())
-    basis = _per_asset(db, now - SCORE_WINDOW)
+    basis = _per_asset(db, now - SCORE_WINDOW, sources=COMMUNITY)
+    research_basis = _per_asset(db, now - SCORE_WINDOW, sources=EDITORIAL)
 
     def row(a: str, n: int) -> dict[str, Any]:
-        return {"symbol": a, "name": names.get(a) or a, "discussions": n, "score": pulse_score.score(basis.get(a, {}))}
+        return {"symbol": a, "name": names.get(a) or a, "discussions": n, "score": pulse_score.score(basis.get(a, {})),
+                "research_view": pulse_score.score(research_basis.get(a, {}))}  # fmt: skip
 
     week = _per_asset(db, now - timedelta(days=7))
     month = _per_asset(db, now - timedelta(days=30))
-    recent14 = _per_asset(db, now - timedelta(days=14))
-    prior14 = _per_asset(db, now - timedelta(days=28), now - timedelta(days=14))
+    # Sentiment changes are about the community, so they use member discussions only.
+    recent14 = _per_asset(db, now - timedelta(days=14), sources=COMMUNITY)
+    prior14 = _per_asset(db, now - timedelta(days=28), now - timedelta(days=14), sources=COMMUNITY)
     changes = []
     for a, c in recent14.items():
         before, after = pulse_score.score(prior14.get(a, {})), pulse_score.score(c)
@@ -445,9 +494,11 @@ def user_activity(db: Session, username: str, viewer: User | None) -> dict[str, 
 
 # ------------------------------------------------------------------ AI summary
 
-SUMMARY_PROMPT = """You summarise what members of the Nexis investing community are saying about {name} ({symbol}).
-Below are their numbered discussions. Use ONLY these discussions; never add facts, prices or news that are not in them.
-They are opinions: describe what members argue, not what is true. Cite the discussions behind each point by number.
+SUMMARY_PROMPT = """You summarise the discussions on Nexis about {name} ({symbol}).
+Each numbered discussion says who wrote it: a Nexis member, or Nexis Research (the Nexis editorial team).
+Use ONLY these discussions; never add facts, prices or news that are not in them. They are opinions and analysis:
+describe what is argued, not what is true. When a point comes only from Nexis Research, say so rather than presenting
+it as what members think. Cite the discussions behind each point by number.
 If there are few discussions, say so plainly.
 
 Also classify the sentiment each discussion expresses toward the asset, from its text alone, as bullish, neutral or bearish.
@@ -467,7 +518,12 @@ Discussions:
 def summary(db: Session, symbol: str) -> dict[str, Any]:
     """AI summary of recent discussions, plus the AI's own sentiment reading of each one (stored separately)."""
     sym = markets.clean_symbol(symbol)
-    q = _discussions().where(Post.asset == sym, Post.created_at >= utcnow() - SCORE_WINDOW).order_by(Post.id.desc()).limit(40)
+    q = (
+        _discussions()
+        .where(Post.asset == sym, Post.created_at >= utcnow() - SCORE_WINDOW)
+        .order_by(Post.created_at.desc(), Post.id.desc())
+        .limit(40)
+    )
     posts = list(db.scalars(q))
     if len(posts) < 2:
         return {"available": False, "reason": "At least two discussions are needed before there is anything to summarise."}
@@ -480,7 +536,8 @@ def summary(db: Session, symbol: str) -> dict[str, Any]:
         lines = []
         for n, p in enumerate(posts, 1):
             chose = f" · author marked it {p.sentiment}" if p.sentiment else ""
-            lines.append(f"[{n}] {p.title}{chose}\n{_excerpt(p.body, 900)}")
+            who = "Nexis Research" if p.source in EDITORIAL else "Nexis member"
+            lines.append(f"[{n}] ({who}) {p.title}{chose}\n{_excerpt(p.body, 900)}")
         try:
             msg = llm.chat(
                 [{"role": "system", "content": "You write careful, neutral summaries of investor discussions. Output valid JSON only."},

@@ -26,11 +26,12 @@ Locally it can run fully offline in **DEMO / SYNTHETIC DATA MODE** on a seeded, 
 6. [Machine-learning methodology](#machine-learning-methodology)
 7. [Data](#data)
 8. [Big-data pipeline](#big-data-pipeline)
-9. [Testing](#testing)
-10. [API](#api)
-11. [Deployment](#deployment)
-12. [Limitations](#limitations)
-13. [Disclaimer](#disclaimer)
+9. [Nexis Pulse content](#nexis-pulse-content)
+10. [Testing](#testing)
+11. [API](#api)
+12. [Deployment](#deployment)
+13. [Limitations](#limitations)
+14. [Disclaimer](#disclaimer)
 
 ---
 
@@ -249,6 +250,39 @@ The conventions below are applied everywhere and are also served to the UI as to
 | incremental append (one partition) | 0.34 | 387 MB |
 
 **PySpark is deliberately not included.** At this scale a single process handles the work in seconds, and no JVM is available in the development environment. [docs/BIG_DATA.md](docs/BIG_DATA.md) explains when Spark would be warranted and how the pipeline's stages map onto it.
+
+## Nexis Pulse content
+
+Pulse discussions come from two sources, recorded in `posts.source` and registered in
+`backend/app/services/pulse_sources.py`:
+
+| Source | Written by | Counts toward the community Pulse score |
+|---|---|---|
+| `nexis` — **Nexis Community** | members, through the Pulse composer | yes |
+| `research` — **Nexis Research** | the official `nexis.research` account (kind `editorial`) | no — shown as a separate "Nexis Research view" |
+
+Members can only create `nexis` discussions. Nexis Research discussions are labelled **Official** everywhere they
+appear, are excluded from member sentiment, participants and sentiment-change rankings, and are listed separately with
+the *Members / Nexis Research* filter. They are seeded with no likes, comments or saves.
+
+**Seeding** (run against the target database; `DATABASE_URL` / `NEXIS_DATABASE_URL` selects it):
+
+```bash
+cd backend
+python -m app.seeds.research --verify-assets --dry-run   # check symbols with live market data, write nothing
+python -m app.seeds.research                             # create or update
+```
+
+The command runs migrations first, then reconciles the content in `backend/app/seeds/research_content.py`.
+It is idempotent: each discussion has a permanent `key`, stored as `posts.external_key = "nexis-research:<key>"`.
+Missing keys are created, changed entries are updated in place (text, sentiment, topics), unchanged ones are left
+alone, and rows not owned by the research account are never touched — a second run reports `created: 0`.
+Removing an entry from the file does not delete it from the database.
+
+**Editing content:** change the entry in `research_content.py` (keep its `key`), or add a new entry with a new key,
+then rerun the command. Topics must be keys from `pulse.TOPICS`; sentiment is `bullish`, `neutral` or `bearish`;
+`days_ago` (at least 1) sets the publication date relative to the first run. `tests/test_research_seed.py` validates
+the file.
 
 ## Testing
 

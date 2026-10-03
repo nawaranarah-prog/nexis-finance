@@ -61,12 +61,13 @@ def discussions(
     sentiment: Sentiment | None = None,
     topic: str | None = Query(default=None, max_length=32),
     author: str | None = Query(default=None, max_length=30),
-    cursor: str | None = Query(default=None, max_length=20),
+    cursor: str | None = Query(default=None, max_length=40),
     limit: int = Query(default=20, ge=1, le=50),
+    source: Literal["community", "research"] | None = None,
     viewer: User | None = Depends(auth.optional_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return pulse.listing(db, viewer, symbol, sort, sentiment, topic, author, cursor, limit)
+    return pulse.listing(db, viewer, symbol, sort, sentiment, topic, author, cursor, limit, source)
 
 
 @router.post("/pulse/discussions", status_code=201)

@@ -77,7 +77,15 @@ const AR: Record<string, string> = {
   "Search any ADX or DFM share, UAE bond or global market — or ask a research question. The advisor checks live prices, news and valuations, and shows its working.":
     "ابحث عن أي سهم في سوق أبوظبي أو دبي، أو سند إماراتي، أو أي سوق عالمي — أو اطرح سؤالًا بحثيًا. يتحقق المستشار من الأسعار المباشرة والأخبار والتقييمات، ويعرض خطواته.",
   "Search a ticker or ask a question — e.g. Compare FAB and Emirates NBD": "ابحث عن رمز أو اطرح سؤالًا — مثلًا: قارن بين أبوظبي الأول والإمارات دبي الوطني",
-  // pulse discussions
+  // pulse: community vs Nexis Research
+  "Community Pulse": "نبض المجتمع", "Members and Nexis Research": "الأعضاء وأبحاث نكسس",
+  "Discussions by Nexis members and the Nexis Research team — the arguments for and against and the topics people care about. The community Pulse score is built from member discussions only.":
+    "نقاشات أعضاء نكسس وفريق أبحاث نكسس — الحجج المؤيدة والمعارضة والمواضيع التي تهم الناس. يُبنى نبض المجتمع من نقاشات الأعضاء فقط.", "Official": "رسمي", "Nexis Research": "أبحاث نكسس", "Nexis Research view": "رأي أبحاث نكسس",
+  "Members": "الأعضاء", "Member sentiment": "مزاج الأعضاء", "by members": "من الأعضاء", "by Nexis Research": "من أبحاث نكسس", "member": "عضو", "members": "أعضاء",
+  "Who wrote it": "الكاتب", "Not enough member discussions yet.": "لا توجد نقاشات كافية من الأعضاء بعد.",
+  "member discussions from the last": "نقاشًا للأعضاء خلال آخر", "Nexis Research · Official": "أبحاث نكسس · رسمي",
+  "Editorial analysis by the Nexis Research team. It is not a member opinion, it does not count toward the community Pulse score, and it is not financial advice.":
+    "تحليل تحريري من فريق أبحاث نكسس. ليس رأي عضو، ولا يُحتسب في نبض المجتمع، وليس نصيحة مالية.",
   "Pulse": "النبض", "Community": "المجتمع", "Open Community": "افتح المجتمع", "News and posts from the Community": "أخبار ومنشورات من المجتمع",
   "See what investors are saying.": "اعرف ماذا يقول المستثمرون.", "What investors on Nexis are saying": "ماذا يقول المستثمرون على نكسس",
   "Every Pulse comes from discussions written by Nexis members — the arguments for and against, the topics people care about, and an overall sentiment score.":

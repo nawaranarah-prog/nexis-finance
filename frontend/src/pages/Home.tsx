@@ -304,12 +304,16 @@ function Pulse() {
               <span className="pulse-rank num">{i + 1}</span>
               <span className="pulse-name"><span className="mono">{r.symbol}</span><span className="wl-name">{r.name ?? ""}</span></span>
               <span className="pulse-bar" aria-hidden><span style={{ transform: `scaleX(${r.discussions / max})` }} /></span>
-              <span className="pulse-n num" title={t("Pulse score")}>{r.score?.available ? r.score.value : "—"}</span>
+              {r.score?.available
+                ? <span className="pulse-n num" title={t("Community Pulse")}>{r.score.value}</span>
+                : r.research_view?.available
+                  ? <span className="pulse-n num research" title={t("Nexis Research view — editorial, not community sentiment")}>R {r.research_view.value}</span>
+                  : <span className="pulse-n num">—</span>}
             </Link>
           </li>
         ))}
       </ol>
-      {rows.length > 0 && <p className="hm-fine">{t("Bars show how many discussions; the number is the Pulse score (1–100) — the sentiment of those discussions, not a prediction. “—” means too few discussions to score.")}</p>}
+      {rows.length > 0 && <p className="hm-fine">{t("Bars count discussions by members and Nexis Research. The number is the community Pulse (1–100) from member discussions; “R” marks the Nexis Research editorial view where members haven't scored an asset yet. Neither is a prediction.")}</p>}
     </section>
   );
 }
