@@ -72,10 +72,18 @@ def serialize_user(db: Session, u: User, viewer: User | None = None, full: bool 
             "email": u.email if viewer is not None and viewer.id == u.id else None,
             "phone": u.phone if viewer is not None and viewer.id == u.id else None,
             "auth_provider": u.auth_provider if viewer is not None and viewer.id == u.id else None,
+            "role": u.role if viewer is not None and viewer.id == u.id else None,
+            "legal": _legal(db, u) if viewer is not None and viewer.id == u.id else None,
             "followed_by_me": viewer is not None
             and db.scalar(select(Follow.id).where(Follow.follower_id == viewer.id, Follow.followee_id == u.id)) is not None,
         }
     return out
+
+
+def _legal(db: Session, u: User) -> dict[str, Any]:
+    from app.services import legal
+
+    return legal.status(db, u)
 
 
 def _set_cookie(response: Response, token: str) -> None:
@@ -129,8 +137,13 @@ def register(
     display_name: str | None,
     email: str | None = None,
     phone_number: str | None = None,
+    accepted: tuple[str, str] | None = None,
 ) -> User:
-    """Create an account with an email or a mobile number (and optionally a username), then sign in."""
+    """Create an account with an email or a mobile number (and optionally a username), then sign in.
+
+    ``accepted`` is the (terms, privacy) versions the person explicitly agreed to on the form; it is stored in the
+    same transaction as the account.
+    """
     ratelimit.hit(db, f"register:{ratelimit.client_ip(request)}", 5)
     mail = (email or "").strip().lower() or None
     mobile = phone.normalize(phone_number) if phone_number else None
@@ -166,6 +179,11 @@ def register(
         auth_provider="password",
     )
     db.add(u)
+    if accepted is not None:
+        from app.services import legal
+
+        db.flush()
+        legal.accept(db, u, accepted[0], accepted[1], method="signup", commit=False)
     db.commit()
     _start_session(db, u, response)
     return u
@@ -340,7 +358,9 @@ def delete_account(db: Session, request: Request, response: Response, user: User
     elif not verify_password(password, user.password_hash):
         raise AuthenticationRequired("wrong password")
     from app.models import Comment, Like, Media, PostReport
+    from app.services import pulse
 
+    pulse.erase_member(db, user)  # anonymous Pulse text is erased and detached from the account
     post_ids = list(db.scalars(select(Post.id).where(Post.user_id == user.id)))
     for model, col in ((Like, Like.user_id), (Comment, Comment.user_id), (PostReport, PostReport.user_id)):
         db.execute(delete(model).where(col == user.id))

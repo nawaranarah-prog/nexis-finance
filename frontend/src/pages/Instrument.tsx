@@ -188,7 +188,7 @@ export default function Instrument() {
               <table className="dt"><tbody>{i.fund.top_holdings.map((t: AnyObj) => <tr key={t.symbol ?? t.name}><td className="mono">{t.symbol}</td><td>{t.name}</td><td className="r num">{pct(t.weight, 2)}</td></tr>)}</tbody></table>
             </Card>
           )}
-          <Card title={`Finstagram · $${sym}`} actions={<><Link className="btn sm" to={`/pulse/${encodeURIComponent(sym)}`}>Investor opinions</Link> <Link className="btn sm" to={`/finstagram?symbol=${encodeURIComponent(sym)}`}>Open feed</Link></>}>
+          <Card title={`Finstagram · $${sym}`} actions={<><Link className="btn sm" to={`/pulse/asset/${encodeURIComponent(sym)}`}>Pulse discussions</Link> <Link className="btn sm" to={`/finstagram?symbol=${encodeURIComponent(sym)}`}>Open feed</Link></>}>
             <QueryView q={posts} label="Loading posts">
               {(p) => p.items.length ? (
                 <div className="mini-posts">{p.items.slice(0, 4).map((it: AnyObj) => (

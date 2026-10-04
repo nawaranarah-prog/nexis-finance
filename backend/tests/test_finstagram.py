@@ -13,6 +13,7 @@ import pytest
 
 from app.markets import feeds
 from app.services import advisor, llm, oauth, social
+from tests.helpers import TERMS
 
 RSS = b"""<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>
 <item><title>Emaar posts record sales &amp; profit</title><link>https://example.com/business/emaar-record</link>
@@ -84,7 +85,7 @@ def test_engagement_save_feedback_topics_and_search(client, monkeypatch):
     )
     client.cookies.clear()
     r = client.post(
-        "/api/auth/register", json={"email": "Reader@Example.com", "password": "reader-pass-1", "display_name": "Reader"}
+        "/api/auth/register", json={**TERMS, "email": "Reader@Example.com", "password": "reader-pass-1", "display_name": "Reader"}
     )
     assert r.status_code == 201, r.text
     me = r.json()
@@ -115,7 +116,7 @@ def test_engagement_save_feedback_topics_and_search(client, monkeypatch):
         client.post("/api/auth/login", json={"identifier": "READER@example.com", "password": "reader-pass-1"}).status_code == 200
     )
     assert (
-        client.post("/api/auth/register", json={"email": "reader@example.com", "password": "another-pass-9"}).status_code == 409
+        client.post("/api/auth/register", json={**TERMS, "email": "reader@example.com", "password": "another-pass-9"}).status_code == 409
     )
     client.post("/api/auth/logout")
     client.cookies.clear()
@@ -225,10 +226,10 @@ def test_phone_normalisation():
 
 def test_phone_signup_and_login_with_password(client):
     client.cookies.clear()
-    r = client.post("/api/auth/register", json={"phone": "050 765 4321", "password": "phone-pass-77", "display_name": "Mona"})
+    r = client.post("/api/auth/register", json={**TERMS, "phone": "050 765 4321", "password": "phone-pass-77", "display_name": "Mona"})
     assert r.status_code == 201, r.text
     assert r.json()["phone"] == "+971507654321" and r.json()["display_name"] == "Mona"
-    assert client.post("/api/auth/register", json={"phone": "+971507654321", "password": "other-pass-88"}).status_code == 409
+    assert client.post("/api/auth/register", json={**TERMS, "phone": "+971507654321", "password": "other-pass-88"}).status_code == 409
     client.post("/api/auth/logout")
     client.cookies.clear()
     assert client.post("/api/auth/login", json={"identifier": "0507654321", "password": "phone-pass-77"}).status_code == 200
@@ -274,7 +275,7 @@ def test_account_settings_password_details_language_sessions(client):
     from fastapi.testclient import TestClient
 
     client.cookies.clear()
-    r = client.post("/api/auth/register", json={"email": "settings@example.com", "password": "first-pass-11"})
+    r = client.post("/api/auth/register", json={**TERMS, "email": "settings@example.com", "password": "first-pass-11"})
     assert r.status_code == 201
     other = TestClient(client.app)  # a second device
     assert (

@@ -1,20 +1,20 @@
 import { lazy, Suspense, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "./services/api";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { Toaster } from "./components/toast";
 import AppLayout from "./layouts/AppLayout";
 import { Empty, ErrorState, Loading } from "./components/ui";
 import { useWorkspace } from "./hooks/workspace";
 
 const Overview = lazy(() => import("./pages/Overview"));
-const Pulse = lazy(() => import("./pages/Pulse"));
-const PulseOverview = lazy(() => import("./pages/Pulse").then((m) => ({ default: m.PulseDiscover })));
-const PulseHome = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PulseHome })));
-const PulseTopic = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PulseTopic })));
-const PulseSearch = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PulseSearch })));
-const PersonaPage = lazy(() => import("./pages/PulseFeed").then((m) => ({ default: m.PersonaPage })));
-const Portfolio = lazy(() => import("./pages/Portfolio"));
+const PulseHome = lazy(() => import("./pages/pulse/PulseHome"));
+const PulseDiscussion = lazy(() => import("./pages/pulse/PulseDiscussion"));
+const PulseAsset = lazy(() => import("./pages/pulse/PulseAsset"));
+const MyNexis = lazy(() => import("./pages/MyNexis"));
+const MyNexisAsset = lazy(() => import("./pages/MyNexis").then((m) => ({ default: m.MyNexisAsset })));
+const Legal = lazy(() => import("./pages/Legal"));
+const Moderation = lazy(() => import("./pages/Moderation"));
 const NotificationsPage = lazy(() => import("./pages/Notifications"));
 const MarketData = lazy(() => import("./pages/MarketData"));
 const DataQuality = lazy(() => import("./pages/DataQuality"));
@@ -85,6 +85,20 @@ function Guard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Old Pulse and Portfolio addresses keep working. */
+function LegacyPulseAsset() {
+  const { symbol } = useParams();
+  return <Navigate to={`/pulse/asset/${encodeURIComponent(symbol ?? "")}`} replace />;
+}
+
+function LegacyPortfolio() {
+  const [sp] = useSearchParams();
+  const tab = sp.get("tab");
+  const sym = sp.get("symbol");
+  if (sym) return <Navigate to={`/my-nexis/asset/${encodeURIComponent(sym)}`} replace />;
+  return <Navigate to={tab === "watchlist" ? "/my-nexis/watchlist" : tab === "alerts" ? "/my-nexis/alerts" : tab === "intelligence" ? "/my-nexis" : "/my-nexis/investments"} replace />;
+}
+
 function LegacySocial() {
   const loc = useLocation();
   return <Navigate to={loc.pathname.replace(/^\/social/, "/finstagram") + loc.search} replace />;
@@ -131,21 +145,33 @@ export default function App() {
           <Route path="/markets" element={<Markets />} />
           <Route path="/markets/:symbol" element={<Instrument />} />
           <Route path="/advisor" element={<Advisor />} />
-          <Route path="/pulse" element={<PulseHome mode="trending" />} />
-          <Route path="/pulse/latest" element={<PulseHome mode="latest" />} />
-          <Route path="/pulse/trending" element={<PulseHome mode="trending" />} />
-          <Route path="/pulse/following" element={<PulseHome mode="following" />} />
-          <Route path="/pulse/saved" element={<PulseHome mode="saved" />} />
-          <Route path="/pulse/topics" element={<PulseTopic />} />
-          <Route path="/pulse/topics/:topic" element={<PulseTopic />} />
-          <Route path="/pulse/search" element={<PulseSearch />} />
-          <Route path="/pulse/overview" element={<PulseOverview />} />
-          <Route path="/pulse/persona/:username" element={<PersonaPage />} />
-          <Route path="/pulse/discussion/:id" element={<Pulse />} />
-          <Route path="/pulse/ticker/:symbol" element={<Pulse />} />
-          <Route path="/pulse/d/:id" element={<Pulse />} />
-          <Route path="/pulse/:symbol" element={<Pulse />} />
-          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/pulse" element={<PulseHome />} />
+          <Route path="/pulse/topic/:topic" element={<PulseHome view="topic" />} />
+          <Route path="/pulse/search" element={<PulseHome view="search" />} />
+          <Route path="/pulse/asset/:symbol" element={<PulseAsset />} />
+          <Route path="/pulse/d/:id" element={<PulseDiscussion />} />
+          <Route path="/pulse/d/:id/:slug" element={<PulseDiscussion />} />
+          <Route path="/pulse/discussion/:id" element={<PulseDiscussion />} />
+          <Route path="/pulse/latest" element={<Navigate to="/pulse?sort=latest" replace />} />
+          <Route path="/pulse/trending" element={<Navigate to="/pulse" replace />} />
+          <Route path="/pulse/following" element={<Navigate to="/pulse?sort=following" replace />} />
+          <Route path="/pulse/saved" element={<Navigate to="/pulse?sort=saved" replace />} />
+          <Route path="/pulse/topics" element={<Navigate to="/pulse" replace />} />
+          <Route path="/pulse/topics/:topic" element={<PulseHome view="topic" />} />
+          <Route path="/pulse/overview" element={<Navigate to="/pulse" replace />} />
+          <Route path="/pulse/persona/:username" element={<Navigate to="/pulse" replace />} />
+          <Route path="/pulse/ticker/:symbol" element={<LegacyPulseAsset />} />
+          <Route path="/pulse/:symbol" element={<LegacyPulseAsset />} />
+          <Route path="/my-nexis" element={<MyNexis />} />
+          <Route path="/my-nexis/asset/:symbol" element={<MyNexisAsset />} />
+          <Route path="/my-nexis/:section" element={<MyNexis />} />
+          <Route path="/portfolio" element={<LegacyPortfolio />} />
+          <Route path="/moderation" element={<Moderation />} />
+          <Route path="/terms" element={<Legal />} />
+          <Route path="/privacy" element={<Legal />} />
+          <Route path="/disclaimer" element={<Legal />} />
+          <Route path="/community-guidelines" element={<Legal />} />
+          <Route path="/ai-disclosure" element={<Legal />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/valuation" element={<Valuation />} />

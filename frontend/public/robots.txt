@@ -2,5 +2,9 @@ User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /settings
+Disallow: /my-nexis
+Disallow: /notifications
+Disallow: /moderation
+Disallow: /portfolio
 
 Sitemap: https://nexis-finance-five.vercel.app/sitemap.xml

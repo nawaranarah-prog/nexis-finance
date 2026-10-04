@@ -92,18 +92,31 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("NEXIS_TWILIO_VERIFY_SID", "TWILIO_VERIFY_SERVICE_SID")
     )
 
-    # Nexis Pulse generated discussions. They use the AI client above (no extra service); these limits keep
-    # usage inside free tiers. A thread costs two model calls, a follow-up one.
+    # Nexis Pulse market debate. The AI narrative uses the AI client above (no extra service); these limits keep
+    # usage inside free tiers. One asset's narrative costs one model call; scores never need a model.
     pulse_model: str = "openai/gpt-4.1-mini,openai/gpt-4.1"
-    pulse_daily_threads: int = 16
+    # A page view recomputes an asset's analysis (cheap, cached feeds) when it is older than this.
+    pulse_fresh_minutes: int = 30
+    # The AI narrative for one asset is rewritten at most this often, and only when its evidence changed.
+    pulse_ai_refresh_minutes: int = 180
+    pulse_ai_daily_limit: int = 60
+    # Background refresh (cron / page nudges) runs at most this often.
     pulse_tick_minutes: int = 40
-    pulse_personas: int = 100
     # Email delivery for digests (not connected; digests are prepared and kept until a provider is added).
     email_provider: str | None = None
 
     # Abuse protection for public endpoints (per client IP, per hour).
     advisor_requests_per_hour: int = 20
     posts_per_hour: int = 12
+    # Anonymous Pulse participation, per account.
+    pulse_discussions_per_day: int = 8
+    pulse_comments_per_hour: int = 30
+    pulse_reactions_per_hour: int = 200
+    pulse_reports_per_day: int = 30
+    # Nexis editorial discussions the background engine may publish or update per run.
+    pulse_editorial_per_tick: int = 3
+    # The public site, used for canonical URLs, sitemaps and the cross-site request check.
+    public_site_url: str = "https://nexis-finance-five.vercel.app"
     # Seed the demo database in the background when it is empty (hosted demo deployments).
     auto_seed: bool = False
 

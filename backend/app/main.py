@@ -14,7 +14,21 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
-from app.api.routes import connectivity, data, markets, me, portfolios, public_v1, pulse, reports, research, seo, social, system
+from app.api.routes import (
+    connectivity,
+    data,
+    legal,
+    markets,
+    me,
+    portfolios,
+    public_v1,
+    pulse,
+    reports,
+    research,
+    seo,
+    social,
+    system,
+)
 from app.core.config import APP_VERSION, get_settings
 from app.core.errors import NexisError
 from app.core.logging import configure_logging, get_logger, log_event, request_metrics
@@ -64,6 +78,38 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+
+_UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _origin_allowed(origin: str, host: str | None) -> bool:
+    from urllib.parse import urlsplit
+
+    o = origin.rstrip("/")
+    if o in settings.cors_origin_list or o == settings.public_site_url.rstrip("/"):
+        return True
+    parts = urlsplit(o)
+    if parts.hostname in ("localhost", "127.0.0.1"):
+        return True
+    return bool(host) and parts.netloc == host  # same origin as the API itself
+
+
+@app.middleware("http")
+async def origin_check(request: Request, call_next: Any) -> Any:
+    """Cross-site request forgery guard for cookie-authenticated writes (on top of SameSite=Lax cookies).
+
+    A browser always sends ``Origin`` on cross-site POST/PUT/PATCH/DELETE; requests that carry the session cookie from
+    an origin that isn't Nexis are refused. Requests without a session cookie or without ``Origin`` (server-to-server,
+    the cron) are unaffected.
+    """
+    if request.method in _UNSAFE and request.cookies.get("nexis_session"):
+        origin = request.headers.get("origin")
+        if origin and origin != "null" and not _origin_allowed(origin, request.headers.get("host")):
+            return _error(403, "forbidden_origin", "this request came from another website and was blocked")
+        if origin == "null":
+            return _error(403, "forbidden_origin", "this request came from another website and was blocked")
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -131,5 +177,6 @@ for r in (
     seo.router,
     pulse.router,
     me.router,
+    legal.router,
 ):
     app.include_router(r, prefix="/api")

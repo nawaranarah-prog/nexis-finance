@@ -51,6 +51,10 @@ class User(Base, TimestampMixin):
     links: Mapped[dict | None] = mapped_column(JSON)
     avatar_media_id: Mapped[int | None] = mapped_column(Integer)
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # member | moderator | admin. Set with ``python -m app.cli.set_role`` (never from the web).
+    role: Mapped[str] = mapped_column(String(12), default="member", server_default="member", nullable=False)
+    # Moderators can pause someone's Pulse posting without closing the account.
+    posting_suspended_until: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class LinkedAccount(Base, TimestampMixin):

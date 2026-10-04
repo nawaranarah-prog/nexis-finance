@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from app.services import oauth
+from tests.helpers import TERMS
 
 
 def _configure(monkeypatch):  # type: ignore[no-untyped-def]
@@ -55,7 +56,7 @@ def test_link_reddit_and_x_then_sign_in_with_reddit(client, monkeypatch):
     assert anon.headers["location"].startswith("/settings?error=")  # linking needs a Nexis account
 
     mail = f"link{random.randint(10000, 99999)}@example.com"
-    assert client.post("/api/auth/register", json={"email": mail, "password": "linking-pass-1"}).status_code == 201
+    assert client.post("/api/auth/register", json={**TERMS, "email": mail, "password": "linking-pass-1"}).status_code == 201
     r = client.get("/api/auth/oauth/reddit/start", params={"mode": "link", "next": "/settings"}, follow_redirects=False)
     q = parse_qs(urlparse(r.headers["location"]).query)
     assert r.headers["location"].startswith("https://www.reddit.com/api/v1/authorize") and q["scope"] == ["identity"]

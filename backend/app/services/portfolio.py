@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import NexisError, NotFoundError, ProviderError, ValidationFailed
 from app.db.base import utcnow
 from app.models import TopicFollow, User, UserHolding
-from app.services import events, llm, markets, personas, pulse, social
+from app.services import events, llm, markets, pulse, social
 
 ASSET_TYPES = ("stock", "etf", "fund", "bond", "crypto", "other")
 MAX_HOLDINGS = 200
@@ -35,8 +35,12 @@ def _guess_type(symbol: str, quote: dict[str, Any] | None) -> str:
         return "etf"
     if qt in ("mutualfund", "fund"):
         return "fund"
-    c = personas.classify(symbol)["class"]
-    return {"bond": "bond", "crypto": "crypto"}.get(c, "stock" if qt in ("equity", "") else "other")
+    s = symbol.upper()
+    if s.endswith(".BOND"):
+        return "bond"
+    if s.endswith("-USD"):
+        return "crypto"
+    return "stock" if qt in ("equity", "") else "other"
 
 
 def _holding(h: UserHolding) -> dict[str, Any]:
@@ -258,7 +262,7 @@ def intelligence(db: Session, user: User, days: int = 7) -> dict[str, Any]:
                 per.setdefault(a, []).append(events.serialize(e))
     assets = []
     for sym in sorted(tr, key=lambda s: (-len(per.get(s, [])), s)):
-        disc = pulse.listing(db, user, symbol=sym, limit=2)["items"]
+        disc = pulse.for_symbol(db, user, sym, limit=3)
         assets.append({"symbol": sym, "relation": tr[sym], "developments": per.get(sym, [])[:6], "discussions": disc})
     important = sum(
         1 for items in per.values() for e in items if e["importance"] >= 3 or e["kind"] in ("earnings", "dividend", "price_move")
@@ -272,37 +276,91 @@ def intelligence(db: Session, user: User, days: int = 7) -> dict[str, Any]:
     }
 
 
-def asset_intelligence(db: Session, user: User | None, symbol: str) -> dict[str, Any]:
-    sym = markets.clean_symbol(symbol)
-    evs = [events.serialize(e) for e in events.recent(db, [sym], days=30, limit=15)]
-    upcoming: list[dict[str, Any]] = []
+def _upcoming(db: Session, sym: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     try:
         d = markets.details(db, sym)
-        if d.get("next_earnings"):
-            upcoming.append({"kind": "earnings", "date": str(d["next_earnings"]), "source": "Market data (company calendar)"})
-        div = d.get("dividends") or {}
-        if isinstance(div, dict) and div.get("ex_date"):
-            upcoming.append({"kind": "ex-dividend", "date": str(div["ex_date"]), "source": "Market data"})
-        if (d.get("bond") or {}).get("maturity"):
-            upcoming.append({"kind": "maturity", "date": str(d["bond"]["maturity"]), "source": "Bond terms"})
     except NexisError:
-        pass
+        return out
+    if d.get("next_earnings"):
+        out.append({"kind": "earnings", "date": str(d["next_earnings"])[:10], "source": "Market data (company calendar)"})
+    div = d.get("dividends") or {}
+    if isinstance(div, dict) and div.get("ex_date"):
+        out.append({"kind": "ex-dividend", "date": str(div["ex_date"])[:10], "source": "Market data"})
+    if (d.get("bond") or {}).get("maturity"):
+        out.append({"kind": "maturity", "date": str(d["bond"]["maturity"])[:10], "source": "Bond terms"})
+    today = date.today().isoformat()
+    return [u for u in out if u["date"] >= today]
+
+
+def asset_intelligence(db: Session, user: User | None, symbol: str) -> dict[str, Any]:
+    """What matters about one asset right now: price, developments, sector news, risks, Nexis analysis, Pulse."""
+    sym = markets.clean_symbol(symbol)
+    try:
+        q = (markets.quotes(db, [sym]) or [None])[0]
+    except NexisError:
+        q = None
+    evs = [events.serialize(e) for e in events.recent(db, [sym], days=30, limit=20)]
+    company = [e for e in evs if e["kind"] in ("earnings", "dividend", "filing", "deal", "regulation")]
+    news = [e for e in evs if e not in company and e["kind"] != "price_move"]
+    moves = [e for e in evs if e["kind"] == "price_move"][:3]
+    sector = events.SECTOR_BY_SYMBOL.get(sym)
+    peers = [s for s, sec in events.SECTOR_BY_SYMBOL.items() if sec == sector and s != sym] if sector else []
+    sector_news = [events.serialize(e) for e in events.recent(db, peers, days=7, limit=6)] if peers else []
     position = None
     if user is not None:
         rows = [h for h in db.scalars(select(UserHolding).where(UserHolding.user_id == user.id, UserHolding.symbol == sym))]
         if rows:
             position = {"quantity": sum(h.quantity for h in rows), "lots": [_holding(h) for h in rows]}
+    from app.models import PulseDiscussion
+
+    ed = db.scalars(select(PulseDiscussion).where(PulseDiscussion.editorial_key == f"asset:{sym}", PulseDiscussion.status == "visible")).first()
+    analysis = pulse.serialize_full(db, ed, user) if ed else None
+    risks: list[dict[str, Any]] = []
+    if analysis:
+        srcs = {s["id"]: s for s in analysis["sources"]}
+        risks = [{"point": p["point"], "sources": [srcs[i] for i in p["source_ids"] if i in srcs][:2], "from": "Nexis analysis"}
+                 for p in analysis["editorial"]["bear_case"]][:3]  # fmt: skip
+    risks += [{"point": e["title"], "sources": [{"title": e["title"], "url": e["url"], "publisher": e["publisher"], "published_at": e["published_at"]}],
+               "from": "Recent coverage"} for e in evs if "risk" in (e.get("topics") or [])][: max(0, 4 - len(risks))]  # fmt: skip
     return {
-        "symbol": sym, "events": evs, "upcoming": upcoming, "position": position,
-        "discussions": pulse.listing(db, user, symbol=sym, sort="top", limit=4)["items"],
+        "symbol": sym, "name": (q or {}).get("name") or sym,
+        "quote": {k: q.get(k) for k in ("price", "change", "change_pct", "currency", "exchange", "market_time")} if q else None,
+        "events": evs, "news": news[:8], "company": company[:6], "moves": moves, "sector": {"key": sector, "events": sector_news},
+        "risks": risks, "analysis": analysis, "upcoming": _upcoming(db, sym), "position": position,
+        "discussions": pulse.for_symbol(db, user, sym, limit=5),
         "status": status_for(db, user, sym),
+    }  # fmt: skip
+
+
+def today(db: Session, user: User) -> dict[str, Any]:
+    """"Your Nexis Today": the few things that matter to what this member owns and watches."""
+    tr = tracked(db, user)
+    if not tr:
+        return {"tracked": 0, "developments": [], "discussions": [], "upcoming": [], "counts": {"developments": 0, "discussions": 0, "upcoming": 0}}
+    since = utcnow() - timedelta(hours=48)
+    material = [e for e in events.recent(db, list(tr), days=2, limit=80)
+                if e.published_at >= since and (e.importance >= 2 or e.kind in ("earnings", "dividend", "price_move", "filing", "regulation"))]  # fmt: skip
+    material.sort(key=lambda e: (tr.get(next((a for a in e.assets or [] if a in tr), ""), "") == "holding", e.importance, e.published_at), reverse=True)
+    active = [d for d in pulse.feed(db, user, "for_you", limit=12)["items"]
+              if d["last_activity_at"] and d["last_activity_at"] >= since.isoformat() + "Z" and set([d["symbol"], *d["symbols"]]) & set(tr)]  # fmt: skip
+    horizon = (date.today() + timedelta(days=21)).isoformat()
+    upcoming = []
+    for sym in sorted(tr, key=lambda s: tr[s] != "holding")[:12]:
+        upcoming += [{"symbol": sym, "relation": tr[sym], **u} for u in _upcoming(db, sym) if u["date"] <= horizon]
+    upcoming.sort(key=lambda u: u["date"])
+    devs = [events.serialize(e) | {"relation": tr.get(next((a for a in e.assets or [] if a in tr), ""), None)} for e in material[:8]]
+    return {
+        "tracked": len(tr), "holdings": sum(1 for v in tr.values() if v == "holding"), "watching": sum(1 for v in tr.values() if v == "watchlist"),
+        "developments": devs, "discussions": active[:5], "upcoming": upcoming[:8],
+        "counts": {"developments": len(material), "discussions": len(active), "upcoming": len(upcoming)},
     }  # fmt: skip
 
 
 BRIEF = """You prepare a short, neutral intelligence note about {symbol} for someone who tracks it.
 Use ONLY the FACTS and DISCUSSIONS below. Do not add prices, figures, dates or events that are not there.
 Never recommend buying, selling or holding, and don't address the reader's decision. Discussions are opinions
-(from members, Nexis Research, or Nexis-generated perspectives as labelled) — present them as views, not facts.
+(from anonymous community members, or Nexis editorial context, as labelled) — present them as views, not facts.
 
 FACTS (verified developments with sources)
 {facts}
@@ -325,7 +383,8 @@ def brief(db: Session, user: User | None, symbol: str) -> dict[str, Any]:
                       + (f" — {e['summary'][:400]}" if e.get("summary") else "") for i, e in enumerate(evs, 1))  # fmt: skip
     disc = (
         "\n".join(
-            f"- ({d['source']['label']}) {d['title']}" + (f" · {d['sentiment']}" if d.get("sentiment") else "")
+            f"- ({'Nexis editorial' if d['kind'] == 'editorial' else 'Anonymous community member'}) {d['title']}"
+            + (f" · {d['stance']}" if d.get("stance") else "")
             for d in data["discussions"]
         )
         or "None yet."

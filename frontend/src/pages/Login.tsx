@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../services/api";
 import { useT } from "../i18n";
+import { rememberTermsChoice } from "../components/pulse";
 
 function GoogleIcon() {
   return (
@@ -20,7 +21,8 @@ export default function Login() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const { t } = useT();
-  const next = sp.get("next") && sp.get("next")!.startsWith("/") ? sp.get("next")! : "/finstagram";
+  const rawNext = sp.get("next");
+  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/pulse";
   const providers = useQuery({ queryKey: ["auth-providers"], queryFn: () => api.get<Record<string, boolean>>("/auth/providers"), staleTime: 600_000 });
   const [mode, setMode] = useState<"signin" | "signup">(sp.get("mode") === "signup" ? "signup" : "signin");
   const [method, setMethod] = useState<"email" | "phone">("email");
@@ -28,7 +30,12 @@ export default function Login() {
   const [codeSent, setCodeSent] = useState(false);
   const [err, setErr] = useState<string | null>(sp.get("error"));
   const [busy, setBusy] = useState(false);
+  // Never pre-ticked: creating an account needs an explicit choice.
+  const [agree, setAgree] = useState(false);
+  const legal = useQuery({ queryKey: ["legal-docs"], queryFn: () => api.get<Record<string, string>>("/legal"), staleTime: 3600_000 });
+  const versions = legal.data ? { terms_version: legal.data.terms_version, privacy_version: legal.data.privacy_version } : null;
   const otp = method === "phone" && !!providers.data?.phone_otp;
+  const signup = mode === "signup";
 
   const done = async () => {
     await qc.invalidateQueries({ queryKey: ["me"] });
@@ -37,6 +44,7 @@ export default function Login() {
   };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (signup && (!agree || !versions)) { setErr(t("Please accept the Terms of Use and acknowledge the Privacy Policy to create an account.")); return; }
     setBusy(true); setErr(null);
     try {
       if (otp) {
@@ -46,30 +54,40 @@ export default function Login() {
           return;
         }
         await api.post("/auth/phone/verify", { phone: f.phone, code: f.code });
+        if (signup && agree && versions) await api.post("/legal/accept", versions).catch(() => undefined);
       } else if (mode === "signin") {
         await api.post("/auth/login", { identifier: method === "phone" ? f.phone : f.email, password: f.password });
       } else {
         await api.post("/auth/register", {
           ...(method === "phone" ? { phone: f.phone } : { email: f.email }),
           password: f.password,
+          accept_terms: agree,
+          ...versions,
         });
       }
       await done();
     } catch (x) { setErr(errorMessage(x)); } finally { setBusy(false); }
   };
-  const google = () => window.location.assign(`/api/auth/oauth/google/start?next=${encodeURIComponent(next)}`);
+  const oauth = (provider: string) => {
+    if (signup) {
+      if (!agree || !versions) { setErr(t("Please accept the Terms of Use and acknowledge the Privacy Policy to create an account.")); return; }
+      rememberTermsChoice(versions);  // recorded when you come back signed in
+    }
+    window.location.assign(`/api/auth/oauth/${provider}/start?next=${encodeURIComponent(next)}`);
+  };
+  const google = () => oauth("google");
   const switchMethod = (m: "email" | "phone") => { setMethod(m); setErr(null); setCodeSent(false); };
 
   return (
     <div className="login">
       <aside className="login-brand">
         <div className="login-logo">NEXIS FINANCE</div>
-        <h1>UAE markets, an AI advisor and a community of investors — in one place.</h1>
+        <h1>Financial intelligence, your investments in context, and an honest market debate.</h1>
         <ul>
+          <li>Nexis Pulse: anonymous discussion between real investors, next to sourced Nexis editorial context</li>
+          <li>My Nexis: what matters to the investments you own and watch — private to you</li>
           <li>Every ADX and DFM share, UAE bonds and sukuk, plus global markets</li>
           <li>An AI advisor that researches live data before it answers</li>
-          <li>Finstagram: follow stocks, news pages and people you trust</li>
-          <li>Comparisons, valuations and PDF reports</li>
         </ul>
         <div className="xs" style={{ opacity: 0.7 }}>Educational research tools — not personalised financial advice.</div>
       </aside>
@@ -81,12 +99,12 @@ export default function Login() {
             <>
               {providers.data?.google && <button className="oauth-btn" onClick={google}><GoogleIcon /> {t("Continue with Google")}</button>}
               {providers.data?.reddit && (
-                <button className="oauth-btn" onClick={() => window.location.assign(`/api/auth/oauth/reddit/start?next=${encodeURIComponent(next)}`)}>
+                <button className="oauth-btn" onClick={() => oauth("reddit")}>
                   <span className="src-mark reddit" aria-hidden>r/</span> {t("Continue with Reddit")}
                 </button>
               )}
               {providers.data?.x && (
-                <button className="oauth-btn" onClick={() => window.location.assign(`/api/auth/oauth/x/start?next=${encodeURIComponent(next)}`)}>
+                <button className="oauth-btn" onClick={() => oauth("x")}>
                   <span className="src-mark x" aria-hidden>𝕏</span> {t("Continue with X")}
                 </button>
               )}
@@ -119,6 +137,12 @@ export default function Login() {
                 <input className="input" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} required minLength={mode === "signup" ? 8 : 1} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
             )}
             {mode === "signup" && !otp && <div className="xs muted">At least 8 characters. Passwords are stored only as salted scrypt hashes.</div>}
+            {signup && (
+              <label className="np-check login-terms">
+                <input type="checkbox" checked={agree} onChange={(e) => { setAgree(e.target.checked); setErr(null); }} required />
+                <span>I agree to the Nexis Finance <Link to="/terms" target="_blank">Terms of Use</Link> and acknowledge the <Link to="/privacy" target="_blank">Privacy Policy</Link>.</span>
+              </label>
+            )}
             {err && <div className="banner error small">{err}</div>}
             <button className="btn primary block login-submit" disabled={busy}>
               {busy ? "…" : t(otp ? (codeSent ? "Verify and continue" : "Send me a code") : mode === "signin" ? "Sign in" : "Create account")}

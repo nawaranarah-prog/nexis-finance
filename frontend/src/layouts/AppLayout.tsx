@@ -9,6 +9,7 @@ import { useWorkspace } from "../hooks/workspace";
 import type { AnyObj, Notification } from "../types/api";
 import { dt } from "../utils/format";
 import { useT } from "../i18n";
+import { LegalGate } from "../components/pulse";
 
 /** Every route in the app, grouped by task. Pulse, Markets and Research stay open; the rest fold away until needed. */
 export const NAV: { group: string; fixed?: boolean; items: { to: string; label: string }[] }[] = [
@@ -17,15 +18,16 @@ export const NAV: { group: string; fixed?: boolean; items: { to: string; label: 
     fixed: true,
     items: [
       { to: "/pulse", label: "Pulse" },
-      { to: "/finstagram", label: "Community" },
+      { to: "/finstagram", label: "Community feed" },
     ],
   },
   {
-    group: "You",
+    group: "My Nexis",
     fixed: true,
     items: [
-      { to: "/portfolio", label: "Portfolio" },
-      { to: "/portfolio?tab=watchlist", label: "Watchlist" },
+      { to: "/my-nexis", label: "Today" },
+      { to: "/my-nexis/investments", label: "My investments" },
+      { to: "/my-nexis/watchlist", label: "Watchlist" },
       { to: "/notifications", label: "Notifications" },
     ],
   },
@@ -104,7 +106,7 @@ export const NAV: { group: string; fixed?: boolean; items: { to: string; label: 
 const isActive = (to: string, path: string, search = "") => {
   const [p, q] = to.split("?");
   if (q) return path === p && search.includes(q);
-  if (p === "/portfolio") return path === p && !search.includes("tab=watchlist");
+  if (p === "/my-nexis") return path === p || path.startsWith("/my-nexis/asset/");
   return p === "/" ? path === "/" : path === p || path.startsWith(`${p}/`);
 };
 
@@ -173,8 +175,11 @@ function Account() {
       {open && (
         <div className="share-menu popover-in" role="menu" style={{ right: 0, left: "auto", transformOrigin: "top right" }}>
           <div className="small" style={{ padding: "8px 10px" }}><b>{u.display_name}</b><div className="xs muted">@{u.username}{u.email ? ` · ${u.email}` : ""}</div></div>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/my-nexis"); }}>{t("My Nexis")}</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/my-nexis/activity"); }}>{t("My Pulse activity")} <span className="xs muted">· {t("private")}</span></button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/pulse?sort=saved"); }}>{t("Saved discussions")}</button>
+          {(u.role === "moderator" || u.role === "admin") && <button role="menuitem" onClick={() => { setOpen(false); nav("/moderation"); }}>{t("Moderation")}</button>}
           <button role="menuitem" onClick={() => { setOpen(false); nav(`/finstagram/u/${u.username}`); }}>{t("My Finstagram profile")}</button>
-          <button role="menuitem" onClick={() => { setOpen(false); nav("/finstagram?mode=saved"); }}>{t("Saved posts")}</button>
           <button role="menuitem" onClick={() => { setOpen(false); nav("/advisor"); }}>{t("AI Advisor")}</button>
           <button role="menuitem" onClick={() => { setOpen(false); nav("/settings"); }}>{t("Account settings")}</button>
           <button role="menuitem" onClick={logout}>{t("Sign out")}</button>
@@ -194,8 +199,8 @@ function TabBar() {
     { to: "/", label: "Home", icon: "⌂" },
     { to: "/markets", label: "Markets", icon: "↗" },
     { to: "/pulse", label: "Pulse", icon: "P", primary: true },
-    { to: "/portfolio", label: "Portfolio", icon: "◧" },
-    { to: me ? `/finstagram/u/${me.username}` : "/login", label: me ? "Me" : "Sign in", icon: "◉" },
+    { to: "/my-nexis", label: "My Nexis", icon: "◧" },
+    { to: me ? "/notifications" : "/login", label: me ? "Alerts" : "Sign in", icon: "◉" },
   ];
   return (
     <nav className="tabbar" aria-label="Main">
@@ -343,23 +348,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       title = "AI Financial Advisor — ask about any UAE or global stock · Nexis Finance";
       desc = "Ask an AI financial advisor about Emaar, FAB, Aldar or any stock, bond or sukuk. It checks live prices, news and analyst ratings before it answers.";
     } else if (path.startsWith("/pulse/d/") || path.startsWith("/pulse/discussion/")) {
-      title = "Discussion · Nexis Pulse";
-    } else if (path.startsWith("/pulse/persona/")) {
-      title = `@${path.split("/")[3]} · Nexis-generated persona · Nexis Pulse`;
-    } else if (/^\/pulse\/(latest|trending|following|saved|topics|search|overview)/.test(path)) {
-      const part = path.split("/")[2];
-      title = `${part.charAt(0).toUpperCase()}${part.slice(1)} · Nexis Pulse`;
-    } else if (path.startsWith("/pulse/")) {
-      const s = path.startsWith("/pulse/ticker/") ? path.split("/")[3] : path.split("/")[2];
-      title = `${s} — what investors are saying · Nexis Pulse`;
-      desc = `Nexis Pulse for ${s}: discussions, the bullish and bearish arguments, sourced news and the people discussing it.`;
-    } else if (path === "/pulse") {
-      title = "Nexis Pulse — financial conversations, grounded in real events";
-      desc = "Investors and Nexis-generated perspectives discussing stocks, bonds, crypto, rates and markets — every generated discussion is tied to a real, sourced event.";
-    } else if (path === "/portfolio") {
-      title = "Portfolio · Nexis Finance";
+      title = "Discussion · Nexis Pulse";  // the discussion page sets its own title once loaded
+    } else if (path.startsWith("/pulse/asset/")) {
+      const s = path.split("/")[3];
+      title = `${s} — what the market is debating · Nexis Pulse`;
+      desc = `Nexis editorial context on ${s} — what happened, the bull and bear cases, open questions and sources — and anonymous community discussion.`;
+    } else if (path.startsWith("/pulse/topic/")) {
+      title = `${path.split("/")[3].replace(/_/g, " ")} · Nexis Pulse`;
+    } else if (path.startsWith("/pulse")) {
+      title = "Nexis Pulse — what the market is debating";
+      desc = "Anonymous discussion between real investors next to Nexis editorial context: what happened, the bull and bear cases, open questions and sources. No fake users, no invented activity.";
+    } else if (path.startsWith("/my-nexis")) {
+      title = "My Nexis · Nexis Finance";
     } else if (path === "/notifications") {
       title = "Notifications · Nexis Finance";
+    } else if (path === "/moderation") {
+      title = "Moderation · Nexis Pulse";
+    } else if (["/terms", "/privacy", "/disclaimer", "/community-guidelines", "/ai-disclosure"].includes(path)) {
+      title = `${{ "/terms": "Terms of Use", "/privacy": "Privacy Policy", "/disclaimer": "Financial Disclaimer", "/community-guidelines": "Community Guidelines", "/ai-disclosure": "AI Disclosure" }[path]} · Nexis Finance`;
     } else if (path.startsWith("/finstagram")) {
       title = "Community · Nexis Finance";
       desc = "Real market news, charts and videos from UAE and global sources. Like, save, comment and follow stocks and news pages.";
@@ -368,10 +374,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     }
     document.title = title;
     document.querySelector('meta[name="description"]')?.setAttribute("content", desc);
+    // Private pages are never indexed.
+    const priv = ["/my-nexis", "/notifications", "/settings", "/moderation", "/portfolio"].some((p) => path === p || path.startsWith(`${p}/`));
+    document.querySelector('meta[name="robots"]')?.setAttribute("content", priv ? "noindex, nofollow" : "index, follow, max-image-preview:large");
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", `https://nexis-finance-five.vercel.app${location.pathname}`);
   }, [location.pathname]);
   // The research-dataset picker only matters on the research pages, not on Home, Finstagram, markets or the advisor.
-  const consumer = ["/finstagram", "/advisor", "/pulse", "/markets", "/compare", "/valuation", "/login", "/settings"];
+  const consumer = ["/finstagram", "/advisor", "/pulse", "/markets", "/compare", "/valuation", "/login", "/settings", "/my-nexis", "/notifications",
+    "/moderation", "/terms", "/privacy", "/disclaimer", "/community-guidelines", "/ai-disclosure"];
   const researchPage = location.pathname !== "/" && !consumer.some((p) => location.pathname.startsWith(p));
   const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, label: t(it.label), group: t(g.group) })));
   return (
@@ -383,7 +393,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <span className="brand-name" dir="ltr">Nexis <span>Finance</span></span>
         </Link>
         <SideNav />
-        <div className="side-foot">{t("Research software · not investment advice")}</div>
+        <div className="side-foot">
+          <div>{t("Information, not investment advice")}</div>
+          <nav className="side-legal" aria-label="Legal">
+            <Link to="/terms">{t("Terms")}</Link><Link to="/privacy">{t("Privacy")}</Link><Link to="/disclaimer">{t("Disclaimer")}</Link>
+            <Link to="/community-guidelines">{t("Guidelines")}</Link><Link to="/ai-disclosure">{t("AI disclosure")}</Link>
+          </nav>
+        </div>
       </aside>
       <div className="main">
         <header className="topbar">
@@ -404,7 +420,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <span aria-hidden>⌕</span><span className="grow">{t("Search or jump to…")}</span><kbd className="hide-sm">Ctrl K</kbd>
           </button>
           <Link to="/pulse" className={`top-link hide-sm ${location.pathname.startsWith("/pulse") ? "on" : ""}`}><span className="top-link-mark" aria-hidden>P</span>{t("Pulse")}</Link>
-          <Link to="/finstagram" className={`top-link hide-sm ${location.pathname.startsWith("/finstagram") ? "on" : ""}`}>{t("Community")}</Link>
+          <Link to="/my-nexis" className={`top-link hide-sm ${location.pathname.startsWith("/my-nexis") ? "on" : ""}`}>{t("My Nexis")}</Link>
           <Link to="/advisor" className={`top-link hide-sm ${location.pathname.startsWith("/advisor") ? "on" : ""}`}><span className="top-link-mark ai" aria-hidden>✦</span>{t("AI Advisor")}</Link>
           <Notifications />
           <Account />
@@ -421,6 +437,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </div>
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={pages} />
       <TabBar />
+      <LegalGate />
       <Toaster />
     </div>
   );

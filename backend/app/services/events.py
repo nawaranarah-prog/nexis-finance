@@ -4,10 +4,13 @@ Providers turn verifiable information into ``SourceEvent`` rows with the facts e
 
 * ``newsfeed``    — articles already imported by the news pages (publisher RSS / Google News), with their links.
 * ``market_data`` — large daily price moves from the existing market-data providers (delayed quotes).
-* ``nexis``       — Nexis Research editorial notes.
+* ``nexis``       — older Nexis Research editorial notes (no longer collected; kept so stored rows still label).
+* ``news_search`` — per-asset headlines found by the Nexis Pulse news connector (Yahoo Finance, Google News).
+* ``sec_edgar``   — company filings from SEC EDGAR, found by the Nexis Pulse filing connector.
 
-Planned providers (Reddit, X, a licensed news API, SEC EDGAR filings) are registered with ``connected = False``
-and are never called. Adding one means implementing ``fetch`` and flipping it on — nothing else changes.
+Social sources (Reddit, X) and a licensed news API are registered with ``connected = False`` and are never
+called; see ``app/services/pulse_connectors.py`` for how a connector is added once legitimate access exists.
+Every event is linked to its assets in ``source_event_assets`` (:func:`link_assets`).
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NexisError
 from app.db.base import utcnow
-from app.models import Post, SourceEvent, TopicFollow, User, UserHolding
+from app.models import Post, SourceEvent, SourceEventAsset, TopicFollow, User, UserHolding
 from app.services import markets
 
 
@@ -39,10 +42,11 @@ PROVIDERS: dict[str, Provider] = {p.key: p for p in (
     Provider("newsfeed", "Publisher news (RSS and Google News)", "news", True, "Headlines and links from the publishers the news pages follow."),
     Provider("market_data", "Market data (Yahoo Finance, TradingView)", "market", True, "Delayed daily quotes; used for large price moves."),
     Provider("nexis", "Nexis Research", "editorial", True, "Editorial notes written by the Nexis Research team."),
+    Provider("news_search", "Financial news (Yahoo Finance, Google News)", "news", True, "Headlines and links found per asset; full articles are never copied."),
+    Provider("sec_edgar", "SEC EDGAR filings", "filings", True, "Free public SEC API (US-listed issuers); filing type, date and link."),
     Provider("reddit", "Reddit", "social", False, "Needs an approved Reddit API application. Not connected."),
     Provider("x", "X", "social", False, "Needs a paid X API plan with search access. Not connected."),
     Provider("news_api", "Licensed news API", "news", False, "Needs an API key for a licensed news provider. Not connected."),
-    Provider("sec_edgar", "SEC EDGAR filings", "filings", False, "Free public API; integration point only, not yet implemented."),
 )}  # fmt: skip
 
 # ------------------------------------------------------------------ classification
@@ -97,6 +101,15 @@ def sectors_for(assets: list[str], text: str) -> list[str]:
     return list(dict.fromkeys(out + list(classify_text(text)["sectors"])))[:4]
 
 
+def link_assets(db: Session, event: SourceEvent, symbols: list[str] | None = None) -> None:
+    """Record which assets an event is about (call after the event has an id). Existing links are kept."""
+    wanted = list(dict.fromkeys(symbols if symbols is not None else (event.assets or [])))
+    if not wanted or event.id is None:
+        return
+    have = set(db.scalars(select(SourceEventAsset.symbol).where(SourceEventAsset.event_id == event.id)))
+    db.add_all(SourceEventAsset(event_id=event.id, symbol=s[:32]) for s in wanted if s and s not in have)
+
+
 # ------------------------------------------------------------------ providers that are connected
 
 
@@ -125,12 +138,15 @@ def _from_news(db: Session, since_hours: int = 72) -> int:
         elif not assets and "energy" in c["topics"] and re.search(r"\b(oil|brent|crude|opec)\b", headline.lower()):
             assets = ["BZ=F"]
         importance = 1 + (2 if c["kind"] in ("earnings", "rates", "deal", "dividend") else 0) + (1 if assets else 0)
-        db.add(SourceEvent(
+        ev = SourceEvent(
             kind=c["kind"], provider="newsfeed", title=headline[:500], url=p.link_url, publisher=p.link_source,
             published_at=p.created_at,
             facts={"headline": headline, "summary": summary, "post_id": p.id, "names": {s: names.get(s) for s in assets if names.get(s)}},
             assets=assets, topics=c["topics"], importance=importance, external_key=key,
-        ))  # fmt: skip
+        )  # fmt: skip
+        db.add(ev)
+        db.flush()
+        link_assets(db, ev)
         have.add(key)
         added += 1
     db.commit()
@@ -199,35 +215,18 @@ def _from_moves(db: Session) -> int:
             direction = "rose" if pct > 0 else "fell"
             fact = (f"{name} ({q['symbol']}) {direction} {abs(pct) * 100:.1f}% in the latest session to {q['price']:,.2f}"
                     f"{' ' + q['currency'] if q.get('currency') else ''} (delayed market data).")  # fmt: skip
-            db.add(SourceEvent(
+            ev = SourceEvent(
                 kind="price_move", provider="market_data", title=f"{name} {direction} {abs(pct) * 100:.1f}%", url=None,
                 publisher="Market data (delayed)", published_at=utcnow(),
                 facts={"headline": fact, "price": q["price"], "change_pct": round(pct * 100, 2), "currency": q.get("currency"),
                        "market_time": q.get("market_time")},
                 assets=[q["symbol"]], topics=["risk"] if pct < 0 else ["growth"], importance=2 + (1 if abs(pct) >= 0.08 else 0),
                 external_key=key,
-            ))  # fmt: skip
+            )  # fmt: skip
+            db.add(ev)
+            db.flush()
+            link_assets(db, ev)
             added += 1
-    db.commit()
-    return added
-
-
-def _from_research(db: Session) -> int:
-    from app.services import pulse_sources
-
-    q = select(Post).where(Post.source.in_(list(pulse_sources.EDITORIAL)), Post.created_at >= utcnow() - timedelta(days=3))
-    added = 0
-    for p in db.scalars(q):
-        key = f"research:{p.id}"
-        if db.scalar(select(SourceEvent.id).where(SourceEvent.external_key == key)) is not None:
-            continue
-        c = classify_text(f"{p.title} {p.body}")
-        db.add(SourceEvent(
-            kind="research", provider="nexis", title=p.title or "", url=f"/pulse/discussion/{p.id}", publisher="Nexis Research",
-            published_at=p.created_at, facts={"headline": p.title, "summary": p.body[:900], "post_id": p.id},
-            assets=[p.asset] if p.asset else [], topics=c["topics"], importance=1, external_key=key,
-        ))  # fmt: skip
-        added += 1
     db.commit()
     return added
 
@@ -235,7 +234,8 @@ def _from_research(db: Session) -> int:
 def ingest(db: Session) -> dict[str, int]:
     """Collect new events from every connected provider. Cheap to call repeatedly (deduplicated)."""
     out: dict[str, int] = {}
-    for key, fn in (("newsfeed", _from_news), ("market_data", _from_moves), ("nexis", _from_research)):
+    # Nexis editorial discussions are not evidence; they notify followers directly (``alerts.notify_new_discussion``).
+    for key, fn in (("newsfeed", _from_news), ("market_data", _from_moves)):
         try:
             out[key] = fn(db)
         except Exception as exc:  # one provider failing must not stop the others

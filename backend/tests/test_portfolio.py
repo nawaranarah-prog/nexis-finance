@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.db.base import utcnow
 from app.models import SourceEvent, UserNotification
 from app.services import alerts, llm, portfolio
+from tests.helpers import TERMS
 
 QUOTES = {
     "AAPL": {"symbol": "AAPL", "name": "Apple Inc.", "price": 200.0, "change": 2.0, "change_pct": 0.01, "currency": "USD", "type": "equity"},
@@ -39,7 +40,7 @@ def _signup(client, tag: str) -> dict:  # type: ignore[no-untyped-def]
     client.post("/api/auth/logout")
     client.cookies.clear()
     mail = f"{tag}{random.randint(10**6, 10**7)}@example.com"
-    assert client.post("/api/auth/register", json={"email": mail, "password": "folio-pass-123"}).status_code == 201
+    assert client.post("/api/auth/register", json={**TERMS, "email": mail, "password": "folio-pass-123"}).status_code == 201
     return {"identifier": mail, "password": "folio-pass-123", **client.get("/api/auth/me").json()["user"]}
 
 
@@ -165,13 +166,13 @@ def test_watchlist_intelligence_alerts_and_digest(client, db, market, monkeypatc
     client.cookies.clear()
 
 
-def test_reply_notifications(client, monkeypatch):
+def test_reply_notifications_never_name_the_replier(client, monkeypatch):
     monkeypatch.setattr("app.services.pulse.markets.quotes", lambda db, syms: [{"symbol": s, "name": s} for s in syms])
     author = _signup(client, "author")
     d = client.post("/api/pulse/discussions", json={"symbol": "MSFT", "title": "Azure growth versus capex spending",
                     "body": "Capex is rising faster than revenue right now, which worries me a little."}).json()  # fmt: skip
-    _signup(client, "replier")
-    client.post(f"/api/social/posts/{d['id']}/comments", json={"body": "The payback period is the real question."})
+    replier = _signup(client, "replier")
+    assert client.post(f"/api/pulse/discussions/{d['id']}/comments", json={"body": "The payback period is the real question."}).status_code == 201
     client.post("/api/auth/logout")
     client.cookies.clear()
     assert (
@@ -179,10 +180,31 @@ def test_reply_notifications(client, monkeypatch):
         == 200
     )
     items = client.get("/api/me/notifications").json()["items"]
-    assert (
-        items[0]["category"] == "pulse"
-        and "replied to your discussion" in items[0]["title"]
-        and items[0]["link"].startswith(f"/pulse/discussion/{d['id']}")
-    )
+    n = items[0]
+    assert n["category"] == "discussions" and n["title"].startswith("New reply to your discussion") and n["link"].startswith(d["url"])
+    text = str(n)
+    assert replier["username"] not in text and replier["identifier"] not in text and replier["display_name"] not in text
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+
+
+def test_today_aggregates_only_what_the_member_tracks(client, db, market, monkeypatch):
+    from datetime import date, timedelta
+
+    soon = (date.today() + timedelta(days=7)).isoformat()
+    monkeypatch.setattr(portfolio.markets, "details", lambda db, s: {"next_earnings": soon})
+    me = _signup(client, "today")
+    assert client.get("/api/me/today").json()["tracked"] == 0
+    client.post("/api/me/holdings", json={"symbol": "AAPL", "quantity": 2})
+    stamp = random.randint(1, 10**9)
+    db.add(SourceEvent(kind="earnings", provider="newsfeed", title="Apple earnings beat", url="https://example.com/a", publisher="Example",
+                       published_at=utcnow(), facts={"headline": "Apple earnings beat"}, assets=["AAPL"], topics=["earnings"],
+                       importance=3, external_key=f"today:{stamp}"))  # fmt: skip
+    db.commit()
+    t = client.get("/api/me/today").json()
+    assert t["tracked"] == 1 and t["holdings"] == 1 and t["counts"]["developments"] >= 1
+    assert t["developments"][0]["relation"] == "holding" and t["upcoming"][0] == {"symbol": "AAPL", "relation": "holding", "kind": "earnings",
+                                                                                 "date": soon, "source": "Market data (company calendar)"}
+    assert me["id"]  # the member's own id is visible only to the member, through /auth/me
     client.post("/api/auth/logout")
     client.cookies.clear()

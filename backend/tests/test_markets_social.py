@@ -17,6 +17,7 @@ from app.markets.news import clean_company_name
 from app.markets.yahoo import YahooClient
 from app.services import advisor, llm, valuation
 from app.services import compare as cmp
+from tests.helpers import TERMS
 
 
 def _client(handler) -> httpx.Client:  # type: ignore[no-untyped-def]
@@ -258,13 +259,13 @@ def test_instafin_end_to_end(client, monkeypatch):
     client.cookies.clear()
     assert client.get("/api/auth/me").json() == {"user": None}
     assert client.post("/api/social/posts", data={"body": "hi"}).status_code == 401
-    bad = client.post("/api/auth/register", json={"username": "No Spaces!", "password": "longenough1"})
+    bad = client.post("/api/auth/register", json={**TERMS, "username": "No Spaces!", "password": "longenough1"})
     assert bad.status_code == 422
     r = client.post(
-        "/api/auth/register", json={"username": "trader_one", "password": "longenough1", "display_name": "Trader One"}
+        "/api/auth/register", json={**TERMS, "username": "trader_one", "password": "longenough1", "display_name": "Trader One"}
     )
     assert r.status_code == 201 and r.json()["username"] == "trader_one"
-    assert client.post("/api/auth/register", json={"username": "trader_one", "password": "longenough1"}).status_code == 409
+    assert client.post("/api/auth/register", json={**TERMS, "username": "trader_one", "password": "longenough1"}).status_code == 409
     assert client.get("/api/auth/me").json()["user"]["display_name"] == "Trader One"
 
     p = client.post("/api/social/posts", data={"body": "Loading up on $EMAAR.AE before results #dubai #realestate"},
@@ -289,7 +290,7 @@ def test_instafin_end_to_end(client, monkeypatch):
     # A second user: cannot delete someone else's post, can follow, like and report.
     client.post("/api/auth/logout")
     client.cookies.clear()
-    client.post("/api/auth/register", json={"username": "investor_two", "password": "longenough2"})
+    client.post("/api/auth/register", json={**TERMS, "username": "investor_two", "password": "longenough2"})
     assert client.delete(f"/api/social/posts/{post['id']}").status_code == 403
     assert client.delete(f"/api/social/comments/{c['id']}").status_code == 403
     assert client.post("/api/social/users/trader_one/follow").json()["followed_by_me"] is True
@@ -351,7 +352,7 @@ def test_account_deletion_removes_everything(client, monkeypatch):
 
     monkeypatch.setattr(social.markets, "quotes", lambda db, syms: [])
     client.cookies.clear()
-    client.post("/api/auth/register", json={"username": "leaver", "password": "longenough9"})
+    client.post("/api/auth/register", json={**TERMS, "username": "leaver", "password": "longenough9"})
     pid = client.post("/api/social/posts", data={"body": "bye $AAPL"}).json()["id"]
     client.post(f"/api/social/posts/{pid}/like")
     assert client.post("/api/auth/me/delete", json={"password": "wrong"}).status_code == 401
