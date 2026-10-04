@@ -5,7 +5,8 @@ import { Link, useLocation } from "react-router-dom";
    re-accept, bump the version there and here. Drafted for review by qualified counsel before relying on them. */
 const VERSION = "2026-10-04";
 const EFFECTIVE = "4 October 2026";
-const CONTACT = "legal@nexis.finance";  // placeholder: replace with the operator's real contact address before launch
+const CONTACT = "nawaranarah@gmail.com";
+const OPERATOR = "Nawar Anarah, an individual based in Dubai, United Arab Emirates, who operates Nexis Finance as an independent project";
 
 type Doc = { path: string; title: string; summary: string; body: ReactNode };
 
@@ -21,7 +22,7 @@ const TERMS: Doc = {
     <>
       <p className="lg-callout">Nexis Finance provides financial information, analysis tools and discussion. It does not provide personalised investment advice, and nothing on Nexis is a recommendation to buy, sell or hold any investment. Investing involves risk, including the loss of the money you invest.</p>
       <H id="who">1. Who we are and what these Terms cover</H>
-      <p>These Terms of Use ("Terms") govern your access to and use of the Nexis Finance website, applications and related services, including Nexis Pulse, My Nexis, the AI Advisor, market pages, reports and the Community feed (together, the "Service"). The Service is operated by [Operator legal name], [registered address] ("Nexis", "we", "us").</p>
+      <p>These Terms of Use ("Terms") govern your access to and use of the Nexis Finance website, applications and related services, including Nexis Pulse, My Nexis, the AI Advisor, market pages, reports and the Community feed (together, the "Service"). The Service is operated by {OPERATOR} ("Nexis", "we", "us").</p>
       <p>By creating an account, or by using the Service, you agree to these Terms. If you do not agree, do not use the Service. If you use the Service on behalf of an organisation, you confirm you have authority to bind it.</p>
       <H>2. Eligibility and accounts</H>
       <p>You must be at least 18 years old, or the age of majority where you live if higher, and legally able to enter into this agreement. You are responsible for your account, for keeping your sign-in details secure and for activity under your account. Tell us promptly at {CONTACT} if you believe your account has been compromised. We may refuse, suspend or close accounts as described in these Terms.</p>
@@ -71,7 +72,7 @@ const TERMS: Doc = {
       <H>14. Changes</H>
       <p>We may update these Terms. When changes are material we will tell you in the Service and ask you to accept the updated Terms before you post again. The version and effective date are shown at the top of this page.</p>
       <H>15. Governing law and disputes</H>
-      <p>These Terms are governed by the laws of [Governing jurisdiction — to be confirmed by counsel], without regard to conflict-of-law rules, and the courts of [Venue — to be confirmed by counsel] have jurisdiction, except where mandatory local law gives you the right to bring proceedings elsewhere.</p>
+      <p>These Terms are governed by the laws of the Emirate of Dubai and the federal laws of the United Arab Emirates as applied in Dubai, without regard to conflict-of-law rules, and the courts of Dubai have jurisdiction, except where mandatory local law gives you the right to bring proceedings elsewhere.</p>
       <H>16. Contact</H>
       <p>Questions about these Terms: {CONTACT}.</p>
     </>
@@ -86,7 +87,7 @@ const PRIVACY: Doc = {
     <>
       <p className="lg-callout">Pulse is anonymous to other people: your name, email, phone, profile and investments are never shown next to what you post. Nexis itself keeps the link between your account and your posts, and only uses it to run, protect and moderate the Service and to meet legal obligations.</p>
       <H>1. Who is responsible</H>
-      <p>[Operator legal name], [registered address] is responsible for personal information processed through the Service. Contact: {CONTACT}.</p>
+      <p>{OPERATOR} is responsible for personal information processed through the Service. Contact: {CONTACT}.</p>
       <H>2. What we collect</H>
       <ul>
         <li><b>Account information:</b> email address and/or mobile number, a password hash (never the password itself), the sign-in method (for example Google), interface language, and the versions of the Terms and Privacy Policy you accepted and when.</li>
@@ -223,7 +224,6 @@ export default function Legal() {
         <h1>{doc.title}</h1>
         <p className="lg-summary">{doc.summary}</p>
         {doc.body}
-        <p className="lg-review">This document is provided for review by qualified legal counsel. Bracketed items are placeholders to be completed before reliance.</p>
       </article>
     </div>
   );
