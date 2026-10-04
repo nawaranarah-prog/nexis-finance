@@ -21,17 +21,17 @@ COMMENTS = """<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.o
 <entry><author><name>/u/proudmelon</name></author><id>t3_abc123</id><link href="https://www.reddit.com/r/stocks/comments/abc123/x/"/>
 <title>post</title><content type="html">the post itself</content></entry>
 <entry><author><name>/u/bull_guy</name></author><id>t1_c1</id><link href="https://www.reddit.com/r/stocks/comments/abc123/x/c1/"/>
-<published>2026-10-04T09:00:00+00:00</published><title>c</title><content type="html">I agree with @bull_guy here, data centre demand is still growing and margins look solid for the next two years.</content></entry>
+<published>2026-10-04T09:00:00+00:00</published><title>/u/bull_guy on Is Nvidia still worth buying at this valuation?</title><content type="html">I agree with @bull_guy here, data centre demand is still growing and margins look solid for the next two years.</content></entry>
 <entry><author><name>/u/bear_gal</name></author><id>t1_c2</id><link href="https://www.reddit.com/r/stocks/comments/abc123/x/c2/"/>
-<published>2026-10-04T09:30:00+00:00</published><title>c</title><content type="html">I disagree, the expectations are already priced in and any slowdown in hyperscaler capex will hit it hard.</content></entry>
+<published>2026-10-04T09:30:00+00:00</published><title>/u/bear_gal on Is Nvidia still worth buying at this valuation?</title><content type="html">I disagree, the expectations are already priced in and any slowdown in hyperscaler capex will hit it hard.</content></entry>
 <entry><author><name>/u/asker</name></author><id>t1_c3</id><link href="https://www.reddit.com/r/stocks/comments/abc123/x/c3/"/>
-<published>2026-10-04T10:00:00+00:00</published><title>c</title><content type="html">What happens to the multiple if AMD actually catches up on inference chips over the next year?</content></entry>
+<published>2026-10-04T10:00:00+00:00</published><title>/u/asker on Is Nvidia still worth buying at this valuation?</title><content type="html">What happens to the multiple if AMD actually catches up on inference chips over the next year?</content></entry>
 <entry><author><name>/u/spammer</name></author><id>t1_c4</id><link href="https://www.reddit.com/r/stocks/comments/abc123/x/c4/"/>
-<published>2026-10-04T10:10:00+00:00</published><title>c</title><content type="html">Guaranteed 50% returns every month, DM me on telegram to join my VIP signals group today friends.</content></entry>
+<published>2026-10-04T10:10:00+00:00</published><title>/u/spammer on Is Nvidia still worth buying at this valuation?</title><content type="html">Guaranteed 50% returns every month, DM me on telegram to join my VIP signals group today friends.</content></entry>
 <entry><author><name>/u/hype</name></author><id>t1_c5</id><link href="https://www.reddit.com/r/stocks/comments/abc123/x/c5/"/>
-<published>2026-10-04T10:20:00+00:00</published><title>c</title><content type="html">TO THE MOON!!! NVDA WILL PUMP ALL WEEK LONG, GET YOUR CALLS IN ORDER RIGHT NOW EVERYONE!!!</content></entry>
+<published>2026-10-04T10:20:00+00:00</published><title>/u/hype on Is Nvidia still worth buying at this valuation?</title><content type="html">TO THE MOON!!! NVDA WILL PUMP ALL WEEK LONG, GET YOUR CALLS IN ORDER RIGHT NOW EVERYONE!!!</content></entry>
 <entry><author><name>/u/short</name></author><id>t1_c6</id><link href="https://www.reddit.com/r/stocks/comments/abc123/x/c6/"/>
-<published>2026-10-04T10:30:00+00:00</published><title>c</title><content type="html">lol</content></entry>
+<published>2026-10-04T10:30:00+00:00</published><title>/u/short on Is Nvidia still worth buying at this valuation?</title><content type="html">lol</content></entry>
 </feed>"""
 
 
@@ -55,7 +55,7 @@ def feeds(monkeypatch):  # type: ignore[no-untyped-def]
             return None
 
     def fake_get(url, params=None):  # type: ignore[no-untyped-def]
-        return R(COMMENTS if "/comments/" in url else POST)
+        return R(COMMENTS)
 
     monkeypatch.setattr(pd, "_get", fake_get)
     monkeypatch.setattr(pd.time, "sleep", lambda s: None)
@@ -73,7 +73,7 @@ def test_reddit_thread_is_collected_without_any_account(client, db, feeds):
     texts = " ".join([d.title, d.body] + [q["text"] for q in d.quotes])
     for name in ("proudmelon", "someone_else", "bull_guy", "bear_gal", "asker", "spammer", "submitted by"):
         assert name not in texts
-    assert "[user]" in d.body  # mentions are replaced, not kept
+    assert d.title == "Is Nvidia still worth buying at this valuation?"  # "/u/name on …" stripped
     stances = {q["text"][:12]: q["stance"] for q in d.quotes}
     assert len(d.quotes) == 3  # the scam, the shouting hype and "lol" were dropped
     assert sorted(stances.values()) == ["pushback", "question", "support"]

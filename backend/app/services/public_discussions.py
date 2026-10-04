@@ -53,7 +53,7 @@ STANCES = ("support", "pushback", "question", "context", "bullish", "bearish")
 MAX_QUOTES = 12
 MIN_QUOTES = 3
 KEEP_DAYS = 21
-REDDIT_PAUSE = 3.0
+REDDIT_PAUSE = 10.0  # Reddit throttles unauthenticated feeds hard; one request every ten seconds
 STATE_KEY = "public-discussions:state"
 
 _FINANCE = re.compile(
@@ -315,46 +315,47 @@ def _quote(text: str, url: str | None, at: datetime | None, stance: str | None =
     return {"text": tidy(excerpt(text)), "stance": stance, "url": url, "at": at.isoformat() + "Z" if at else None}
 
 
-def collect_reddit(db: Session, subreddits: list[str], posts_per_sub: int = 5, with_comments: int = 3) -> dict[str, Any]:
+def collect_reddit(db: Session, subreddits: list[str], posts_per_sub: int = 10, with_comments: int = 0) -> dict[str, Any]:
+    """One request per subreddit: its latest replies, grouped under the threads they belong to (each reply's feed
+    title carries the thread title). Reddit throttles keyless feeds hard, so nothing else is requested."""
     out: dict[str, Any] = {"threads": 0, "skipped": 0}
     for sub in subreddits:
-        posts = fetch_atom(f"https://www.reddit.com/r/{sub}/top/.rss?t=day&limit={posts_per_sub}")
-        fetched = 0
-        for p in posts:
-            m = re.search(r"/comments/([a-z0-9]+)/", p["link"] or "")
-            if not m or not p["link"]:
+        posts: dict[str, dict[str, Any]] = {}  # thread text is only known for threads collected before
+        threads: dict[str, dict[str, Any]] = {}
+        for c in fetch_atom(f"https://www.reddit.com/r/{sub}/comments/.rss?limit=100"):
+            m = re.search(r"/comments/([a-z0-9]+)/[^/]*/([a-z0-9]+)/?", c["link"] or "")
+            if not m or not c["id"].startswith("t1_"):
                 continue
-            key = f"reddit:{m.group(1)}"
-            have = db.scalars(select(PulseDiscussion).where(PulseDiscussion.editorial_key == key)).first()
-            if have is not None and have.content_updated_at and utcnow() - have.content_updated_at < timedelta(hours=3):
+            t = threads.setdefault(m.group(1), {"title": re.sub(r"^/?u/\S+\s+on\s+", "", c["title"]).strip(), "quotes": [], "link": None})
+            t["link"] = t["link"] or re.sub(r"[a-z0-9]+/?$", "", c["link"])
+            text = clean(c["content"])
+            if usable(text):
+                t["quotes"].append(_quote(text, c["link"], c["published"]))
+        for pid in dict.fromkeys([*posts, *threads]):
+            t = threads.get(pid) or {"title": None, "quotes": [], "link": None}
+            p = posts.get(pid)
+            quotes = t["quotes"]
+            have = db.scalars(select(PulseDiscussion).where(PulseDiscussion.editorial_key == f"reddit:{pid}")).first()
+            if len(quotes) < MIN_QUOTES and have is None:
                 continue
-            if fetched >= with_comments:
-                break
-            time.sleep(REDDIT_PAUSE)
-            replies = fetch_atom(f"https://www.reddit.com/r/{sub}/comments/{m.group(1)}/.rss?sort=top&limit=25")
-            fetched += 1
-            quotes = []
-            for c in replies:
-                if not c["id"].startswith("t1_"):
-                    continue  # t3_ is the post itself; t1_ entries are the replies
-                text = clean(c["content"])
-                if usable(text):
-                    quotes.append(_quote(text, c["link"], c["published"]))
-            body = clean(p["content"])
-            debate, ai = classify(p["title"], body, quotes, db)
-            d = upsert(db, key, platform="reddit", community=f"r/{sub}", url=p["link"], title=p["title"], body=body,
-                       posted_at=p["published"], quotes=quotes, debate=debate, ai=ai)  # fmt: skip
+            title = p["title"] if p else t["title"]
+            if not title or (not _FINANCE.search(title) and sub not in ("stocks", "investing", "StockMarket", "ValueInvesting", "SecurityAnalysis", "dividends")):
+                continue
+            body = clean(p["content"]) if p else (clean(have.body) if have else "")
+            debate, ai = classify(title, body, quotes, db) if quotes else (None, False)
+            d = upsert(db, f"reddit:{pid}", platform="reddit", community=f"r/{sub}", url=(p or {}).get("link") or t["link"] or f"https://www.reddit.com/r/{sub}/comments/{pid}/",
+                       title=title, body=body, posted_at=(p or {}).get("published"), quotes=quotes, debate=debate, ai=ai)  # fmt: skip
             out["threads" if d else "skipped"] += 1
         time.sleep(REDDIT_PAUSE)
     return out
 
 
-def collect_hn(db: Session, queries: list[str], days: int = 4, per_query: int = 2) -> dict[str, Any]:
+def collect_hn(db: Session, queries: list[str], days: int = 7, per_query: int = 3) -> dict[str, Any]:
     out: dict[str, Any] = {"threads": 0, "skipped": 0}
     since = int((datetime.now(UTC) - timedelta(days=days)).timestamp())
     for q in queries:
         r = _get("https://hn.algolia.com/api/v1/search", {"tags": "story", "query": q, "hitsPerPage": 8,
-                                                          "numericFilters": f"created_at_i>{since},num_comments>=25"})  # fmt: skip
+                                                          "numericFilters": f"created_at_i>{since},num_comments>=15"})  # fmt: skip
         r.raise_for_status()
         hits = [h for h in r.json().get("hits", []) if _FINANCE.search(h.get("title") or "")][:per_query]
         for h in hits:
@@ -417,7 +418,7 @@ def collect(db: Session, budget: str = "small") -> dict[str, Any]:
     if s.pulse_public_reddit:
         i = st.get("reddit_i", 0)
         subs = [SUBREDDITS[(i + k) % len(SUBREDDITS)] for k in range(3 if big else 1)]
-        jobs.append(("reddit", lambda: collect_reddit(db, subs, with_comments=4 if big else 2)))
+        jobs.append(("reddit", lambda: collect_reddit(db, subs)))
         st["reddit_i"] = (i + len(subs)) % len(SUBREDDITS)
     if s.pulse_public_hn:
         i = st.get("hn_i", 0)
