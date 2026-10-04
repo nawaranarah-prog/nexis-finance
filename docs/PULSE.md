@@ -64,8 +64,8 @@ cd backend && python -m app.cli.set_role person@example.com moderator
   accept again before posting.
 * Acceptance is recorded in `legal_acceptances` (user, terms version, privacy version, time, method). Email sign-up
   requires it in the request; Google/phone sign-ups record it on return or through the prompt.
-* **Before launch:** fill the bracketed placeholders (operator legal name, address, governing law and venue) and the
-  contact address, and have qualified counsel review all five documents.
+* Operator: Nawar Anarah (Dubai, UAE); governing law: Dubai / UAE; contact: nawaranarah@gmail.com. Having qualified
+  counsel review the documents is still recommended.
 
 ## Notifications
 
