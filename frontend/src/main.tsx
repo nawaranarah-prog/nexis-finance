@@ -12,6 +12,7 @@ import "./styles-social.css";
 import "./styles-home.css";
 import "./styles-pulse.css";
 import "./styles-intel.css";
+import "./styles-np.css";
 
 const client = new QueryClient({
   defaultOptions: {

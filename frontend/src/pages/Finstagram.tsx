@@ -376,7 +376,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
       <div className="post-likes">{likes.toLocaleString()} {likes === 1 ? t("like") : t("likes")}</div>
       <div className="post-body" dir="auto">
         {post.discussion && (
-          <Link to={`/pulse/d/${post.id}`} className="post-discussion">
+          <Link to={`/pulse/discussion/${post.id}`} className="post-discussion">
             <span className="post-discussion-meta">
               <span className="mono">{post.discussion.asset}</span>
               {(post.discussion.sentiment || post.discussion.ai_sentiment) && (

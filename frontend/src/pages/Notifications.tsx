@@ -6,10 +6,11 @@ import { toast } from "../components/toast";
 import { useT } from "../i18n";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
-import { ago } from "../components/pulseParts";
+import { ago } from "../components/pulse";
 
 const CATEGORY_LABEL: Record<string, string> = {
-  important: "Important alerts", earnings: "Earnings and dividends", portfolio: "Portfolio events", watchlist: "Watchlist events", news: "News", pulse: "Pulse activity",
+  portfolio: "Investment alerts", watchlist: "Watchlist alerts", important: "Market alerts", earnings: "Earnings alerts", news: "Major news",
+  pulse: "Pulse alerts", discussions: "Discussion updates",
 };
 const MODES = ["immediate", "daily", "weekly", "off"] as const;
 const MODE_LABEL: Record<string, string> = { immediate: "Immediate", daily: "Daily digest", weekly: "Weekly digest", off: "Off" };
@@ -32,18 +33,18 @@ function Settings() {
     <aside className="nt-settings">
       <section className="pl-section">
         <div className="sec-head"><h2>{t("How you're notified")}</h2></div>
-        <p className="xs muted">{t("Immediate alerts appear here and on the bell. Digest categories are collected into a daily or weekly summary.")}</p>
+        <p className="xs muted">{t("Immediate alerts appear on the bell. Digest categories wait for a daily or weekly summary in this list. Nexis only alerts you to material events, never every small price change.")}</p>
         <div className="nt-prefs">
-          {Object.keys(CATEGORY_LABEL).map((c) => (
-            <label key={c} className="nt-pref">
-              <span>{t(CATEGORY_LABEL[c])}</span>
-              <select className="input" value={p.channels[c]} onChange={(e) => save({ channels: { [c]: e.target.value } })}>
+          {(p.categories ?? Object.keys(CATEGORY_LABEL).map((k) => ({ key: k, label: CATEGORY_LABEL[k] }))).map((c: AnyObj) => (
+            <label key={c.key} className="nt-pref">
+              <span>{t(c.label)}{c.description && <span className="xs muted nt-pref-d">{c.description}</span>}</span>
+              <select className="input" value={p.channels[c.key]} onChange={(e) => save({ channels: { [c.key]: e.target.value } })}>
                 {MODES.map((m) => <option key={m} value={m}>{t(MODE_LABEL[m])}</option>)}
               </select>
             </label>
           ))}
         </div>
-        <Link className="sec-link" to="/portfolio?tab=alerts">{t("Choose which events alert you")} <span aria-hidden>→</span></Link>
+        <Link className="sec-link" to="/my-nexis/alerts">{t("Choose which events alert you")} <span aria-hidden>→</span></Link>
       </section>
       <section className="pl-section">
         <div className="sec-head"><h2>{t("Email")}</h2></div>
@@ -88,7 +89,7 @@ export default function Notifications() {
   if (!me.data?.user) {
     return (
       <div className="hm pt"><header className="pl-head"><h1>{t("Notifications")}</h1>
-        <p className="hm-lede">{t("Sign in to get alerts about the assets you hold and watch, and replies to your discussions.")}</p>
+        <p className="hm-lede">{t("Sign in to get alerts about the assets you own and watch, and replies to your Pulse posts.")}</p>
         <Link className="btn primary" to="/login?next=/notifications">{t("Sign in")}</Link></header></div>
     );
   }
@@ -127,6 +128,7 @@ export default function Notifications() {
                   <div className="nt-meta">
                     {n.symbol && <span className="mono">{n.symbol}</span>}
                     <span>{t(CATEGORY_LABEL[n.category] ?? n.category)}</span>
+                    {n.delivery === "digest" && <span className="nt-digest-tag">{t("Digest")}</span>}
                     {n.severity !== "info" && <span className={`nt-sev ${n.severity}`}>{n.severity === "high" ? t("Important") : t("Notable")}</span>}
                     <time dateTime={n.created_at}>{ago(n.created_at, lang)}</time>
                   </div>

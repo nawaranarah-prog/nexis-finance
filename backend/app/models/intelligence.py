@@ -1,9 +1,15 @@
-"""Pulse personas and source events, personal holdings, and per-user notifications.
+"""Market evidence and the Nexis Pulse market debate, personal holdings, and per-user notifications.
 
-* ``Persona`` — the profile of a Nexis-generated (AI) participant. Its public identity is a ``users`` row with
-  ``kind = "persona"``; it can never sign in and is always labelled as generated.
-* ``SourceEvent`` — a real, verifiable event (a news article, a market move, a Nexis Research note) that Pulse
-  discussions are grounded in. Generated discussions point at the event they discuss (``posts.event_id``).
+* ``SourceEvent`` — one piece of real, verifiable evidence (a news headline, a company filing, a market move, a
+  Nexis Research note) with its link and publication time exactly as the source gave them. It is the evidence
+  store for Nexis Pulse: ``sentiment``/``analysis`` hold how the Pulse pipeline read it.
+* ``SourceEventAsset`` — which assets an evidence item is about (indexed, so per-asset lookups stay cheap).
+* ``MarketDiscussion`` — the current structured market debate for one asset (bull case, bear case, themes, score),
+  synthesised from evidence and cached. Not a user account and not written by anyone in particular.
+* ``PulseSnapshot`` — one recorded Pulse reading per asset per day. Only days the pipeline actually ran exist,
+  so sentiment history is never back-filled or invented.
+* ``Persona`` — retired. Nexis no longer generates fictional investors; the table only remains so existing rows
+  can be removed with ``python -m app.seeds.retire_personas``.
 * ``UserHolding`` — what a member owns. Private: only ever read through the owner's session.
 * ``UserNotification`` / ``NotificationPreference`` / ``AlertRule`` — personal alerts about tracked assets.
 * ``DigestRecord`` — digests prepared for email; ``status`` records honestly whether anything was sent.
@@ -54,6 +60,80 @@ class SourceEvent(Base, TimestampMixin):
     # new → discussed | skipped (with reason in facts["skip"])
     status: Mapped[str] = mapped_column(String(12), default="new", nullable=False)
     external_key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    # How Nexis Pulse read this item: positive | neutral | negative (null until analysed).
+    sentiment: Mapped[str | None] = mapped_column(String(8), index=True)
+    # {"score": -1..1, "method": "lexicon" | "ai", "topics": [...], "terms": [...], "model": ...}
+    analysis: Mapped[dict | None] = mapped_column(JSON)
+
+
+class SourceEventAsset(Base):
+    """An evidence item is about this asset."""
+
+    __tablename__ = "source_event_assets"
+    __table_args__ = (Index("ix_source_event_assets_symbol_event", "symbol", "event_id"),)
+
+    event_id: Mapped[int] = mapped_column(ForeignKey("source_events.id", ondelete="CASCADE"), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
+
+
+class MarketDiscussion(Base, TimestampMixin):
+    """The current Nexis Pulse market debate for one asset, synthesised from evidence (one row per asset)."""
+
+    __tablename__ = "market_discussions"
+    __table_args__ = (Index("ix_market_discussions_computed", "computed_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(160))
+    exchange: Mapped[str | None] = mapped_column(String(80))
+    asset_type: Mapped[str | None] = mapped_column(String(24))
+    # market_debate | market_update | earnings_debate | valuation_debate | sector_debate | macro_debate | event_analysis
+    content_type: Mapped[str] = mapped_column(String(24), default="market_debate", nullable=False, index=True)
+    title: Mapped[str | None] = mapped_column(String(200))
+    summary: Mapped[str | None] = mapped_column(Text)  # what's happening
+    bull_case: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # [{"point", "source_ids"}]
+    bear_case: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    debate: Mapped[dict | None] = mapped_column(JSON)  # {"question", "bull_side", "bear_side"}
+    split: Mapped[str | None] = mapped_column(Text)  # where the debate is split
+    what_changed: Mapped[dict | None] = mapped_column(JSON)
+    analysis: Mapped[str | None] = mapped_column(Text)  # Nexis analysis
+    themes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # extremely_unfavorable | unfavorable | mixed | favorable | extremely_favorable | insufficient
+    sentiment: Mapped[str] = mapped_column(String(24), default="insufficient", nullable=False, index=True)
+    pulse_score: Mapped[int | None] = mapped_column(Integer)
+    # Evidence coverage: none | limited | developing | strong
+    confidence: Mapped[str] = mapped_column(String(12), default="none", nullable=False)
+    source_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # The evidence as analysed (including live market data, which is not stored as a SourceEvent).
+    evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    stats: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)  # distribution, contributors, quote, trend
+    # How the narrative was written: "ai" (model synthesis of the evidence) or "rules" (deterministic template).
+    method: Mapped[str] = mapped_column(String(8), default="rules", nullable=False)
+    model: Mapped[str | None] = mapped_column(String(80))
+    evidence_hash: Mapped[str | None] = mapped_column(String(40))
+    synthesized_at: Mapped[datetime | None] = mapped_column(DateTime)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PulseSnapshot(Base, TimestampMixin):
+    """One recorded Pulse reading for an asset on one day (the latest run of that day)."""
+
+    __tablename__ = "pulse_snapshots"
+    __table_args__ = (UniqueConstraint("symbol", "day", name="uq_pulse_snapshots_symbol_day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    score: Mapped[int | None] = mapped_column(Integer)
+    sentiment: Mapped[str] = mapped_column(String(24), nullable=False)
+    confidence: Mapped[str] = mapped_column(String(12), nullable=False)
+    items: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # {"positive": n, "neutral": n, "negative": n}, top themes with their net contribution, evidence ids used
+    distribution: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    themes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    source_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class UserHolding(Base, TimestampMixin):
@@ -96,6 +176,8 @@ class UserNotification(Base, TimestampMixin):
     event_id: Mapped[int | None] = mapped_column(ForeignKey("source_events.id", ondelete="SET NULL"))
     dedupe_key: Mapped[str] = mapped_column(String(120), nullable=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # immediate (shown in the bell right away) | digest (collected into the member's daily/weekly digest)
+    delivery: Mapped[str] = mapped_column(String(10), default="immediate", server_default="immediate", nullable=False)
     digested_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 

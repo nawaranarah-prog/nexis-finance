@@ -280,40 +280,33 @@ function Watchlist() {
 }
 
 /** What Finstagram is talking about: mention counts only. Not sentiment, and not a signal. */
-/** Nexis Pulse on the homepage: the assets members discuss most, with their Pulse score. Real discussions only. */
+/** Nexis Pulse on the homepage: the debates Nexis is tracking, with real reply counts only. */
 function Pulse() {
-  const { t } = useT();
-  const q = useQuery({ queryKey: ["pulse-discover"], queryFn: () => api.get<AnyObj>("/pulse/discover"), staleTime: 60_000 });
+  const { t, lang } = useT();
+  const q = useQuery({ queryKey: ["pulse-overview"], queryFn: () => api.get<AnyObj>("/pulse/overview"), staleTime: 60_000 });
   const d = q.data;
-  const rows: AnyObj[] = (d?.trending_assets?.length ? d.trending_assets : d?.most_discussed ?? []).slice(0, 6);
-  const max = Math.max(1, ...rows.map((r) => r.discussions));
+  const rows: AnyObj[] = (d?.debates ?? []).slice(0, 5);
   return (
     <section className="hm-pulse">
-      <SectionHead title={t("Nexis Pulse")} sub={d?.trending_assets?.length ? t("Most discussed · 7 days") : t("Most discussed · 30 days")} to="/pulse" cta={t("Open Pulse")} />
+      <SectionHead title={t("Nexis Pulse")} sub={t("What the market is debating")} to="/pulse" cta={t("Open Pulse")} />
       {q.isLoading && <div className="wire-skel"><span className="skel w80" /><span className="skel w60" /><span className="skel w70" /></div>}
       {d && !rows.length && (
         <div className="hm-empty-state">
-          <p>{t("No discussions yet. Pulse shows what Nexis members think about an asset — start the first discussion and its sentiment appears here.")}</p>
-          <Link className="btn primary sm" to="/pulse">{t("Start a discussion")}</Link>
+          <p>{t("Pulse is tracking what the market is debating. Join the discussion when you have something to say — posts are anonymous.")}</p>
+          <Link className="btn primary sm" to="/pulse?compose=1">{t("Start a discussion")}</Link>
         </div>
       )}
       <ol className="pulse">
-        {rows.map((r, i) => (
-          <li key={r.symbol}>
-            <Link to={`/pulse/${encodeURIComponent(r.symbol)}`} className="pulse-row">
-              <span className="pulse-rank num">{i + 1}</span>
-              <span className="pulse-name"><span className="mono">{r.symbol}</span><span className="wl-name">{r.name ?? ""}</span></span>
-              <span className="pulse-bar" aria-hidden><span style={{ transform: `scaleX(${r.discussions / max})` }} /></span>
-              {r.score?.available
-                ? <span className="pulse-n num" title={t("Community Pulse")}>{r.score.value}</span>
-                : r.research_view?.available
-                  ? <span className="pulse-n num research" title={t("Nexis Research view — editorial, not community sentiment")}>R {r.research_view.value}</span>
-                  : <span className="pulse-n num">—</span>}
+        {rows.map((r) => (
+          <li key={r.id}>
+            <Link to={r.url} className="pulse-row debate">
+              <span className="pulse-name"><span className="mono">{r.symbol ?? r.topics?.[0]?.label ?? "Markets"}</span><span className="wl-name" dir="auto">{r.title}</span></span>
+              <span className="pulse-n xs">{r.counts.comments ? `${r.counts.comments} ${t("replies")}` : t("No replies yet")} · {ago(r.updated_at ?? r.created_at, lang)}</span>
             </Link>
           </li>
         ))}
       </ol>
-      {rows.length > 0 && <p className="hm-fine">{t("Bars count discussions by members and Nexis Research. The number is the community Pulse (1–100) from member discussions; “R” marks the Nexis Research editorial view where members haven't scored an asset yet. Neither is a prediction.")}</p>}
+      {rows.length > 0 && <p className="hm-fine">{t("Nexis editorial context with sources, updated as news arrives. Community replies come from real members, shown as Anonymous.")}</p>}
     </section>
   );
 }

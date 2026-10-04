@@ -30,6 +30,10 @@ class RegisterIn(_Base):
     username: str | None = Field(default=None, max_length=30)
     password: str = Field(min_length=1, max_length=200)
     display_name: str | None = Field(default=None, max_length=60)
+    # Explicit acceptance of the Terms of Use and Privacy Policy (the versions the form showed).
+    accept_terms: bool = False
+    terms_version: str | None = Field(default=None, max_length=20)
+    privacy_version: str | None = Field(default=None, max_length=20)
 
 
 class LoginIn(_Base):
@@ -85,7 +89,10 @@ async def _read_image(f: UploadFile | None) -> bytes | None:
 
 @router.post("/auth/register", status_code=201)
 def register(req: RegisterIn, request: Request, response: Response, db: Session = Depends(get_db)) -> dict[str, Any]:
-    u = auth.register(db, request, response, req.username, req.password, req.display_name, req.email, req.phone)
+    if not req.accept_terms or not req.terms_version or not req.privacy_version:
+        raise ValidationFailed("you need to accept the Terms of Use and Privacy Policy to create an account")
+    u = auth.register(db, request, response, req.username, req.password, req.display_name, req.email, req.phone,
+                      accepted=(req.terms_version, req.privacy_version))  # fmt: skip
     return auth.serialize_user(db, u, u, full=True)
 
 
@@ -298,7 +305,7 @@ def refresh_news(request: Request, db: Session = Depends(get_db)) -> dict[str, A
     if forced:  # the daily cron also advances Pulse and prepares digests
         from app.services import alerts, pulse_engine
 
-        out["pulse"] = pulse_engine.tick(db, max_threads=4, force=True)
+        out["pulse"] = pulse_engine.tick(db, max_assets=4, force=True)
         out["digests"] = alerts.run_digests(db)
     return out
 

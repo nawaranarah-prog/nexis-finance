@@ -49,7 +49,7 @@ class ReadIn(_Base):
 
 
 class PreferencesIn(_Base):
-    channels: dict[Literal["important", "earnings", "portfolio", "watchlist", "news", "pulse"], Mode] | None = None
+    channels: dict[Literal["important", "earnings", "portfolio", "watchlist", "news", "pulse", "discussions"], Mode] | None = None
     email_enabled: bool | None = None
     price_move_pct: float | None = Field(default=None, ge=1, le=50)
 
@@ -111,6 +111,12 @@ def track_status(symbol: str, viewer: User | None = Depends(auth.optional_user),
 
 
 # ------------------------------------------------------------------ intelligence
+
+
+@router.get("/me/today")
+def today(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Your Nexis Today: material developments, active Pulse discussions and upcoming events for what you track."""
+    return portfolio.today(db, user)
 
 
 @router.get("/me/intelligence")
