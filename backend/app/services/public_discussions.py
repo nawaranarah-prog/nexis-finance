@@ -46,7 +46,9 @@ log = get_logger(__name__)
 
 UA = "Mozilla/5.0 (compatible; NexisFinance/1.0; +https://nexis-finance-five.vercel.app/ai-disclosure)"
 SUBREDDITS = ["stocks", "investing", "StockMarket", "ValueInvesting", "SecurityAnalysis", "Economics", "dividends", "CryptoCurrency"]
-HN_QUERIES = ["stock market", "interest rates", "inflation", "Nvidia", "earnings", "IPO", "Federal Reserve", "AI chips", "recession", "bitcoin"]
+HN_QUERIES = ["stock market", "interest rates", "inflation", "Nvidia", "earnings", "IPO", "Federal Reserve", "AI chips", "recession", "bitcoin",
+              "tariffs", "layoffs", "OpenAI valuation", "Tesla", "Apple", "Microsoft", "Google antitrust", "Amazon", "housing market",
+              "jobs report", "stablecoin", "bank", "venture capital", "private equity", "oil prices", "dollar", "bonds", "S&P 500"]
 STOCKTWITS_SYMBOLS = ["NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "META", "AMD", "GOOGL", "SPY", "BTC.X"]
 PLATFORMS = {"reddit": "Reddit", "hn": "Hacker News", "stocktwits": "StockTwits"}
 STANCES = ("support", "pushback", "question", "context", "bullish", "bearish")
@@ -70,6 +72,14 @@ _HYPE = re.compile(
     r"\b(pump\w*|dump\w*|to the moon|moon(ing)?|tap in|it'?s free|bio|link in bio|calls in order|load(ing)? up|lfg|mark (it|my words)|"
     r"let'?s go+|go harder|wsb|tendies|yolo|free (signals?|alerts?)|discord|join (us|now)|subscribe|watch (this|my) (new )?vid\w*|"
     r"rich dads?|boys and girls|thanks+)\b",
+    re.I,
+)
+# Hacker News threads must be about markets or business, not just mention a company (a Kindle launch is not a debate).
+_MARKET = re.compile(
+    r"\b(stocks?|shares?|markets?|invest\w*|earnings|revenue|profits?|losses|valuation|ipo|fed|federal reserve|rates?|inflation|recession|"
+    r"economy|economic|gdp|jobs report|unemployment|bonds?|treasur\w+|yields?|bitcoin|crypto\w*|stablecoins?|tariffs?|layoffs|bank\w*|credit|debt|"
+    r"loans?|fees|prices?|oil|dividends?|s&p|nasdaq|dow|funding|raises?|acqui\w+|mergers?|buyouts?|antitrust|bankrupt\w*|bubble|capex|spending|"
+    r"\$\d+(\.\d+)?\s?[bmt]\b|billion|trillion|venture|private equity|hedge funds?|dollar|euro|currency)\b",
     re.I,
 )
 _BOTS = re.compile(r"^(i am a bot|this action was performed automatically|your (post|submission) (has been|was) removed|\[deleted\]|\[removed\])", re.I)
@@ -357,7 +367,7 @@ def collect_hn(db: Session, queries: list[str], days: int = 7, per_query: int = 
         r = _get("https://hn.algolia.com/api/v1/search", {"tags": "story", "query": q, "hitsPerPage": 8,
                                                           "numericFilters": f"created_at_i>{since},num_comments>=15"})  # fmt: skip
         r.raise_for_status()
-        hits = [h for h in r.json().get("hits", []) if _FINANCE.search(h.get("title") or "")][:per_query]
+        hits = [h for h in r.json().get("hits", []) if _MARKET.search(h.get("title") or "")][:per_query]
         for h in hits:
             key = f"hn:{h['objectID']}"
             have = db.scalars(select(PulseDiscussion).where(PulseDiscussion.editorial_key == key)).first()
