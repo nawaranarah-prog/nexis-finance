@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Change, fmtPrice } from "../../components/market";
 import {
-  ago, assetPath, Byline, DiscussionRow, KindLabel, Reactions, ReportButton, SectionHead, Stance, stamp, Topics, useParticipate,
+  ago, assetPath, Byline, DiscussionRow, KindLabel, Reactions, ReportButton, SectionHead, Stance, STANCE_GROUPS, stamp, Topics, useParticipate,
 } from "../../components/pulse";
 import { toast } from "../../components/toast";
 import { ErrorState } from "../../components/ui";
@@ -103,7 +103,7 @@ function Thread({ d }: { d: AnyObj }) {
   const items: AnyObj[] = q.data?.items ?? [];
   return (
     <section className="np-thread" aria-labelledby="community-h" id="community">
-      <SectionHead title="Community discussion">
+      <SectionHead title={d.kind === "public" ? "Discuss it on Nexis" : "Community discussion"}>
         <span className="xs muted">{d.counts.comments ? `${d.counts.comments} ${d.counts.comments === 1 ? "reply" : "replies"} from ${d.counts.participants} ${d.counts.participants === 1 ? "person" : "people"}` : "Anonymous replies from members"}</span>
         <span className="grow" />
         {items.length > 1 && (
@@ -218,6 +218,45 @@ function Editorial({ d }: { d: AnyObj }) {
   );
 }
 
+const GROUP_ORDER = ["support", "bullish", "pushback", "bearish", "question", "context"];
+
+/** A public thread from another site: the post, then the replies grouped by how they argue. No accounts. */
+function PublicThread({ d }: { d: AnyObj }) {
+  const { lang } = useT();
+  const p = d.public;
+  const o = d.origin ?? {};
+  const groups = GROUP_ORDER.map((k) => ({ k, items: (p.quotes as AnyObj[]).filter((q) => q.stance === k) })).filter((g) => g.items.length);
+  const tone = (k: string) => (k === "support" || k === "bullish" ? "bull" : k === "pushback" || k === "bearish" ? "bear" : "");
+  return (
+    <>
+      <section className="np-sec">
+        {d.body && <div className="np-prose np-orig-post"><Paras text={d.body} /></div>}
+        <p className="np-src-meta">Posted on {o.label}{o.posted_at ? ` · ${ago(o.posted_at, lang)}` : ""} · collected {ago(d.updated_at, lang)} · <a href={o.url} target="_blank" rel="noreferrer noopener nofollow">Read the full thread ↗</a></p>
+      </section>
+      {p.debate && <section className="np-sec"><h2 className="np-h">What they're arguing about</h2><div className="np-prose"><p dir="auto">{p.debate}</p></div></section>}
+      <section className="np-sec">
+        <h2 className="np-h">The arguments</h2>
+        <div className="np-args">
+          {groups.map((g) => (
+            <div key={g.k} className={`np-arg-group ${tone(g.k)}`}>
+              <h3>{STANCE_GROUPS[g.k] ?? g.k} <span className="num">{g.items.length}</span></h3>
+              <ul>
+                {g.items.map((q, i) => (
+                  <li key={i}>
+                    <p dir="auto">“{q.text}”</p>
+                    <span className="np-src-meta">{q.url ? <a href={q.url} target="_blank" rel="noreferrer noopener nofollow">A reply on {o.label?.split(" · ")[0] ?? "the site"} ↗</a> : "A reply"}{q.at ? ` · ${ago(q.at, lang)}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className="np-disclosure">{p.disclosure} <Link to="/ai-disclosure">How this works</Link></p>
+      </section>
+    </>
+  );
+}
+
 function Updates({ d }: { d: AnyObj }) {
   const { lang } = useT();
   if (!d.updates?.length) return null;
@@ -268,7 +307,7 @@ export default function PulseDiscussion() {
       <nav className="np-eyebrow" aria-label="Breadcrumb"><Link to="/pulse">Nexis Pulse</Link>{d.symbol && <Link to={assetPath(d.symbol)} className="mono">{d.symbol}</Link>}</nav>
       <article>
         <header className="np-d-head">
-          <div className="np-row-meta"><KindLabel kind={d.kind} /><Stance s={d.stance} /><Topics topics={d.topics} /></div>
+          <div className="np-row-meta"><KindLabel kind={d.kind} origin={d.origin} /><Stance s={d.stance} /><Topics topics={d.topics} /></div>
           <h1 dir="auto">{d.title}</h1>
           <div className="np-d-sub">
             <Byline author={d.author} aiAssisted={d.ai_assisted} />
@@ -279,13 +318,13 @@ export default function PulseDiscussion() {
               </Link>
             )}
             <time dateTime={d.updated_at ?? d.created_at} title={stamp(d.updated_at ?? d.created_at, lang)}>
-              {d.kind === "editorial" ? `Updated ${ago(d.updated_at ?? d.created_at, lang)}` : `Posted ${ago(d.created_at, lang)}`}
+              {d.kind === "editorial" ? `Updated ${ago(d.updated_at ?? d.created_at, lang)}` : d.kind === "public" ? `Collected ${ago(d.updated_at ?? d.created_at, lang)}` : `Posted ${ago(d.created_at, lang)}`}
             </time>
           </div>
           {d.viewer.pending_review && <p className="np-note">Only you can see this discussion while a moderator reviews it. It matched one of the automatic safety checks.</p>}
         </header>
 
-        {d.kind === "editorial" ? <Editorial d={d} /> : (
+        {d.kind === "editorial" ? <Editorial d={d} /> : d.kind === "public" ? <PublicThread d={d} /> : (
           <section className="np-sec">
             <div className="np-prose"><Paras text={d.body} /></div>
             <Reactions type="discussion" id={d.id} counts={d.counts} mine={d.viewer.reactions} own={d.viewer.is_mine} />

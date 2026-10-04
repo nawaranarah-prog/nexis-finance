@@ -20,7 +20,7 @@ from app.services import auth, pulse, ratelimit
 router = APIRouter(tags=["pulse"])
 
 Sort = Literal["latest", "trending", "discussed", "activity", "following", "for_you", "saved"]
-Kind = Literal["community", "editorial"]
+Kind = Literal["community", "editorial", "public"]
 Target = Literal["discussion", "comment"]
 
 
@@ -193,6 +193,14 @@ def market_events(symbol: str | None = Query(default=None, max_length=32), db: S
     else:
         rows = [e for e in events.important(db, limit=40) if e.provider != "nexis" and (not e.assets or set(e.assets) & public)][:8]
     return {"items": [events.serialize(e) for e in rows]}
+
+
+@router.get("/pulse/public/status")
+def public_status(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Which outside sources are collected, and how the last run went."""
+    from app.services import public_discussions
+
+    return public_discussions.status(db)
 
 
 @router.get("/pulse/engine")

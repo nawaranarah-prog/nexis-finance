@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     pulse_comments_per_hour: int = 30
     pulse_reactions_per_hour: int = 200
     pulse_reports_per_day: int = 30
+    # Public discussions collected from other sites (usernames removed, short linked excerpts). Each can be switched off.
+    pulse_public_reddit: bool = True  # Reddit's public RSS feeds; Reddit's terms restrict automated collection
+    pulse_public_hn: bool = True  # Hacker News (public Algolia search API)
+    pulse_public_stocktwits: bool = True  # StockTwits public symbol streams
     # Nexis editorial discussions the background engine may publish or update per run.
     pulse_editorial_per_tick: int = 3
     # The public site, used for canonical URLs, sitemaps and the cross-site request check.

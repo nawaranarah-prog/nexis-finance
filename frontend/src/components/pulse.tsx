@@ -135,12 +135,23 @@ export function Byline({ author, aiAssisted }: { author: AnyObj; aiAssisted?: bo
       </span>
     );
   }
+  if (author?.type === "public") {
+    return <span className={`np-by public ${author.platform ?? ""}`}><span className="np-plat" aria-hidden>{PLATFORM_MARK[author.platform] ?? "↗"}</span>{author.display_name}</span>;
+  }
   return <span className="np-by">Anonymous{author?.is_op && <span className="np-op" title="Wrote the original post">Author</span>}</span>;
 }
 
-export function KindLabel({ kind }: { kind: string }) {
+const PLATFORM_MARK: Record<string, string> = { reddit: "r/", hn: "Y", stocktwits: "$" };
+const PLATFORM_NAME: Record<string, string> = { reddit: "Reddit", hn: "Hacker News", stocktwits: "StockTwits" };
+
+export function KindLabel({ kind, origin }: { kind: string; origin?: AnyObj | null }) {
+  if (kind === "public") return <span className={`np-kind public ${origin?.platform ?? ""}`} title="Collected from a public discussion on another site">{origin?.label ?? "Public"}</span>;
   return kind === "editorial" ? <span className="np-kind editorial">Nexis</span> : <span className="np-kind">Community</span>;
 }
+
+export const STANCE_GROUPS: Record<string, string> = {
+  support: "Agrees", pushback: "Pushes back", question: "Asks", context: "Adds context", bullish: "Bullish", bearish: "Bearish",
+};
 
 const STANCE: Record<string, string> = { bullish: "Bullish", bearish: "Bearish", neutral: "Neutral", question: "Question", agree: "Agrees", disagree: "Disagrees" };
 export function Stance({ s }: { s?: string | null }) {
@@ -165,7 +176,7 @@ export function DiscussionRow({ d, showAsset = true }: { d: AnyObj; showAsset?: 
   return (
     <li className={`np-row ${d.kind}`}>
       <div className="np-row-meta">
-        <KindLabel kind={d.kind} />
+        <KindLabel kind={d.kind} origin={d.origin} />
         {showAsset && d.symbol && <Link to={assetPath(d.symbol)} className="np-sym mono">{d.symbol}</Link>}
         <Stance s={d.stance} />
         <time dateTime={updated ?? d.created_at} title={stamp(updated ?? d.created_at, lang)}>{updated ? `Updated ${ago(updated, lang)}` : ago(d.created_at, lang)}</time>
@@ -177,7 +188,15 @@ export function DiscussionRow({ d, showAsset = true }: { d: AnyObj; showAsset?: 
         {d.kind === "editorial" && d.debate && (d.debate.bull || d.debate.bear) ? (
           <span className="np-split"><span className="pos">{d.debate.bull} bull</span><span className="neg">{d.debate.bear} bear</span>{d.debate.open ? <span>{d.debate.open} open</span> : null}</span>
         ) : null}
-        <span>{c.comments ? plural(c.comments, "reply", "replies") : "No replies yet"}</span>
+        {d.kind === "public" && d.origin ? (
+          <span className="np-split">
+            {Object.entries(d.origin.stances ?? {}).map(([k, n]) => <span key={k} className={k === "support" || k === "bullish" ? "pos" : k === "pushback" || k === "bearish" ? "neg" : ""}>{n as number} {(STANCE_GROUPS[k] ?? k).toLowerCase()}</span>)}
+          </span>
+        ) : null}
+        {d.kind === "public"
+          ? <span>{c.comments ? `${plural(c.comments, "reply", "replies")} on Nexis` : `Discuss on Nexis`}</span>
+          : <span>{c.comments ? plural(c.comments, "reply", "replies") : "No replies yet"}</span>}
+        {d.kind === "public" && d.origin?.url && <a href={d.origin.url} target="_blank" rel="noreferrer noopener nofollow" className="np-orig">Original on {PLATFORM_NAME[d.origin.platform] ?? "source"} ↗</a>}
         {c.comments > 0 && c.participants > 1 && <span>{plural(c.participants, "person", "people")}</span>}
         {c.agree + c.disagree > 0 && <span>{c.agree} agree · {c.disagree} disagree</span>}
         <Topics topics={(d.topics ?? []).slice(0, 2)} />

@@ -38,7 +38,7 @@ class PulseDiscussion(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     # Random, URL-safe identifier used everywhere publicly (internal ids are never exposed).
     public_id: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)
-    kind: Mapped[str] = mapped_column(String(12), nullable=False)  # community | editorial
+    kind: Mapped[str] = mapped_column(String(12), nullable=False)  # community | editorial | public
     # Internal only: who wrote a community discussion (moderation, rate limits, deletion). Null for editorial.
     author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -77,6 +77,10 @@ class PulseDiscussion(Base, TimestampMixin):
     last_activity_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     # When the editorial content last changed (null for community discussions).
     content_updated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # kind == "public": where the thread was published ({"platform", "community", "url", "label", "posted_at"}) and short
+    # excerpts of the replies there, usernames removed ([{"text", "stance", "url", "at"}]).
+    origin: Mapped[dict | None] = mapped_column(JSON)
+    quotes: Mapped[list | None] = mapped_column(JSON)
     # The Finstagram-era post this discussion was migrated from (old links keep working).
     legacy_post_id: Mapped[int | None] = mapped_column(Integer, unique=True)
 
