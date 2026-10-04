@@ -76,7 +76,7 @@ _HYPE = re.compile(
 )
 # Hacker News threads must be about markets or business, not just mention a company (a Kindle launch is not a debate).
 _MARKET = re.compile(
-    r"\b(stocks?|shares?|markets?|invest\w*|earnings|revenue|profits?|losses|valuation|ipo|fed|federal reserve|rates?|inflation|recession|"
+    r"\b(stocks?|share price|shareholders?|markets?|invest\w*|earnings|revenue|profits?|losses|valuation|ipo|fed|federal reserve|rates?|inflation|recession|"
     r"economy|economic|gdp|jobs report|unemployment|bonds?|treasur\w+|yields?|bitcoin|crypto\w*|stablecoins?|tariffs?|layoffs|bank\w*|credit|debt|"
     r"loans?|fees|prices?|oil|dividends?|s&p|nasdaq|dow|funding|raises?|acqui\w+|mergers?|buyouts?|antitrust|bankrupt\w*|bubble|capex|spending|"
     r"\$\d+(\.\d+)?\s?[bmt]\b|billion|trillion|venture|private equity|hedge funds?|dollar|euro|currency)\b",
