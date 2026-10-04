@@ -40,6 +40,7 @@ const TERMS: Doc = {
         <li><b>Anonymous public identity.</b> Posts, comments and replies you make in Nexis Pulse are shown publicly as "Anonymous". Your account remains linked to them internally so that we can operate and moderate the Service, prevent abuse, and comply with the law. Anonymity on Pulse is not anonymity from Nexis: we may disclose information about an account where required by law or a valid legal request (see section 10 and the Privacy Policy).</li>
         <li><b>Your content.</b> You are responsible for what you post. You confirm you have the right to post it and that it complies with these Terms and the <Link to="/community-guidelines">Community Guidelines</Link>. You keep ownership of your content. You grant Nexis a worldwide, non-exclusive, royalty-free, transferable and sublicensable licence to host, store, reproduce, display, adapt (for example for formatting or translation), distribute and analyse your content in connection with operating, improving and promoting the Service, including summarising discussions. This licence continues for content that others have relied on (for example replies to it) after you delete it, to the extent needed to keep threads intelligible, but we erase the text of content you delete.</li>
         <li><b>Opinions.</b> Content posted by members is their own opinion. Nexis does not endorse it and does not verify it.</li>
+        <li><b>Public discussions from other sites.</b> Pulse also shows threads publicly posted on other sites (currently Reddit, Hacker News and StockTwits), labelled with where they come from. Nexis removes usernames and shows only short excerpts, each linked to the original. These are the views of people on those sites, not of Nexis or its members, and Nexis does not verify them. If you wrote something shown here, or hold rights in it, and want it removed, contact {CONTACT} or use Report and we will take it down.</li>
         <li><b>Nexis editorial content</b> is labelled "Nexis" and may be prepared with AI assistance as described in the <Link to="/ai-disclosure">AI Disclosure</Link>. It is context, not advice.</li>
       </ul>
       <H id="prohibited">6. Prohibited conduct</H>
@@ -93,6 +94,7 @@ const PRIVACY: Doc = {
         <li><b>Account information:</b> email address and/or mobile number, a password hash (never the password itself), the sign-in method (for example Google), interface language, and the versions of the Terms and Privacy Policy you accepted and when.</li>
         <li><b>Content:</b> Pulse discussions, comments, reactions, follows, saves and reports; Community (Finstagram) posts and profile details if you use that feature, which is public by design.</li>
         <li><b>My Nexis:</b> investments (asset, quantity, purchase price and date, notes), your watchlist, notification preferences and the notifications we create for you.</li>
+        <li><b>Public posts from other sites:</b> when Pulse shows a public thread from Reddit, Hacker News or StockTwits, Nexis stores the thread title, short excerpts of replies, their links and times. It removes usernames and mentions and does not keep anything about the people who wrote them. Ask at {CONTACT} to have an excerpt removed.</li>
         <li><b>Technical information:</b> session tokens (stored only as a cryptographic hash), request metadata needed for security and rate limiting (for example IP address, kept briefly), and error logs.</li>
       </ul>
       <p>We do not collect brokerage or bank credentials, and we do not buy personal data about you.</p>
@@ -194,11 +196,11 @@ const AI: Doc = {
         <li><b>Nexis editorial discussions</b> may be drafted with AI from a numbered list of sourced news, filings and market data: what happened, the bull and bear cases, open questions. Each point cites its sources, figures are checked against the sources automatically, and pieces are marked "AI-assisted". When no AI model is available, Nexis assembles the same sections from the sources with fixed rules and says so.</li>
         <li><b>Summaries and briefs</b> — for example the AI brief in My Nexis — are generated on request from the sources shown.</li>
         <li><b>The AI Advisor</b> answers your questions using live data tools; its answers are labelled as AI.</li>
-        <li><b>Classification</b> — topics and tone of news headlines, used to organise editorial context.</li>
+        <li><b>Classification</b> — topics and tone of news headlines, used to organise editorial context, and sorting replies in public threads from other sites into "agrees", "pushes back", "asks" or "adds context". The replies themselves are quoted, never rewritten.</li>
       </ul>
       <H>Where AI is never used</H>
       <ul>
-        <li>AI does not write community posts, comments or replies, and does not create accounts.</li>
+        <li>AI does not write community posts, comments or replies, and does not create accounts. Quotes from other sites are real excerpts, labelled with the site they came from — never presented as Nexis members.</li>
         <li>AI does not create reactions, follows, saves or any other engagement, and Pulse never shows invented activity. If nobody has replied, it says so.</li>
         <li>AI output is never presented as the opinion or experience of an investor.</li>
       </ul>

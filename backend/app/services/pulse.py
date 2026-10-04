@@ -246,6 +246,24 @@ def _topics_of(db: Session, ids: list[int]) -> dict[int, list[str]]:
     return {k: sorted(v, key=lambda t: order.index(t) if t in order else 99) for k, v in out.items()}
 
 
+def _public_author(d: PulseDiscussion) -> dict[str, Any]:
+    """A public thread is labelled by where it was posted, never by who posted it."""
+    o = d.origin or {}
+    return {"display_name": o.get("label") or "Public discussion", "type": "public", "platform": o.get("platform")}
+
+
+def _origin(d: PulseDiscussion) -> dict[str, Any] | None:
+    if d.kind != "public":
+        return None
+    o = d.origin or {}
+    quotes = d.quotes or []
+    stances: dict[str, int] = {}
+    for q in quotes:
+        stances[q.get("stance") or "context"] = stances.get(q.get("stance") or "context", 0) + 1
+    return {"platform": o.get("platform"), "label": o.get("label"), "community": o.get("community"), "url": o.get("url"),
+            "posted_at": o.get("posted_at"), "quotes": len(quotes), "stances": stances}  # fmt: skip
+
+
 def serialize_cards(db: Session, ds: list[PulseDiscussion], viewer: User | None) -> list[dict[str, Any]]:
     if not ds:
         return []
@@ -260,8 +278,9 @@ def serialize_cards(db: Session, ds: list[PulseDiscussion], viewer: User | None)
             "excerpt": _excerpt(d.what_happened or d.body) if editorial else _excerpt(d.body),
             "stance": d.stance, "symbol": d.primary_symbol, "asset_name": d.asset_name, "symbols": list(d.symbols or [])[:6],
             "topics": [{"key": t, "label": TOPICS.get(t, t)} for t in topics.get(d.id, [])],
-            "author": dict(NEXIS) if editorial else dict(ANONYMOUS),
-            "ai_assisted": d.ai_assisted if editorial else False,
+            "author": dict(NEXIS) if editorial else _public_author(d) if d.kind == "public" else dict(ANONYMOUS),
+            "ai_assisted": d.ai_assisted if d.kind != "community" else False,
+            "origin": _origin(d),
             "counts": {"comments": d.comment_count, "participants": d.participant_count, "followers": d.follower_count,
                        "agree": d.agree_count, "disagree": d.disagree_count, "interesting": d.interesting_count},
             "debate": {"bull": len(d.bull_case or []), "bear": len(d.bear_case or []), "open": len(d.open_questions or [])} if editorial else None,
@@ -317,6 +336,13 @@ def serialize_full(db: Session, d: PulseDiscussion, viewer: User | None) -> dict
             "ai_assisted": d.ai_assisted,
             "disclosure": _disclosure(d, bool(srcs)),
         } if editorial else None,
+        "public": {
+            "debate": d.debate, "ai_assisted": d.ai_assisted,
+            "quotes": [{"text": q.get("text"), "stance": q.get("stance") or "context", "url": q.get("url"), "at": q.get("at")} for q in d.quotes or []],
+            "disclosure": (f"Collected from public posts on {(d.origin or {}).get('label') or 'another site'}. Usernames are removed and each quote is a "
+                           "short excerpt linked to the original. Nexis hasn't checked what's said here. Not advice."
+                           + (" Replies were sorted into arguments with AI assistance." if d.ai_assisted else "")),
+        } if d.kind == "public" else None,
         "sources": srcs,
         "updates": [{"id": u.id, "kind": u.kind, "headline": u.headline, "body": u.body, "source_ids": [s for s in u.source_ids or [] if s in valid],
                      "created_at": _iso(u.created_at)} for u in updates],
@@ -399,7 +425,7 @@ def tracked_symbols(db: Session, user: User) -> dict[str, str]:
 
 def _base(viewer: User | None, kind: str | None, topic: str | None, symbol: str | None, q: str | None):  # type: ignore[no-untyped-def]
     stmt = select(PulseDiscussion).where(PulseDiscussion.status == "visible")
-    if kind in ("community", "editorial"):
+    if kind in ("community", "editorial", "public"):
         stmt = stmt.where(PulseDiscussion.kind == kind)
     if topic:
         _topics_in([topic])

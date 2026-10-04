@@ -38,6 +38,7 @@ export default function PulseAsset() {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next ?? null,
   });
+  const web = useQuery({ queryKey: ["pulse-feed", "asset-web", sym], queryFn: () => api.get<AnyObj>("/pulse/feed", { sort: "activity", symbol: sym, kind: "public", limit: 6 }) });
   const p = page.data;
   const ed = p?.editorial;
   const items: AnyObj[] = (feed.data?.pages ?? []).flatMap((x) => x.items);
@@ -78,6 +79,13 @@ export default function PulseAsset() {
           </Link>
         )}
       </section>
+
+      {(web.data?.items ?? []).length > 0 && (
+        <section className="np-sec">
+          <SectionHead title={`What people are arguing about ${sym} around the web`}><span className="xs muted">Reddit, Hacker News, StockTwits · no usernames</span></SectionHead>
+          <ol className="np-list">{web.data!.items.map((d: AnyObj) => <DiscussionRow key={d.id} d={d} showAsset={false} />)}</ol>
+        </section>
+      )}
 
       <section className="np-sec">
         <SectionHead title={`Community discussions about ${sym}`}><span className="xs muted">{p ? `${p.discussions} in total` : ""}</span></SectionHead>

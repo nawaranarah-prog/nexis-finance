@@ -98,6 +98,13 @@ def tick(db: Session, max_assets: int = 2, force: bool = False) -> dict[str, Any
             db.rollback()
             errors.append(f"editorial {job[1]}: {exc.message}")
     result["editorial"] = editorial
+    from app.services import public_discussions
+
+    try:
+        result["public"] = public_discussions.collect(db, "large" if force else "small")
+    except Exception as exc:  # outside sites must never take Pulse down
+        db.rollback()
+        errors.append(f"public: {exc.__class__.__name__}")
     result["digests"] = alerts.summarise_digests(db)
     _save_state(db, last_result=result, last_error="; ".join(errors)[:500] or None)
     return result

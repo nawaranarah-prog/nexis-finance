@@ -8,8 +8,8 @@ import { api } from "../../services/api";
 import type { AnyObj } from "../../types/api";
 
 const SORTS = [
-  { key: "trending", label: "Trending" },
   { key: "latest", label: "Latest" },
+  { key: "trending", label: "Trending" },
   { key: "discussed", label: "Most discussed" },
   { key: "activity", label: "Recent activity" },
   { key: "following", label: "Following" },
@@ -19,6 +19,7 @@ const SORTS = [
 const KINDS = [
   { key: "", label: "Everything" },
   { key: "community", label: "Community" },
+  { key: "public", label: "Around the web" },
   { key: "editorial", label: "Nexis editorial" },
 ] as const;
 const UPDATE_KIND: Record<string, string> = {
@@ -81,6 +82,7 @@ function Rail({ overview }: { overview: AnyObj | undefined }) {
       </section>
       <section className="np-howto">
         <SectionHead title="How Pulse works" />
+        <p><b>Around the web</b> threads are public discussions from Reddit, Hacker News and StockTwits. Usernames are removed; every quote links to the original.</p>
         <p><b>Community</b> posts come from real Nexis members and are always shown as Anonymous. Nexis never posts as a member.</p>
         <p><b>Nexis editorial</b> discussions give context — what happened, the bull and bear cases, open questions — with sources and a dated history.</p>
         {s && <p className="np-honest">This week: {s.comments_7d.toLocaleString()} {s.comments_7d === 1 ? "reply" : "replies"} from {s.participants_7d.toLocaleString()} {s.participants_7d === 1 ? "member" : "members"}. Counts are real activity only.</p>}
@@ -112,7 +114,7 @@ function Debates({ items }: { items: AnyObj[] }) {
 export default function PulseHome({ view = "feed" }: { view?: "feed" | "topic" | "search" }) {
   const { topic } = useParams();
   const [sp, setSp] = useSearchParams();
-  const sort = sp.get("sort") ?? (view === "feed" ? "trending" : "activity");
+  const sort = sp.get("sort") ?? (view === "feed" ? "latest" : "activity");
   const kind = sp.get("kind") ?? "";
   const q = sp.get("q") ?? "";
   const [composing, setComposing] = useState(sp.get("compose") === "1");
@@ -147,7 +149,7 @@ export default function PulseHome({ view = "feed" }: { view?: "feed" | "topic" |
       <header className="np-head">
         <div className="np-eyebrow"><Link to="/pulse">Nexis Pulse</Link>{view === "topic" && <span>Topic</span>}{view === "search" && <span>Search</span>}</div>
         <h1>{view === "topic" ? topicLabel : view === "search" ? (q ? `“${q}”` : "Search Pulse") : "What the market is debating"}</h1>
-        {view === "feed" && <p className="np-lede">Anonymous discussion between real investors, next to Nexis editorial context on the developments behind each debate.</p>}
+        {view === "feed" && <p className="np-lede">The arguments investors are having right now — collected from Reddit, Hacker News and StockTwits without anyone's account, anonymous discussion between Nexis members, and Nexis editorial context.</p>}
         <div className="np-head-actions">
           <SearchBox initial={q} />
           <button type="button" className="btn primary" onClick={() => setComposing(true)}>Start a discussion</button>
@@ -156,7 +158,7 @@ export default function PulseHome({ view = "feed" }: { view?: "feed" | "topic" |
 
       {composing && <Composer topic={view === "topic" ? topic : undefined} onClose={() => { setComposing(false); set("compose", ""); }} />}
 
-      {view === "feed" && !kind && sort === "trending" && <Debates items={overview.data?.debates ?? []} />}
+      {view === "feed" && !kind && sort === "latest" && <Debates items={overview.data?.debates ?? []} />}
 
       {view === "search" && search.data && (search.data.assets.length > 0 || search.data.topics.length > 0) && (
         <section className="np-search-hits">
@@ -171,7 +173,7 @@ export default function PulseHome({ view = "feed" }: { view?: "feed" | "topic" |
             <nav className="np-tabs" aria-label="Sort discussions">
               {SORTS.filter((s) => view === "feed" || !["following", "for_you", "saved"].includes(s.key)).map((s) => (
                 <button key={s.key} type="button" className={sort === s.key ? "on" : ""} aria-current={sort === s.key ? "page" : undefined}
-                  onClick={() => set("sort", s.key === (view === "feed" ? "trending" : "activity") ? "" : s.key)}>{s.label}</button>
+                  onClick={() => set("sort", s.key === (view === "feed" ? "latest" : "activity") ? "" : s.key)}>{s.label}</button>
               ))}
             </nav>
             <div className="np-seg small" role="radiogroup" aria-label="Kind">
