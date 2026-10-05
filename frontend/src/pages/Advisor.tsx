@@ -212,7 +212,7 @@ export default function Advisor() {
         </div>
         {post && (
           <div className="adv-attached">
-            {(post.image_url || post.link?.image) && <img src={post.image_url || post.link.image} alt="" loading="lazy" />}
+            {(post.image_url || post.link?.image) && <img src={post.image_url || post.link.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
             <div className="grow">
               <div className="row-between xs muted"><span>{tr("About this Finstagram post")} · @{post.author.username}</span>
                 <button type="button" className="link-btn xs" onClick={() => setPostId(null)}>{tr("Remove")}</button></div>
