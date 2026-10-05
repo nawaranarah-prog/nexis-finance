@@ -11,6 +11,7 @@ import { dt } from "../utils/format";
 import { useT } from "../i18n";
 import { LegalGate } from "../components/pulse";
 import { UpgradeDialog } from "../components/pro";
+import { DialogHost } from "../components/dialog";
 
 /** Every route in the app, grouped by task. Pulse, Markets and Research stay open; the rest fold away until needed. */
 export const NAV: { group: string; fixed?: boolean; items: { to: string; label: string }[] }[] = [
@@ -444,6 +445,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <TabBar />
       <LegalGate />
       <UpgradeDialog />
+      <DialogHost />
       <Toaster />
     </div>
   );

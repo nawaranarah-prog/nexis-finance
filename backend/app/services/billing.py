@@ -45,9 +45,20 @@ def configured() -> bool:
     return bool(s.stripe_secret_key and s.stripe_webhook_secret and all(price_ids().values()))
 
 
-def _sellable(db: Session) -> tuple[bool, str | None]:
+def test_mode() -> bool:
+    return bool((get_settings().stripe_secret_key or "").startswith(("sk_test_", "rk_test_")))
+
+
+def _tester(user: User | None) -> bool:
+    emails = {e.strip().lower() for e in get_settings().billing_test_emails.split(",") if e.strip()}
+    return bool(user and user.email and user.email.lower() in emails)
+
+
+def _sellable(db: Session, user: User | None = None) -> tuple[bool, str | None]:
     if not configured():
         return False, "Nexis Pro isn't available to buy yet."
+    if test_mode() and get_settings().env == "production" and not _tester(user):
+        return False, "Nexis Pro isn't available to buy yet."  # test keys on the public site: testers only
     from app.services import billing_stripe
 
     problems = billing_stripe.verify_prices(db)
@@ -56,10 +67,11 @@ def _sellable(db: Session) -> tuple[bool, str | None]:
     return True, None
 
 
-def catalog(db: Session) -> dict[str, Any]:
+def catalog(db: Session, user: User | None = None) -> dict[str, Any]:
     """Plans, limits and prices from ``plans.py`` — one source for the pricing page, Settings and checkout."""
-    sellable, reason = _sellable(db)
+    sellable, reason = _sellable(db, user)
     return {**plans.public(), "available": sellable, "unavailable_reason": reason,
+            "test_mode": sellable and test_mode(),
             "payment_methods": ["Visa", "Mastercard", "Apple Pay", "Google Pay"],
             "cancellation": "Cancel any time. You keep Nexis Pro until the end of the period you've paid for, then return to Free. "
                             "Your account, My Nexis and discussions are never deleted."}  # fmt: skip
@@ -102,7 +114,7 @@ def checkout(db: Session, user: User, plan: str) -> dict[str, str]:
         raise ValidationFailed("unknown plan")
     if entitlements.has_pro(db, user):
         raise AlreadyPro("You're already on Nexis Pro.")
-    sellable, reason = _sellable(db)
+    sellable, reason = _sellable(db, user)
     if not sellable:
         raise BillingUnavailable(reason or "Nexis Pro isn't available to buy yet.")
     from app.services import billing_stripe

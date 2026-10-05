@@ -85,7 +85,7 @@ export default function Reports() {
           <div><b>Backtests</b>: trade logs, daily results and metrics from the Backtesting page (<code>/api/exports/backtests/&#123;id&#125;/trades|results</code>)</div>
           <div><b>Portfolio metrics & returns, risk metrics</b>: Portfolio Lab and Risk Analytics (<code>/api/exports/portfolios/&#123;id&#125;/metrics|returns</code>, <code>/api/exports/risk/&#123;id&#125;</code>)</div>
           <div><b>ML predictions and anomalies</b>: Machine Learning and Anomaly Detection pages (<code>/api/exports/experiments/&#123;id&#125;/predictions|anomalies</code>)</div>
-          <div><b>API documentation</b>: <a href="/docs" onClick={(e) => { e.preventDefault(); window.open("http://127.0.0.1:8000/docs", "_blank", "noopener"); }}>OpenAPI / Swagger UI</a></div>
+          <div><b>API documentation</b>: <a href="/docs" target="_blank" rel="noopener noreferrer">OpenAPI / Swagger UI</a></div>
         </div>
       </Card>
     </>

@@ -1,3 +1,4 @@
+import { askConfirm, askText } from "../components/dialog";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "../i18n";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -311,7 +312,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
     } catch (e) { toast("error", "Couldn't save that", errorMessage(e)); }
   });
   const remove = async () => {
-    if (!window.confirm("Delete this post?")) return;
+    if (!(await askConfirm({ title: "Delete this post?", confirm: "Delete", danger: true }))) return;
     try { await api.del(`/social/posts/${post.id}`); qc.invalidateQueries({ queryKey: ["social"] }); toast("success", "Post deleted"); } catch (e) { toast("error", "Delete failed", errorMessage(e)); }
   };
   const report = () => gate("Sign in to report posts", async () => {
@@ -661,9 +662,9 @@ function EditProfile({ me, onClose }: { me: AnyObj; onClose: () => void }) {
     catch (e) { toast("error", "Upload failed", errorMessage(e)); }
   };
   const removeAccount = async () => {
-    const pw = window.prompt(me.auth_provider && me.auth_provider !== "password"
-      ? "This permanently deletes your account, posts, photos, comments and likes. Type DELETE to confirm:"
-      : "This permanently deletes your account, posts, photos, comments and likes. Enter your password to confirm:");
+    const sso = me.auth_provider && me.auth_provider !== "password";
+    const pw = await askText({ title: "Delete your account?", body: "This permanently deletes your account, posts, photos, comments and likes.",
+      label: sso ? "Type DELETE to confirm" : "Enter your password to confirm", type: sso ? "text" : "password", confirm: "Delete account", danger: true });
     if (!pw) return;
     try {
       await api.post("/auth/me/delete", { password: pw });

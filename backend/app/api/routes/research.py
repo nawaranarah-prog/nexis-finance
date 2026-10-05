@@ -20,9 +20,9 @@ from app.schemas.requests import (
     VolatilityExperimentRequest,
     WalkForwardRequest,
 )
+from app.services import auth, jobs
 from app.services import backtests as bt_svc
 from app.services import experiments as exp_svc
-from app.services import jobs
 from app.services import ml as ml_svc
 from app.services import research as research_svc
 from app.strategies.registry import list_strategies
@@ -103,7 +103,7 @@ def strategies() -> list[dict[str, Any]]:
     return list_strategies()
 
 
-@router.post("/backtests", status_code=202)
+@router.post("/backtests", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def create_backtest(req: BacktestRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     cfg = req.model_dump(mode="json")
     bt_svc.validate_config(db, cfg)  # fail fast with a 422 before queueing
@@ -111,7 +111,7 @@ def create_backtest(req: BacktestRequest, db: Session = Depends(get_db)) -> dict
     return jobs.serialize(job)
 
 
-@router.post("/backtests/walk-forward", status_code=202)
+@router.post("/backtests/walk-forward", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def create_walk_forward(req: WalkForwardRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     cfg = req.model_dump(mode="json")
     bt_svc.validate_config(db, {**cfg, "mode": "walk_forward"})
@@ -159,21 +159,21 @@ def ml_catalog() -> dict[str, Any]:
     }
 
 
-@router.post("/ml/experiments/volatility", status_code=202)
+@router.post("/ml/experiments/volatility", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def ml_volatility(req: VolatilityExperimentRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     cfg = req.model_dump(mode="json")
     job = jobs.submit(db, "volatility_forecast", cfg, lambda s, p, prog: ml_svc.run_volatility(s, p, prog))
     return jobs.serialize(job)
 
 
-@router.post("/ml/experiments/regime", status_code=202)
+@router.post("/ml/experiments/regime", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def ml_regime(req: RegimeExperimentRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     cfg = req.model_dump(mode="json")
     job = jobs.submit(db, "regime", cfg, lambda s, p, prog: ml_svc.run_regime(s, p, prog))
     return jobs.serialize(job)
 
 
-@router.post("/ml/experiments/anomaly", status_code=202)
+@router.post("/ml/experiments/anomaly", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def ml_anomaly(req: AnomalyExperimentRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     cfg = req.model_dump(mode="json")
     job = jobs.submit(db, "anomaly", cfg, lambda s, p, prog: ml_svc.run_anomaly(s, p, prog))
@@ -230,18 +230,18 @@ def get_experiment(exp_id: int, artifacts: bool = True, db: Session = Depends(ge
     return out
 
 
-@router.patch("/experiments/{exp_id}")
+@router.patch("/experiments/{exp_id}", dependencies=[Depends(auth.workspace_editor)])
 def update_notes(exp_id: int, req: NotesUpdate, db: Session = Depends(get_db)) -> dict[str, Any]:
     return exp_svc.serialize(exp_svc.update_notes(db, exp_id, req.notes))
 
 
-@router.delete("/experiments/{exp_id}", status_code=204)
+@router.delete("/experiments/{exp_id}", status_code=204, dependencies=[Depends(auth.workspace_editor)])
 def delete_experiment(exp_id: int, db: Session = Depends(get_db)) -> Response:
     exp_svc.delete_experiment(db, exp_id)
     return Response(status_code=204)
 
 
-@router.post("/experiments/{exp_id}/reproduce", status_code=202)
+@router.post("/experiments/{exp_id}/reproduce", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def reproduce(exp_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     exp = exp_svc.get_experiment(db, exp_id)
     if exp.status != "completed":

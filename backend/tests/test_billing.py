@@ -443,3 +443,36 @@ def test_deleting_an_account_cancels_its_subscription(client, stripe_on):
     assert client.post("/api/auth/me/delete", json={"password": u["password"]}).status_code == 204
     assert stripe_on["canceled"] == [sid]
     client.cookies.clear()
+
+
+def test_test_keys_in_production_sell_only_to_testers(client, stripe_on, monkeypatch):
+    s = get_settings()
+    tester = _signup(client, "tester")  # accounts made before switching to production (Secure cookies need HTTPS)
+    monkeypatch.setattr(s, "env", "production")
+    assert client.get("/api/billing/plans").json()["available"] is False  # signed in, but not a named tester
+    assert client.post("/api/billing/checkout", json={"plan": "pro_monthly"}).status_code == 503
+    monkeypatch.setattr(s, "billing_test_emails", f"someone@else.com, {tester['identifier'].upper()}")
+    p = client.get("/api/billing/plans").json()
+    assert p["available"] is True and p["test_mode"] is True
+    assert client.post("/api/billing/checkout", json={"plan": "pro_monthly"}).status_code == 200
+    _out(client)
+    assert client.get("/api/billing/plans").json()["available"] is False  # visitors: not with test keys
+    monkeypatch.setattr(s, "stripe_secret_key", "sk_live_x")
+    assert client.get("/api/billing/plans").json()["available"] is True  # live keys: on sale to everyone
+
+
+def test_shared_workspace_is_read_only_for_the_public(client, db, monkeypatch):
+    monkeypatch.setattr(get_settings(), "public_instance", True)
+    _out(client)
+    assert client.get("/api/portfolios").status_code == 200  # viewing stays open
+    for method, path in (("delete", "/api/portfolios/1"), ("post", "/api/developer/api-keys"), ("post", "/api/developer/webhooks"),
+                         ("post", "/api/backtests"), ("delete", "/api/experiments/1"), ("post", "/api/market-data/ingest"),
+                         ("post", "/api/connections"), ("post", "/api/imports/samples/load")):  # fmt: skip
+        r = client.request(method.upper(), path, json={})
+        assert r.status_code == 403, (path, r.status_code)
+    u = _signup(client, "member-not-admin")
+    assert client.delete("/api/portfolios/1").status_code == 403  # members can't either
+    db.get(User, u["id"]).role = "admin"
+    db.commit()
+    assert client.post("/api/developer/api-keys", json={}).status_code != 403  # the Nexis team can
+    _out(client)

@@ -1,3 +1,4 @@
+import { askConfirm } from "../components/dialog";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -193,7 +194,7 @@ function Analytics({ p, rf, window_, onEdit, onDeleted, others }: { p: Portfolio
     enabled: cmpId != null,
   });
   const remove = async () => {
-    if (!window.confirm(`Delete portfolio “${p.name}”? Its stored returns, risk metrics and stress tests are deleted too.`)) return;
+    if (!(await askConfirm({ title: `Delete portfolio “${p.name}”?`, body: "Its stored returns, risk metrics and stress tests are deleted too.", confirm: "Delete", danger: true }))) return;
     await api.del(`/portfolios/${p.id}`);
     qc.invalidateQueries({ queryKey: ["portfolios"] });
     onDeleted();

@@ -1,3 +1,4 @@
+import { askConfirm } from "../components/dialog";
 import { Fragment, useEffect, useState } from "react";
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -152,7 +153,7 @@ function Investments({ add }: { add: boolean }) {
   useEffect(() => { if (add) setAdding(true); }, [add]);
   const refresh = () => { qc.invalidateQueries({ queryKey: ["portfolio"] }); qc.invalidateQueries({ queryKey: ["my-today"] }); qc.invalidateQueries({ queryKey: ["billing-status"] }); };
   const remove = async (h: AnyObj) => {
-    if (!window.confirm(`Remove ${h.symbol} from your investments?`)) return;
+    if (!(await askConfirm({ title: `Remove ${h.symbol} from your investments?`, body: "This removes the investment from My Nexis. It doesn't affect anything outside Nexis.", confirm: "Remove", danger: true }))) return;
     try { await api.del(`/me/holdings/${h.id}`); refresh(); toast("success", "Investment removed"); } catch (x) { toast("error", "Couldn't remove", errorMessage(x)); }
   };
   const d = q.data;

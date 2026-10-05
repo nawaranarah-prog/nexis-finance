@@ -28,8 +28,8 @@ class ConfirmIn(_Base):
 
 
 @router.get("/billing/plans")
-def plans(db: Session = Depends(get_db)) -> dict[str, Any]:
-    return billing.catalog(db)
+def plans(viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return billing.catalog(db, viewer)
 
 
 @router.get("/billing/status")

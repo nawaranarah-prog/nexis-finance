@@ -109,7 +109,7 @@ def peers(symbol: str, db: Session = Depends(get_db)) -> list[str]:
     return markets.peers(db, symbol)
 
 
-@router.post("/markets/compare")
+@router.post("/markets/compare", dependencies=[Depends(auth.compute_limit)])
 def compare(req: CompareRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     return cmp.compare(db, req.symbols, req.period, req.start, req.end, req.interval, req.bucket, req.risk_free_rate)
 
@@ -129,7 +129,7 @@ def valuation_default(symbol: str, peers: str | None = None, db: Session = Depen
     return valuation.run(db, symbol, None, [p for p in peers.split(",") if p.strip()] if peers else None)
 
 
-@router.post("/valuation/{symbol}")
+@router.post("/valuation/{symbol}", dependencies=[Depends(auth.compute_limit)])
 def valuation_custom(symbol: str, req: ValuationRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     return valuation.run(db, symbol, req.overrides, req.peers)
 

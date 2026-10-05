@@ -1,3 +1,4 @@
+import { askConfirm } from "./dialog";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -168,7 +169,7 @@ export function BillingSection() {
   if (!s) return null;
   const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
   const change = async (path: "/billing/cancel" | "/billing/resume") => {
-    if (path === "/billing/cancel" && !window.confirm(`Cancel Nexis Pro? You keep Pro until ${date(s.renews_at)}, then move to Free. Nothing is deleted.`)) return;
+    if (path === "/billing/cancel" && !(await askConfirm({ title: "Cancel Nexis Pro?", body: `You keep Pro until ${date(s.renews_at)}, then move to Free. Nothing is deleted.`, confirm: "Cancel subscription", danger: true }))) return;
     setBusy(true);
     try { qc.setQueryData(["billing-status"], await api.post<AnyObj>(path)); toast("success", path === "/billing/cancel" ? "Subscription canceled" : "Subscription resumed"); }
     catch (e) { toast("error", "Couldn't update your subscription", errorMessage(e)); } finally { setBusy(false); }

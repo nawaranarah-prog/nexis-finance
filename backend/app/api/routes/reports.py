@@ -15,9 +15,9 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConfigurationError
 from app.db.session import get_db
 from app.schemas.requests import ReportRequest
+from app.services import auth, jobs
 from app.services import backtests as bt_svc
 from app.services import experiments as exp_svc
-from app.services import jobs
 from app.services import ml as ml_svc
 from app.services import portfolios as port_svc
 from app.services import reports as rep_svc
@@ -25,7 +25,7 @@ from app.services import reports as rep_svc
 router = APIRouter(tags=["reports & exports"])
 
 
-@router.post("/reports", status_code=202)
+@router.post("/reports", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def create_report(req: ReportRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     params = req.model_dump()
 

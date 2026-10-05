@@ -18,8 +18,8 @@ from app.core.glossary import GLOSSARY
 from app.db.session import get_db
 from app.models import Backtest, DataQualityRun, Experiment, Portfolio
 from app.schemas.requests import MarkReadRequest
+from app.services import auth, jobs, notifications, system
 from app.services import experiments as exp_svc
-from app.services import jobs, notifications, system
 from app.services import portfolios as port_svc
 from app.services.market_data import dataset_summary, get_dataset, load_panel
 
@@ -73,7 +73,7 @@ def list_notifications(
     return {"items": items, "unread": unread}
 
 
-@router.post("/notifications/read")
+@router.post("/notifications/read", dependencies=[Depends(auth.workspace_editor)])
 def mark_read(req: MarkReadRequest, db: Session = Depends(get_db)) -> dict[str, int]:
     return {"updated": notifications.mark_read(db, req.ids)}
 

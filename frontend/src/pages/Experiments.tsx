@@ -1,3 +1,4 @@
+import { askConfirm } from "../components/dialog";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -67,7 +68,7 @@ function Detail({ id, onDeleted }: { id: number; onDeleted: () => void }) {
   useEffect(() => setNotes(q.data?.notes ?? ""), [q.data]);
   const saveNotes = async () => { await api.patch(`/experiments/${id}`, { notes }); qc.invalidateQueries({ queryKey: ["experiment", id] }); qc.invalidateQueries({ queryKey: ["experiments"] }); };
   const remove = async () => {
-    if (!window.confirm("Delete this experiment and all its stored metrics, predictions and trades?")) return;
+    if (!(await askConfirm({ title: "Delete this experiment?", body: "Its stored metrics, predictions and trades are deleted too.", confirm: "Delete", danger: true }))) return;
     await api.del(`/experiments/${id}`); qc.invalidateQueries({ queryKey: ["experiments"] }); qc.invalidateQueries({ queryKey: ["backtests"] }); onDeleted();
   };
   return (
