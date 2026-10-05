@@ -46,7 +46,8 @@ def quotes(monkeypatch):  # type: ignore[no-untyped-def]
 def _stripe_price(pid: str, amount: int | None = None) -> dict[str, Any]:
     want = plans.PRICES["pro_monthly" if pid == MONTHLY else "pro_yearly"]
     return {"id": pid, "active": True, "unit_amount": amount if amount is not None else want["amount_cents"], "currency": want["currency"],
-            "recurring": {"interval": want["interval"], "interval_count": 1}}  # fmt: skip
+            "recurring": {"interval": want["interval"], "interval_count": 1},
+            "livemode": (get_settings().stripe_secret_key or "").startswith("sk_live_")}  # fmt: skip
 
 
 @pytest.fixture
@@ -60,7 +61,8 @@ def stripe_on(monkeypatch, db):  # type: ignore[no-untyped-def]
     for row in db.scalars(select(MarketCache).where(MarketCache.key.like("billing:%"))):
         db.delete(row)
     db.commit()
-    world: dict[str, Any] = {"subs": {}, "created": [], "canceled": [], "modified": [], "sessions": {}, "prices": {}}
+    world: dict[str, Any] = {"subs": {}, "created": [], "canceled": [], "modified": [], "sessions": {}, "prices": {}, "expired": [],
+                             "invoices": {}, "refunds": []}  # fmt: skip
     monkeypatch.setattr(stripe.Customer, "create", lambda **kw: {"id": f"cus_{kw['metadata']['nexis_user_id']}"})
 
     def session_create(**kw):  # type: ignore[no-untyped-def]
@@ -81,7 +83,21 @@ def stripe_on(monkeypatch, db):  # type: ignore[no-untyped-def]
     monkeypatch.setattr(stripe.Subscription, "retrieve", lambda sid, **kw: world["subs"][sid])
     monkeypatch.setattr(stripe.Subscription, "list", lambda **kw: {"data": [x for x in world["subs"].values() if x["customer"] == kw["customer"]]})
     monkeypatch.setattr(stripe.Subscription, "modify", modify)
-    monkeypatch.setattr(stripe.Subscription, "cancel", lambda sid, **kw: world["canceled"].append(sid))
+    def cancel(sid, **kw):  # type: ignore[no-untyped-def]
+        world["canceled"].append(sid)
+        if sid in world["subs"]:
+            world["subs"][sid]["status"] = "canceled"
+
+    def expire(sid, **kw):  # type: ignore[no-untyped-def]
+        world["expired"].append(sid)
+        world["sessions"][sid]["status"] = "expired"
+
+    monkeypatch.setattr(stripe.Subscription, "cancel", cancel)
+    monkeypatch.setattr(stripe.checkout.Session, "list", lambda **kw: {"data": [x for x in world["sessions"].values() if x["status"] == kw.get("status")]})
+    monkeypatch.setattr(stripe.checkout.Session, "expire", expire)
+    monkeypatch.setattr(stripe.Invoice, "retrieve", lambda iid, **kw: world["invoices"][iid])
+    monkeypatch.setattr(stripe.InvoicePayment, "list", lambda **kw: {"data": [{"status": "paid", "payment": {"payment_intent": f"pi_{kw['invoice']}"}}]})
+    monkeypatch.setattr(stripe.Refund, "create", lambda **kw: world["refunds"].append(kw) or {"id": "re_1"})
     monkeypatch.setattr(stripe.Price, "retrieve", lambda pid, **kw: world["prices"].get(pid) or _stripe_price(pid))
     return world
 
@@ -243,6 +259,85 @@ def test_out_of_order_events_keep_the_latest_state(client, stripe_on):
     stripe_on["subs"][sid] = _sub(sid, u["id"], status="active")
     _send(client, _event("customer.subscription.created", _sub(sid, u["id"], status="incomplete")))  # arrives late
     assert client.get("/api/billing/status").json()["status"] == "active"
+    _out(client)
+
+
+def test_a_second_paid_subscription_is_canceled_and_refunded(client, db, stripe_on):
+    """Monthly paid in one tab and yearly in another: the member keeps the first and is never charged twice."""
+    u = _signup(client, "twotabs")
+    first = _go_pro(client, stripe_on, u)
+    second = f"sub_second_{u['id']}"
+    stripe_on["subs"][second] = _sub(second, u["id"], price=YEARLY) | {"latest_invoice": f"in_{second}"}
+    stripe_on["invoices"][f"in_{second}"] = {"id": f"in_{second}", "amount_paid": 9900}
+    for etype in ("customer.subscription.created", "invoice.paid", "checkout.session.completed"):  # every delivery, any order
+        obj = stripe_on["subs"][second] if etype.startswith("customer.") else (
+            {"id": f"in_{second}", "object": "invoice", "subscription": second} if etype == "invoice.paid" else
+            {"id": "cs_2", "object": "checkout.session", "mode": "subscription", "client_reference_id": str(u["id"]), "subscription": second})
+        assert _send(client, _event(etype, obj)).status_code == 200
+    assert stripe_on["canceled"] == [second]
+    assert [r["payment_intent"] for r in stripe_on["refunds"]] == [f"pi_in_{second}"] and stripe_on["refunds"][0]["reason"] == "duplicate"
+    row = db.scalars(select(Subscription).where(Subscription.user_id == u["id"])).one()
+    db.refresh(row)
+    assert (row.subscription_id, row.status, row.plan) == (first, "active", "pro_monthly")
+    assert db.scalars(select(UserNotification).where(UserNotification.dedupe_key == f"billing-duplicate:{second}")).one()
+    st = client.get("/api/billing/status").json()
+    assert st["plan"] == "pro" and st["billing"] == "$9.99/month"
+    _out(client)
+
+
+def test_resubscribing_while_past_due_replaces_the_failing_subscription(client, db, stripe_on):
+    u = _signup(client, "replace")
+    old = _go_pro(client, stripe_on, u)
+    stripe_on["subs"][old]["status"] = "past_due"
+    _send(client, _event("customer.subscription.updated", stripe_on["subs"][old]))
+    new = f"sub_new_{u['id']}"
+    stripe_on["subs"][new] = _sub(new, u["id"], price=YEARLY)
+    _send(client, _event("customer.subscription.created", stripe_on["subs"][new]))
+    assert stripe_on["canceled"] == [old] and not stripe_on["refunds"]
+    _send(client, _event("customer.subscription.deleted", stripe_on["subs"][old]))  # the old one's end must not downgrade
+    _send(client, _event("invoice.payment_failed", {"id": "in_old", "object": "invoice", "subscription": old}))
+    st = client.get("/api/billing/status").json()
+    assert (st["plan"], st["status"], st["billing"], st["payment_issue"]) == ("pro", "active", "$99/year", False)
+    _out(client)
+
+
+def test_one_members_payment_never_touches_another_account(client, db, stripe_on):
+    a, b = _signup(client, "payer"), _signup(client, "bystander")
+    sid = _go_pro(client, stripe_on, a)
+    # a forged/mismatched checkout claiming B for A's subscription is not applied
+    r = _send(client, _event("checkout.session.completed", {"id": "cs_evil", "object": "checkout.session", "mode": "subscription",
+                                                           "client_reference_id": str(b["id"]), "subscription": sid}))  # fmt: skip
+    assert r.status_code == 200
+    assert db.scalars(select(Subscription).where(Subscription.user_id == b["id"])).first() is None
+    _out(client)
+    client.post("/api/auth/login", json={"identifier": b["identifier"], "password": b["password"]})
+    st = client.get("/api/billing/status").json()
+    assert st["plan"] == "free" and {k: v["limit"] for k, v in st["usage"].items()} == plans.LIMITS["free"]
+    _out(client)
+    client.post("/api/auth/login", json={"identifier": a["identifier"], "password": a["password"]})
+    assert client.get("/api/billing/status").json()["plan"] == "pro"
+    _out(client)
+
+
+def test_switching_plans_in_checkout_expires_the_other_open_session(client, stripe_on):
+    _signup(client, "switcher")
+    first = client.post("/api/billing/checkout", json={"plan": "pro_monthly"}).json()["url"]
+    second = client.post("/api/billing/checkout", json={"plan": "pro_yearly"}).json()["url"]
+    assert first != second and stripe_on["expired"] == ["cs_test_1"]
+    assert stripe_on["sessions"]["cs_test_2"]["status"] == "open"
+    _out(client)
+
+
+def test_test_and_live_stripe_objects_are_never_mixed(client, stripe_on, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "stripe_secret_key", "sk_live_x")  # live key, but the configured prices are test prices
+    stripe_on["prices"] = {pid: _stripe_price(pid) | {"livemode": False} for pid in (MONTHLY, YEARLY)}
+    _signup(client, "mixed")
+    assert client.get("/api/billing/plans").json()["available"] is False
+    assert client.post("/api/billing/checkout", json={"plan": "pro_monthly"}).status_code == 503
+    monkeypatch.setattr(s, "stripe_secret_key", "sk_test_x")  # and the reverse
+    stripe_on["prices"] = {pid: _stripe_price(pid) | {"livemode": True} for pid in (MONTHLY, YEARLY)}
+    assert client.get("/api/billing/plans").json()["available"] is False
     _out(client)
 
 
