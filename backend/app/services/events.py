@@ -107,6 +107,8 @@ def link_assets(db: Session, event: SourceEvent, symbols: list[str] | None = Non
     if not wanted or event.id is None:
         return
     have = set(db.scalars(select(SourceEventAsset.symbol).where(SourceEventAsset.event_id == event.id)))
+    # links added earlier in this unit of work aren't flushed yet (autoflush is off): count them too
+    have |= {o.symbol for o in db.new if isinstance(o, SourceEventAsset) and o.event_id == event.id}
     db.add_all(SourceEventAsset(event_id=event.id, symbol=s[:32]) for s in wanted if s and s not in have)
 
 
