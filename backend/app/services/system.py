@@ -121,6 +121,12 @@ def health(db: Session) -> dict[str, Any]:
     except Exception as exc:
         db_ok, db_error = False, exc.__class__.__name__
     latency = (time.perf_counter() - t0) * 1000
+    revision = None
+    if db_ok:
+        try:
+            revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        except Exception:
+            db.rollback()
     settings = get_settings()
     out: dict[str, Any] = {
         "api": "ok",
@@ -131,6 +137,7 @@ def health(db: Session) -> dict[str, Any]:
             "error": db_error,
             "latency_ms": round(latency, 2),
             "engine": "sqlite" if settings.is_sqlite else "postgresql",
+            "migration": revision,
         },
         "requests": request_metrics.summary(),
         "seeding": autoseed.status(),

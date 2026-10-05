@@ -80,6 +80,16 @@ def _get_post(db: Session, pid: int) -> Post:
     return p
 
 
+# Publishers that refuse images embedded on other sites (they answer 403): their thumbnails are never sent to browsers.
+HOTLINK_BLOCKED = ("content-media.investing.com", "i-invdn-com.investing.com")
+
+
+def _image(url: str | None) -> str | None:
+    from urllib.parse import urlsplit
+
+    return None if url and urlsplit(url).hostname in HOTLINK_BLOCKED else url
+
+
 def serialize_posts(db: Session, posts: list[Post], viewer: User | None) -> list[dict[str, Any]]:
     if not posts:
         return []
@@ -104,7 +114,7 @@ def serialize_posts(db: Session, posts: list[Post], viewer: User | None) -> list
                 "author": {**serialize_user(db, a), "kind": a.kind, "followed_by_me": a.id in following},
                 "body": p.body,
                 "image_url": f"/api/social/media/{p.media_id}" if p.media_id else None,
-                "link": {"url": p.link_url, "title": p.link_title, "source": p.link_source, "image": p.link_image}
+                "link": {"url": p.link_url, "title": p.link_title, "source": p.link_source, "image": _image(p.link_image)}
                 if p.link_url
                 else None,
                 "symbols": [

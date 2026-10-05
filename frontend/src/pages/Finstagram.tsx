@@ -759,7 +759,7 @@ export function ProfilePage() {
               const img = p.image_url ?? (vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : p.link?.image);
               return (
                 <Link key={p.id} to={`/finstagram/p/${p.id}`} className="grid-cell">
-                  {img ? <img src={img} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <div className="grid-text" dir="auto" style={p.link ? { background: gradientFor(p.link.source ?? ""), color: "#fff" } : undefined}>{(p.link?.title ?? p.body).slice(0, 120)}</div>}
+                  {img ? <img src={img} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} /> : <div className="grid-text" dir="auto" style={p.link ? { background: gradientFor(p.link.source ?? ""), color: "#fff" } : undefined}>{(p.link?.title ?? p.body).slice(0, 120)}</div>}
                   {vid && <span className="grid-video" aria-hidden>▶</span>}
                   <span className="grid-hover">♥ {p.like_count} · 💬 {p.comment_count}</span>
                 </Link>
