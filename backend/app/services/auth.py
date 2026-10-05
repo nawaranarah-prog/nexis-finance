@@ -358,8 +358,9 @@ def delete_account(db: Session, request: Request, response: Response, user: User
     elif not verify_password(password, user.password_hash):
         raise AuthenticationRequired("wrong password")
     from app.models import Comment, Like, Media, PostReport
-    from app.services import pulse
+    from app.services import billing, pulse
 
+    billing.close_account(db, user)  # stop billing first; refuses (and keeps the account) if Stripe can't be reached
     pulse.erase_member(db, user)  # anonymous Pulse text is erased and detached from the account
     post_ids = list(db.scalars(select(Post.id).where(Post.user_id == user.id)))
     for model, col in ((Like, Like.user_id), (Comment, Comment.user_id), (PostReport, PostReport.user_id)):

@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.api.routes import (
+    billing,
     connectivity,
     data,
     legal,
@@ -178,5 +179,6 @@ for r in (
     pulse.router,
     me.router,
     legal.router,
+    billing.router,
 ):
     app.include_router(r, prefix="/api")

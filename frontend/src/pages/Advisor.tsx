@@ -1,3 +1,4 @@
+import { handlePlanErrorBody, UsageNote } from "../components/pro";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -118,6 +119,10 @@ export default function Advisor() {
       const res = await fetch(buildUrl("/advisor/chat/stream"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages, language: lang }) });
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => null);
+        if (handlePlanErrorBody(res.status, err)) {  // a plan limit: explained in the upgrade dialog, not as an error
+          setTurns((ts) => ts.slice(0, -1));
+          return;
+        }
         throw new Error(err?.error?.message ?? `Request failed (HTTP ${res.status})`);
       }
       let meta: AnyObj | undefined;
@@ -226,6 +231,7 @@ export default function Advisor() {
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(q); } }} />
           <button className="btn primary" disabled={busy || q.trim().length < 2}>{busy ? "…" : tr("Send")}</button>
         </form>
+        {s?.usage && <div className="chat-usage"><UsageNote usage={s.usage} plan={s.plan} /></div>}
       </div>
     </>
   );

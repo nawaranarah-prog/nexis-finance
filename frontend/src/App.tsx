@@ -15,6 +15,8 @@ const MyNexis = lazy(() => import("./pages/MyNexis"));
 const MyNexisAsset = lazy(() => import("./pages/MyNexis").then((m) => ({ default: m.MyNexisAsset })));
 const Legal = lazy(() => import("./pages/Legal"));
 const Moderation = lazy(() => import("./pages/Moderation"));
+const Pro = lazy(() => import("./pages/Pro"));
+const ProWelcome = lazy(() => import("./pages/Pro").then((m) => ({ default: m.ProWelcome })));
 const NotificationsPage = lazy(() => import("./pages/Notifications"));
 const MarketData = lazy(() => import("./pages/MarketData"));
 const DataQuality = lazy(() => import("./pages/DataQuality"));
@@ -167,6 +169,9 @@ export default function App() {
           <Route path="/my-nexis/:section" element={<MyNexis />} />
           <Route path="/portfolio" element={<LegacyPortfolio />} />
           <Route path="/moderation" element={<Moderation />} />
+          <Route path="/pro" element={<Pro />} />
+          <Route path="/pricing" element={<Navigate to="/pro" replace />} />
+          <Route path="/pro/welcome" element={<ProWelcome />} />
           <Route path="/terms" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />
           <Route path="/disclaimer" element={<Legal />} />
