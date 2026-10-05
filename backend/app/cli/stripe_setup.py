@@ -85,7 +85,7 @@ def main() -> None:
         else:
             print(f"[{mode}] Customer Portal already configured (check it allows cancel at period end)")
 
-    print("\nSet these on the API (Vercel → nexis-finance-api → Settings → Environment Variables):")
+    print("\nSet these on the API (Vercel > nexis-finance-api > Settings > Environment Variables):")
     print("  STRIPE_SECRET_KEY=<the key you used>")
     print(f"  STRIPE_PRO_MONTHLY_PRICE_ID={ids['pro_monthly']}")
     print(f"  STRIPE_PRO_YEARLY_PRICE_ID={ids['pro_yearly']}")
