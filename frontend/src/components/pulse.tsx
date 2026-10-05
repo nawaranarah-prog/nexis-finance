@@ -6,6 +6,7 @@ import { toast } from "./toast";
 import { useT } from "../i18n";
 import { api, ApiError, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
+import { handlePlanError } from "./pro";
 
 // ------------------------------------------------------------------ time
 
@@ -60,6 +61,7 @@ export function useParticipate() {
       return await fn();
     } catch (e) {
       if (e instanceof ApiError && e.code === "terms_required") { requireTerms(); return undefined; }
+      if (handlePlanError(e)) return undefined;  // a plan limit: explained in the upgrade dialog
       if (e instanceof ApiError && e.status === 401) { nav(`/login?next=${encodeURIComponent(window.location.pathname)}`); return undefined; }
       throw e;
     }

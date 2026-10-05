@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, utcnow
@@ -50,6 +50,10 @@ class BillingEvent(Base):
     event_type: Mapped[str] = mapped_column(String(80), nullable=False)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     received_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    # processed (state saved) | ignored (an event type Nexis doesn't act on, or no matching account)
+    status: Mapped[str] = mapped_column(String(12), default="processed", server_default="processed", nullable=False)
+    # Ids that make the event traceable without storing the payload: object, customer, subscription, invoice.
+    details: Mapped[dict | None] = mapped_column(JSON)
 
 
 class UsageEvent(Base):

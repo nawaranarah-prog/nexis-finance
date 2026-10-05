@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-ro
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Change, fmtPrice, SymbolSearch, useMe } from "../components/market";
 import { ago, assetPath, DiscussionRow, stamp } from "../components/pulse";
-import { handlePlanError } from "../components/pro";
+import { handlePlanError, useBilling } from "../components/pro";
 import { toast } from "../components/toast";
 import { useT } from "../i18n";
 import { api, errorMessage } from "../services/api";
@@ -55,7 +55,7 @@ function HoldingForm({ initialSymbol, holding, onDone, onCancel }: { initialSymb
       if (holding) await api.patch(`/me/holdings/${holding.id}`, body);
       else await api.post("/me/holdings", { symbol: asset.symbol, ...body });
       onDone();
-    } catch (x) { setErr(errorMessage(x)); } finally { setBusy(false); }
+    } catch (x) { if (!handlePlanError(x)) setErr(errorMessage(x)); } finally { setBusy(false); }
   };
   return (
     <form className="pt-form" onSubmit={submit}>
@@ -150,7 +150,7 @@ function Investments({ add }: { add: boolean }) {
   const [adding, setAdding] = useState<boolean>(add);
   const [editing, setEditing] = useState<AnyObj | null>(null);
   useEffect(() => { if (add) setAdding(true); }, [add]);
-  const refresh = () => { qc.invalidateQueries({ queryKey: ["portfolio"] }); qc.invalidateQueries({ queryKey: ["my-today"] }); };
+  const refresh = () => { qc.invalidateQueries({ queryKey: ["portfolio"] }); qc.invalidateQueries({ queryKey: ["my-today"] }); qc.invalidateQueries({ queryKey: ["billing-status"] }); };
   const remove = async (h: AnyObj) => {
     if (!window.confirm(`Remove ${h.symbol} from your investments?`)) return;
     try { await api.del(`/me/holdings/${h.id}`); refresh(); toast("success", "Investment removed"); } catch (x) { toast("error", "Couldn't remove", errorMessage(x)); }
@@ -215,9 +215,9 @@ function Watchlist() {
   const change = async (symbol: string, on: boolean) => {
     try {
       if (on) await api.put(`/me/watchlist/${encodeURIComponent(symbol)}`, {}); else await api.del(`/me/watchlist/${encodeURIComponent(symbol)}`);
-      qc.invalidateQueries({ queryKey: ["watchlist"] }); qc.invalidateQueries({ queryKey: ["track", symbol] }); qc.invalidateQueries({ queryKey: ["my-today"] });
+      qc.invalidateQueries({ queryKey: ["watchlist"] }); qc.invalidateQueries({ queryKey: ["track", symbol] }); qc.invalidateQueries({ queryKey: ["my-today"] }); qc.invalidateQueries({ queryKey: ["billing-status"] });
       toast("success", on ? `Watching ${symbol}` : `Stopped watching ${symbol}`);
-    } catch (x) { toast("error", "Couldn't update your watchlist", errorMessage(x)); }
+    } catch (x) { if (!handlePlanError(x)) toast("error", "Couldn't update your watchlist", errorMessage(x)); }
   };
   const items: AnyObj[] = q.data?.items ?? [];
   return (
@@ -389,6 +389,17 @@ function Activity() {
   );
 }
 
+/** Capacity on the current plan (from the server): shown before anyone hits it, and after a downgrade. */
+function Capacity() {
+  const b = useBilling();
+  const u = b.data?.usage?.my_nexis_assets;
+  if (!u) return null;
+  if (u.over_capacity) {
+    return <p className="np-note">You're tracking {u.used} assets and your plan includes {u.limit}. Everything you track stays saved and keeps working; to add another, remove some or <Link to="/pro">upgrade to Nexis Pro</Link>.</p>;
+  }
+  return <p className={`pro-usage ${u.near_limit ? "low" : ""}`}>{u.used} of {u.limit} tracked assets on your plan{u.at_limit && b.data?.plan === "free" ? <> · <Link to="/pro">More with Nexis Pro</Link></> : null}</p>;
+}
+
 export default function MyNexis() {
   const me = useMe();
   const { section } = useParams();
@@ -414,6 +425,7 @@ export default function MyNexis() {
         {SECTIONS.map((x) => <NavLink key={x.key} to={x.to} end className={() => (current === x.key ? "on" : "")}>{x.label}</NavLink>)}
       </nav>
       {current === "today" && <Today />}
+      {(current === "investments" || current === "watchlist") && <Capacity />}
       {current === "investments" && <Investments add={sp.get("add") === "1"} />}
       {current === "watchlist" && <Watchlist />}
       {current === "alerts" && <Alerts />}

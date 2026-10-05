@@ -137,11 +137,8 @@ def asset_intelligence(
 def brief(
     symbol: str, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    from app.services import entitlements
-
-    user = entitlements.require_account(viewer, "brief")
     ratelimit.hit(db, f"intel-brief:{ratelimit.client_ip(request)}", 30)
-    return portfolio.brief(db, user, symbol, metered=True)
+    return portfolio.brief(db, viewer, symbol)
 
 
 # ------------------------------------------------------------------ notifications

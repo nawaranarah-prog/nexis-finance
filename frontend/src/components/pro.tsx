@@ -1,68 +1,70 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMe } from "./market";
 import { toast } from "./toast";
 import { api, ApiError, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
 
-/* Nexis Pro on the client: purely presentation. What a member may do is decided by the server
-   (entitlements.py); this file only explains it when the server says a limit was reached. */
+/* Nexis Pro in the browser is presentation only. Prices and limits come from GET /api/billing/plans, which is
+   built from backend/app/core/plans.py; what a member may do is decided by the server. No number is typed here. */
 
 const EVENT = "nexis:upgrade";
+type Plan = "pro_monthly" | "pro_yearly";
 
 export const usePlans = () => useQuery({ queryKey: ["billing-plans"], queryFn: () => api.get<AnyObj>("/billing/plans"), staleTime: 600_000 });
+export const useBilling = (enabled = true) => useQuery({ queryKey: ["billing-status"], queryFn: () => api.get<AnyObj>("/billing/status"), enabled });
 
-export function price(p: AnyObj | undefined): string | null {
-  if (!p || p.amount == null) return null;
-  const amount = new Intl.NumberFormat("en", { style: "currency", currency: p.currency || "USD", maximumFractionDigits: p.amount % 1 ? 2 : 0 }).format(p.amount);
-  const every = p.interval_count > 1 ? `${p.interval_count} ${p.interval}s` : p.interval;
-  return `${amount} / ${every}`;
-}
+export const money = (amount: number, currency = "USD") =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: amount % 1 ? 2 : 0, maximumFractionDigits: 2 }).format(amount);
+export const priceText = (p: AnyObj | undefined) => (p ? `${money(p.amount, p.currency)}/${p.interval}` : "");
+export const cents = (c: number) => money(c / 100);
 
-/** Turn a usage-limit or sign-in error from the API into the right explanation. Returns true when handled. */
+/** Turn a plan-related API error into the right explanation. Returns true when handled. */
 export function handlePlanError(e: unknown): boolean {
-  if (e instanceof ApiError && (e.code === "usage_limit" || e.code === "sign_in_required")) {
-    window.dispatchEvent(new CustomEvent(EVENT, { detail: { code: e.code, message: e.message, ...(e.details as AnyObj ?? {}) } }));
+  if (e instanceof ApiError && ["usage_limit", "sign_in_required", "already_pro"].includes(e.code)) {
+    window.dispatchEvent(new CustomEvent(EVENT, { detail: { code: e.code, message: e.message, ...((e.details as AnyObj) ?? {}) } }));
     return true;
   }
   return false;
 }
 
-/** For raw fetch calls (the streaming Advisor): same as above from an error body. */
+/** For raw fetch calls (the streaming Advisor). */
 export function handlePlanErrorBody(status: number, body: AnyObj | null): boolean {
   const err = body?.error;
-  if (!err) return false;
-  return handlePlanError(new ApiError(status, err.code, err.message, err.details));
+  return !!err && handlePlanError(new ApiError(status, err.code, err.message, err.details));
 }
 
-export async function startCheckout(plan: "pro_monthly" | "pro_yearly"): Promise<void> {
+export async function startCheckout(plan: Plan): Promise<void> {
   try {
     const r = await api.post<{ url: string }>("/billing/checkout", { plan });
     window.location.assign(r.url);  // Stripe Checkout: card, Apple Pay and Google Pay are handled there
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) { window.location.assign(`/login?mode=signup&next=${encodeURIComponent("/pro")}`); return; }
-    toast("error", "Couldn't start checkout", errorMessage(e));
+    if (!handlePlanError(e)) toast("error", "Couldn't start checkout", errorMessage(e));
   }
 }
 
-export function PlanToggle({ plans, value, onChange }: { plans: AnyObj[]; value: string; onChange: (v: "pro_monthly" | "pro_yearly") => void }) {
-  if (plans.length < 2) return null;
+async function openPortal() {
+  try { window.location.assign((await api.post<{ url: string }>("/billing/portal")).url); }
+  catch (e) { toast("error", "Couldn't open billing", errorMessage(e)); }
+}
+
+export function PlanToggle({ value, onChange, yearlyNote }: { value: Plan; onChange: (v: Plan) => void; yearlyNote?: string }) {
   return (
     <div className="np-seg small pro-toggle" role="radiogroup" aria-label="Billing">
-      {plans.map((p) => (
-        <button key={p.key} type="button" role="radio" aria-checked={value === p.key} className={value === p.key ? "on" : ""} onClick={() => onChange(p.key)}>
-          {p.key === "pro_yearly" ? "Annual" : "Monthly"}
-        </button>
-      ))}
+      <button type="button" role="radio" aria-checked={value === "pro_monthly"} className={value === "pro_monthly" ? "on" : ""} onClick={() => onChange("pro_monthly")}>Monthly</button>
+      <button type="button" role="radio" aria-checked={value === "pro_yearly"} className={value === "pro_yearly" ? "on" : ""} onClick={() => onChange("pro_yearly")}>
+        Yearly{yearlyNote && <span className="pro-save"> {yearlyNote}</span>}
+      </button>
     </div>
   );
 }
 
-/** Mounted once in the app shell. Opens only when the server reported a limit or a sign-in requirement. */
+/** Mounted once in the app shell. Opens only when the server reported a limit, a sign-in need, or an existing plan. */
 export function UpgradeDialog() {
   const [d, setD] = useState<AnyObj | null>(null);
-  const [plan, setPlan] = useState<"pro_monthly" | "pro_yearly">("pro_monthly");
+  const [plan, setPlan] = useState<Plan>("pro_yearly");
   const [busy, setBusy] = useState(false);
   const plans = usePlans();
   const me = useMe().data?.user;
@@ -80,107 +82,128 @@ export function UpgradeDialog() {
   }, [d]);
   if (!d) return null;
   const close = () => setD(null);
-  if (d.code === "sign_in_required" || !me) {
-    return (
-      <div className="np-modal-scrim" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-        <div className="np-modal pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title">
-          <h2 id="pro-title">Keep going with a free account</h2>
-          <p>{d.message}</p>
-          <p className="small text2">A free account also gives you My Nexis, alerts on what you track, and anonymous posting in Pulse. No payment needed.</p>
-          <div className="np-modal-foot">
-            <button type="button" className="btn sm ghost" onClick={close}>Not now</button>
-            <button type="button" className="btn primary sm" onClick={() => { close(); nav(`/login?mode=signup&next=${encodeURIComponent(window.location.pathname)}`); }}>Create a free account</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  const available = plans.data?.configured && (plans.data?.plans ?? []).length > 0;
-  const chosen = (plans.data?.plans ?? []).find((p: AnyObj) => p.key === plan) ?? plans.data?.plans?.[0];
-  const isPro = d.plan === "pro";
-  return (
+  const shell = (body: React.ReactNode) => (
     <div className="np-modal-scrim" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="np-modal pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title">
-        <div className="pro-eyebrow">{isPro ? "Nexis Pro" : "Free plan limit"}</div>
-        <h2 id="pro-title">{d.message}</h2>
-        {isPro ? (
-          <p>Nexis Pro allowances are fair-use limits that keep the service fast for everyone. Your allowance renews on {new Date(d.resets_at).toLocaleDateString()}.</p>
-        ) : (
-          <>
-            <p><b>You tried to {d.action}.</b> {d.value}</p>
-            <ul className="pro-list">
-              {(plans.data?.features?.pro ?? []).slice(0, 3).map((f: string) => <li key={f}>{f}</li>)}
-            </ul>
-            {available ? (
-              <div className="pro-price-row">
-                <PlanToggle plans={plans.data!.plans} value={chosen?.key ?? plan} onChange={setPlan} />
-                <span className="pro-price">{price(chosen)}</span>
-              </div>
-            ) : <p className="np-note">Nexis Pro isn't available to buy yet. Your free allowance renews on {new Date(d.resets_at).toLocaleDateString()}.</p>}
-            <p className="xs muted">Billed by Stripe. Cancel any time; you keep Pro until the end of the period you paid for. Your free allowance renews on {new Date(d.resets_at).toLocaleDateString()}.</p>
-          </>
-        )}
-        <div className="np-modal-foot">
-          <button type="button" className="btn sm ghost" onClick={close}>Maybe later</button>
-          {!isPro && <Link to="/pro" className="btn sm" onClick={close}>Compare plans</Link>}
-          {!isPro && available && (
-            <button type="button" className="btn primary sm" disabled={busy} onClick={async () => { setBusy(true); await startCheckout(chosen.key); setBusy(false); }}>
-              {busy ? "…" : "Start Nexis Pro"}
-            </button>
-          )}
-        </div>
-      </div>
+      <div className="np-modal pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title">{body}</div>
     </div>
   );
+  if (d.code === "already_pro") {
+    return shell(<>
+      <h2 id="pro-title">You're already on Nexis Pro.</h2>
+      <p>Change your plan, payment method or cancellation in Manage subscription.</p>
+      <div className="np-modal-foot">
+        <button type="button" className="btn sm ghost" onClick={close}>Close</button>
+        <button type="button" className="btn primary sm" onClick={() => { close(); void openPortal(); }}>Manage subscription</button>
+      </div>
+    </>);
+  }
+  if (d.code === "sign_in_required" || !me) {
+    return shell(<>
+      <h2 id="pro-title">{d.message}</h2>
+      <p>{d.next ?? "Create a free Nexis account to continue."}</p>
+      <p className="small text2">Free accounts also get My Nexis, alerts on what you track, and anonymous posting in Pulse. No payment needed.</p>
+      <div className="np-modal-foot">
+        <button type="button" className="btn sm ghost" onClick={close}>Not now</button>
+        <button type="button" className="btn primary sm" onClick={() => { close(); nav(`/login?mode=signup&next=${encodeURIComponent(window.location.pathname)}`); }}>Create a free account</button>
+      </div>
+    </>);
+  }
+  const p = plans.data;
+  const isPro = d.plan === "pro";
+  const resets = d.resets_at ? new Date(d.resets_at).toLocaleDateString(undefined, { day: "numeric", month: "long" }) : null;
+  const yv = p?.yearly_value;
+  return shell(<>
+    <div className="pro-eyebrow">{isPro ? "Nexis Pro fair-use limit" : "Free plan limit"}</div>
+    <h2 id="pro-title">{d.message}</h2>
+    {isPro ? (
+      <p>{d.monthly ? `Your allowance resets on ${resets}.` : "Remove an asset to free a slot."} Fair-use limits keep Nexis fast for everyone.</p>
+    ) : (
+      <>
+        <p><b>{d.upgrade_text}</b> {d.value}</p>
+        {d.monthly && resets && <p className="xs muted">Or wait: your free allowance resets on {resets}.</p>}
+        {p?.available ? (
+          <div className="pro-price-row">
+            <PlanToggle value={plan} onChange={setPlan} yearlyNote={yv ? `save ${yv.savings_pct}%` : undefined} />
+            <span className="pro-price">{priceText(p.prices[plan])}</span>
+          </div>
+        ) : <p className="np-note">Nexis Pro isn't available to buy yet.</p>}
+        <p className="xs muted">Fair-use limits apply. Billed by Stripe; cancel any time and keep Pro until the end of the period you paid for.</p>
+      </>
+    )}
+    <div className="np-modal-foot">
+      <button type="button" className="btn sm ghost" onClick={close}>Maybe later</button>
+      {!isPro && <Link to="/pro" className="btn sm" onClick={close}>Compare plans</Link>}
+      {!isPro && p?.available && (
+        <button type="button" className="btn primary sm" disabled={busy} onClick={async () => { setBusy(true); await startCheckout(plan); setBusy(false); }}>
+          {busy ? "…" : "Start Nexis Pro"}
+        </button>
+      )}
+    </div>
+  </>);
 }
 
-/** "3 of 20 AI Advisor questions used this month" — quiet, shown where the feature is used. */
+/** A quiet usage line where a limited feature is used, with the warnings at 90% and 100%. */
 export function UsageNote({ usage, plan }: { usage: AnyObj | null | undefined; plan?: string | null }) {
+  const plans = usePlans();
   if (!usage) return null;
-  const low = usage.remaining <= Math.max(1, Math.ceil(usage.limit * 0.2));
+  const proLimit = plans.data?.limits?.pro?.advisor;
+  const period = usage.monthly ? " this month" : "";
   return (
-    <span className={`pro-usage ${low ? "low" : ""}`}>
-      {usage.used} of {usage.limit} {usage.label} used {plan === "pro" ? "this billing period" : "this month"}
-      {plan !== "pro" && low && <> · <Link to="/pro">More with Nexis Pro</Link></>}
+    <span className={`pro-usage ${usage.near_limit ? "low" : ""}`}>
+      {usage.used} of {usage.limit} {usage.unit} used{period}.
+      {usage.near_limit && !usage.at_limit && usage.monthly && " You're close to your monthly limit."}
+      {usage.at_limit && plan !== "pro" && <> You've reached your Free {usage.label} limit. <Link to="/pro">Upgrade to Nexis Pro{proLimit && usage.label === "AI Advisor" ? ` for ${proLimit} messages/month` : ""}</Link></>}
     </span>
   );
 }
 
-/** The plan block in Settings. */
-export function PlanSection() {
-  const q = useQuery({ queryKey: ["billing-status"], queryFn: () => api.get<AnyObj>("/billing/status") });
+const ORDER = ["advisor", "my_nexis_assets", "pulse_discussions", "pulse_comments"];
+
+/** Settings → Billing. */
+export function BillingSection() {
+  const qc = useQueryClient();
+  const q = useBilling();
   const [busy, setBusy] = useState(false);
   const s = q.data;
   if (!s) return null;
   const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
-  const manage = async () => {
+  const change = async (path: "/billing/cancel" | "/billing/resume") => {
+    if (path === "/billing/cancel" && !window.confirm(`Cancel Nexis Pro? You keep Pro until ${date(s.renews_at)}, then move to Free. Nothing is deleted.`)) return;
     setBusy(true);
-    try { window.location.assign((await api.post<{ url: string }>("/billing/portal")).url); }
-    catch (e) { toast("error", "Couldn't open billing", errorMessage(e)); setBusy(false); }
+    try { qc.setQueryData(["billing-status"], await api.post<AnyObj>(path)); toast("success", path === "/billing/cancel" ? "Subscription canceled" : "Subscription resumed"); }
+    catch (e) { toast("error", "Couldn't update your subscription", errorMessage(e)); } finally { setBusy(false); }
   };
   return (
     <section className="pro-plan" id="plan" aria-labelledby="plan-h">
-      <h2 id="plan-h">Plan</h2>
+      <h2 id="plan-h">Billing</h2>
+      {s.payment_issue && <p className="banner error small">Payment issue — please update your payment method.</p>}
       <dl className="pro-kv">
-        <dt>Plan</dt><dd>{s.pro ? "Nexis Pro" : "Free"}{s.pro && s.interval && <span className="muted"> · billed {s.interval === "year" ? "annually" : "monthly"}</span>}</dd>
-        {s.pro && <><dt>Status</dt><dd>{s.payment_issue ? "Payment issue" : s.status === "trialing" ? "Trial" : "Active"}</dd></>}
+        <dt>Current plan</dt><dd>{s.pro ? "Nexis Pro" : "Free"}</dd>
+        {s.billing && <><dt>Billing</dt><dd>{s.billing}</dd></>}
         {s.renews_at && <><dt>Renews</dt><dd>{date(s.renews_at)}</dd></>}
         {s.access_until && <><dt>Access until</dt><dd>{date(s.access_until)} <span className="muted">· your subscription won't renew</span></dd></>}
       </dl>
-      {s.payment_issue && <p className="banner error small">We couldn't process your latest payment. Update your payment method to keep Nexis Pro.</p>}
       <ul className="pro-meters">
-        {Object.entries(s.usage as Record<string, AnyObj>).map(([k, u]) => (
-          <li key={k}>
-            <span>{u.label}</span>
-            <span className="pro-bar" aria-hidden><span style={{ transform: `scaleX(${Math.min(1, u.used / Math.max(1, u.limit))})` }} /></span>
-            <span className="num">{u.used} / {u.limit}</span>
-          </li>
-        ))}
+        {ORDER.filter((k) => s.usage[k]).map((k) => {
+          const u = s.usage[k];
+          return (
+            <li key={k} className={u.at_limit ? "full" : u.near_limit ? "near" : ""}>
+              <span>{u.label}</span>
+              <span className="pro-bar" aria-hidden><span style={{ transform: `scaleX(${Math.min(1, u.used / Math.max(1, u.limit))})` }} /></span>
+              <span className="num">{u.used} / {u.limit}{u.monthly ? " this month" : " assets"}</span>
+            </li>
+          );
+        })}
       </ul>
-      <p className="xs muted">Allowances renew {s.pro ? "each billing period" : "on the 1st of each month"}.</p>
-      <div className="row" style={{ gap: 8 }}>
-        {s.can_manage && <button type="button" className="btn sm" disabled={busy} onClick={manage}>{s.payment_issue ? "Manage billing" : "Manage subscription"}</button>}
-        {!s.pro && <Link className="btn primary sm" to="/pro">Upgrade to Nexis Pro</Link>}
+      {s.usage.my_nexis_assets?.over_capacity && (
+        <p className="np-note">You're tracking {s.usage.my_nexis_assets.used} assets and your plan includes {s.usage.my_nexis_assets.limit}. Everything stays saved; to add another, remove some or upgrade.</p>
+      )}
+      <p className="xs muted">Monthly allowances reset on the 1st of each month. Fair-use limits apply.</p>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        {!s.pro && <Link className="btn primary sm" to="/pro">Upgrade to Pro</Link>}
+        {s.can_manage && <button type="button" className="btn sm" disabled={busy} onClick={() => openPortal()}>Manage billing</button>}
+        {s.can_cancel && <button type="button" className="btn sm ghost" disabled={busy} onClick={() => change("/billing/cancel")}>Cancel subscription</button>}
+        {s.can_resume && <button type="button" className="btn sm ghost" disabled={busy} onClick={() => change("/billing/resume")}>Keep my subscription</button>}
       </div>
     </section>
   );

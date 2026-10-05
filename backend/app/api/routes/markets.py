@@ -118,13 +118,10 @@ def compare(req: CompareRequest, db: Session = Depends(get_db)) -> dict[str, Any
 def compare_report(
     req: CompareRequest, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """PDF comparison report (with an AI-written narrative): a metered feature, counted per account."""
-    user = entitlements.require_account(viewer, "report")
     ratelimit.hit(db, f"report:{ratelimit.client_ip(request)}", 20)
-    with entitlements.metered(db, user, "report"):
-        return market_reports.generate_comparison(
-            db, req.symbols, req.period, req.start, req.end, req.interval, req.bucket, req.title
-        )
+    return market_reports.generate_comparison(
+        db, req.symbols, req.period, req.start, req.end, req.interval, req.bucket, req.title
+    )
 
 
 @router.get("/valuation/{symbol}")
@@ -141,19 +138,18 @@ def valuation_custom(symbol: str, req: ValuationRequest, db: Session = Depends(g
 def valuation_report(
     symbol: str, req: ValuationRequest, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """PDF valuation report: a metered feature, counted per account."""
-    user = entitlements.require_account(viewer, "report")
     ratelimit.hit(db, f"report:{ratelimit.client_ip(request)}", 20)
-    with entitlements.metered(db, user, "report"):
-        return market_reports.generate_valuation(db, symbol, req.overrides, req.peers, req.title)
+    return market_reports.generate_valuation(db, symbol, req.overrides, req.peers, req.title)
 
 
 @router.get("/advisor/status")
 def advisor_status(viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> dict[str, Any]:
-    usage = entitlements.usage(db, viewer)["advisor"] if viewer else None
+    from app.core import plans
+
+    ent = entitlements.get_user_entitlements(db, viewer) if viewer else None
     return {**advisor.status(db), "limit_per_hour": get_settings().advisor_requests_per_hour, "disclaimer": advisor.DISCLAIMER,
-            "usage": usage, "plan": ("pro" if entitlements.has_pro(db, viewer) else "free") if viewer else None,
-            "anonymous_per_day": get_settings().anonymous_advisor_per_day}  # fmt: skip
+            "usage": ent["usage"]["advisor"] if ent else None, "plan": ent["plan"] if ent else None,
+            "anonymous_per_day": plans.ANONYMOUS["advisor_daily"]}  # fmt: skip
 
 
 def _advisor_gate(db: Session, request: Request, viewer: User | None) -> int | None:
@@ -162,7 +158,7 @@ def _advisor_gate(db: Session, request: Request, viewer: User | None) -> int | N
     if viewer is None:
         entitlements.anonymous_advisor(db, request)
         return None
-    return entitlements.reserve(db, viewer, "advisor")
+    return entitlements.consume_usage(db, viewer, "advisor")
 
 
 @router.post("/advisor/chat")

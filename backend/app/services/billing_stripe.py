@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import plans
 from app.core.config import get_settings
 from app.core.errors import NexisError, ValidationFailed
 from app.core.logging import get_logger
@@ -64,30 +65,39 @@ def _site() -> str:
 # ------------------------------------------------------------------ prices (shown on the pricing page)
 
 
-def prices(db: Session) -> dict[str, dict[str, Any]]:
-    """Amount, currency and interval of each configured price, read from Stripe (cached for an hour)."""
+def verify_prices(db: Session) -> list[str]:
+    """Check each configured Stripe price is exactly the plan in ``plans.PRICES`` (amount, currency, interval,
+    recurring and active). Returns the problems found (empty = sellable). Cached for 10 minutes."""
     row = db.get(MarketCache, PRICES_KEY)
-    if row is not None and utcnow() - row.fetched_at < timedelta(hours=1):
-        return row.payload.get("v", {})
-    out: dict[str, dict[str, Any]] = {}
-    for plan, pid in billing.price_ids().items():
+    ids = billing.price_ids()
+    if row is not None and utcnow() - row.fetched_at < timedelta(minutes=10) and row.payload.get("ids") == ids:
+        return list(row.payload.get("problems", []))
+    problems: list[str] = []
+    for plan, want in plans.PRICES.items():
+        pid = ids.get(plan)
         if not pid:
+            problems.append(f"{plan}: no price id configured")
             continue
         try:
-            p = stripe.Price.retrieve(pid, api_key=_key(), expand=["product"])
+            p = stripe.Price.retrieve(pid, api_key=_key())
         except stripe.StripeError as exc:
-            log.warning("stripe price %s unavailable: %s", plan, exc.__class__.__name__)
+            problems.append(f"{plan}: price {pid} unavailable ({exc.__class__.__name__})")
             continue
         rec = _get(p, "recurring") or {}
-        out[plan] = {"amount": (_get(p, "unit_amount") or 0) / 100, "currency": str(_get(p, "currency") or "").upper(),
-                     "interval": _get(rec, "interval"), "interval_count": _get(rec, "interval_count") or 1,
-                     "product": _get(p, "product", "name")}  # fmt: skip
+        got = (_get(p, "unit_amount"), str(_get(p, "currency") or "").lower(), _get(rec, "interval"), _get(rec, "interval_count") or 1)
+        if got != (want["amount_cents"], want["currency"], want["interval"], 1):
+            problems.append(f"{plan}: Stripe price {pid} is {got}, expected {(want['amount_cents'], want['currency'], want['interval'], 1)}")
+        if not _get(p, "active"):
+            problems.append(f"{plan}: Stripe price {pid} is archived")
+    for msg in problems:
+        log.error("nexis pro is not sellable: %s", msg)
+    payload = {"ids": ids, "problems": problems}
     if row is None:
-        db.add(MarketCache(key=PRICES_KEY, payload={"v": out}, fetched_at=utcnow()))
+        db.add(MarketCache(key=PRICES_KEY, payload=payload, fetched_at=utcnow()))
     else:
-        row.payload, row.fetched_at = {"v": out}, utcnow()
+        row.payload, row.fetched_at = payload, utcnow()
     db.commit()
-    return out
+    return problems
 
 
 # ------------------------------------------------------------------ checkout and portal
@@ -112,11 +122,44 @@ def _customer(db: Session, user: User) -> str:
     return sub.customer_id
 
 
+def _live_stripe_subscription(customer: str) -> Any | None:
+    """A subscription Stripe still considers live for this customer (guards against paying twice)."""
+    subs = stripe.Subscription.list(api_key=_key(), customer=customer, status="all", limit=20)
+    for s in _get(subs, "data") or []:
+        if _get(s, "status") in billing_live():
+            return s
+    return None
+
+
 def checkout_url(db: Session, user: User, plan: str) -> str:
+    """One Stripe Checkout Session for one of the two Nexis Pro prices — never a price the browser chose.
+
+    Duplicate protection: if Stripe already has a live subscription for this customer (for example a webhook
+    hasn't arrived yet), it's synced and the member is told they're already on Pro; and a still-open session for
+    the same plan created in the last hour is reused instead of opening a second checkout.
+    """
     price = billing.price_ids()[plan]
+    customer = _customer(db, user)
+    try:
+        live = _live_stripe_subscription(customer)
+    except stripe.StripeError as exc:
+        raise billing.BillingUnavailable("We couldn't start checkout. Please try again in a moment.") from exc
+    if live is not None:
+        sync(db, live, user.id)
+        db.commit()
+        raise billing.AlreadyPro("You're already on Nexis Pro.")
+    pending_key = f"billing:checkout:{user.id}"
+    pending = db.get(MarketCache, pending_key)
+    if pending is not None and pending.payload.get("plan") == plan and utcnow() - pending.fetched_at < timedelta(hours=1):
+        try:
+            open_session = stripe.checkout.Session.retrieve(pending.payload["id"], api_key=_key())
+            if _get(open_session, "status") == "open" and _get(open_session, "url"):
+                return _get(open_session, "url")
+        except stripe.StripeError:
+            pass
     try:
         session = stripe.checkout.Session.create(
-            api_key=_key(), mode="subscription", customer=_customer(db, user), client_reference_id=str(user.id),
+            api_key=_key(), mode="subscription", customer=customer, client_reference_id=str(user.id),
             line_items=[{"price": price, "quantity": 1}],
             # payment methods (cards, Apple Pay, Google Pay) follow the Dashboard settings
             subscription_data={"metadata": {"nexis_user_id": str(user.id), "nexis_plan": plan}},
@@ -127,7 +170,23 @@ def checkout_url(db: Session, user: User, plan: str) -> str:
     except stripe.StripeError as exc:
         log.warning("stripe checkout failed: %s", exc.__class__.__name__)
         raise billing.BillingUnavailable("We couldn't start checkout. Please try again in a moment.") from exc
+    if pending is None:
+        db.add(MarketCache(key=pending_key, payload={"id": session["id"], "plan": plan}, fetched_at=utcnow()))
+    else:
+        pending.payload, pending.fetched_at = {"id": session["id"], "plan": plan}, utcnow()
+    db.commit()
     return session["url"]
+
+
+def set_cancel_at_period_end(db: Session, sub: Subscription, cancel: bool) -> None:
+    """Cancel when the paid period ends (Pro continues until then), or undo it. Stripe's answer is what's saved."""
+    try:
+        updated = stripe.Subscription.modify(sub.subscription_id, api_key=_key(), cancel_at_period_end=cancel)
+    except stripe.StripeError as exc:
+        log.warning("stripe cancel_at_period_end failed: %s", exc.__class__.__name__)
+        raise billing.BillingUnavailable("We couldn't update your subscription. Please try again, or use Manage billing.") from exc
+    sync(db, updated, sub.user_id)
+    db.commit()
 
 
 def portal_url(sub: Subscription) -> str:
@@ -227,8 +286,8 @@ def _notify_failed(db: Session, row: Subscription, invoice_id: str) -> None:
         with db.begin_nested():
             db.add(UserNotification(
                 user_id=row.user_id, category="important", event_type="billing", severity="high",
-                title="We couldn't process your latest Nexis Pro payment",
-                body="Update your payment method to keep Nexis Pro. Stripe will retry the payment automatically.",
+                title="Your payment needs attention",
+                body="Your payment needs attention. Please update your payment method to keep Nexis Pro.",
                 link="/settings#plan", dedupe_key=f"billing-failed:{invoice_id}"[:120], delivery="immediate",
             ))  # fmt: skip
     except IntegrityError:
@@ -269,7 +328,10 @@ def handle_webhook(db: Session, payload: bytes, signature: str | None) -> dict[s
                 _notify_failed(db, row, _get(obj, "id") or eid)
             elif row is not None:
                 row.payment_failed_at = None
-    db.add(BillingEvent(provider="stripe", event_id=eid, event_type=etype, user_id=row.user_id if row else None, received_at=utcnow()))
+    details = {"object": _get(obj, "id"), "customer": _get(obj, "customer") if isinstance(_get(obj, "customer"), str) else None,
+               "subscription": row.subscription_id if row else None}  # fmt: skip
+    db.add(BillingEvent(provider="stripe", event_id=eid, event_type=etype, user_id=row.user_id if row else None, received_at=utcnow(),
+                        status="processed" if (etype in HANDLED and row is not None) else "ignored", details=details))  # fmt: skip
     try:
         db.commit()
     except IntegrityError:  # the same event processed concurrently: its state is already saved

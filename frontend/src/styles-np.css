@@ -362,3 +362,7 @@
   .pro-col + .pro-col { border-inline-start: 0; border-top: 1px solid var(--rule); padding-inline-start: 0; }
   .pro-table td:not(:first-child) { white-space: normal; }
 }
+.pro-save { font-weight: 500; color: var(--pos); font-size: 11px; }
+.pro-yearly { max-width: 360px; line-height: 1.5; }
+.pro-meters li.near .num { color: var(--warn); }
+.pro-meters li.full .num { color: var(--neg); }

@@ -1,4 +1,4 @@
-import { PlanSection } from "../components/pro";
+import { BillingSection } from "../components/pro";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -184,7 +184,7 @@ function AccountSettings() {
 
 function Plan() {
   const me = useMe().data?.user;
-  return me ? <Card title="Plan and usage"><PlanSection /></Card> : null;
+  return me ? <Card title="Billing"><BillingSection /></Card> : null;
 }
 
 export default function Settings() {

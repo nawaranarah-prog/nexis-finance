@@ -1,11 +1,12 @@
 """Nexis Pro billing, independent of the payment provider.
 
 Routes call these functions; ``billing_stripe`` implements them for Stripe (Checkout, Billing, Customer Portal,
-webhooks). Another provider (for example Tabby) would add its own module with the same functions and its own value
-in ``subscriptions.provider`` — plans, entitlements and usage don't change.
+webhooks). Another provider (for example Tabby) would add its own module and its own ``subscriptions.provider``
+value; plans (``app/core/plans.py``), entitlements and usage stay the same.
 
-Nothing here trusts the browser: the plan a member may buy is checked against the configured price ids, and Pro
-access comes only from subscription state the provider reported (``entitlements.has_pro``).
+Nothing here trusts the browser: the only things a member can buy are the two plans in ``plans.PRICES``, sold at
+the Stripe prices configured on the server — and only if Stripe confirms those prices are exactly $9.99/month and
+$99/year. Pro access comes only from subscription state Stripe reported (``entitlements.has_pro``).
 """
 
 from __future__ import annotations
@@ -14,30 +15,23 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core import plans
 from app.core.config import get_settings
 from app.core.errors import NexisError, ValidationFailed
 from app.models import User
 from app.services import entitlements
 
-PLANS = ("pro_monthly", "pro_yearly")
-PRO_FEATURES = [
-    "Up to {advisor} AI Advisor questions per billing period (Free: {advisor_free} a month)",
-    "Up to {report} PDF comparison and valuation reports (Free: {report_free} a month)",
-    "Up to {brief} AI intelligence briefs on the assets you track (Free: {brief_free} a month)",
-    "Everything in Free",
-]
-FREE_FEATURES = [
-    "UAE and global markets: prices, charts, fundamentals and news",
-    "Interactive comparisons and DCF / peer valuation",
-    "Nexis Pulse: read, post, reply and follow — anonymously",
-    "My Nexis: investments, watchlist, Today, alerts and notifications",
-    "{advisor_free} AI Advisor questions, {report_free} PDF reports and {brief_free} AI briefs a month",
-]
+PLAN_KEYS = tuple(plans.PRICES)
 
 
 class BillingUnavailable(NexisError):
     status_code = 503
     code = "billing_unavailable"
+
+
+class AlreadyPro(NexisError):
+    status_code = 409
+    code = "already_pro"
 
 
 def price_ids() -> dict[str, str | None]:
@@ -46,57 +40,71 @@ def price_ids() -> dict[str, str | None]:
 
 
 def configured() -> bool:
+    """Keys and both price ids are set. Whether the Stripe prices match the plan is checked in ``catalog``."""
     s = get_settings()
-    return bool(s.stripe_secret_key and s.stripe_webhook_secret and any(price_ids().values()))
+    return bool(s.stripe_secret_key and s.stripe_webhook_secret and all(price_ids().values()))
 
 
-def _features() -> dict[str, list[str]]:
-    lim = entitlements.limits()
-    fmt = {k: v["pro"] for k, v in lim.items()} | {f"{k}_free": v["free"] for k, v in lim.items()}
-    return {"free": [f.format(**fmt) for f in FREE_FEATURES], "pro": [f.format(**fmt) for f in PRO_FEATURES]}
+def _sellable(db: Session) -> tuple[bool, str | None]:
+    if not configured():
+        return False, "Nexis Pro isn't available to buy yet."
+    from app.services import billing_stripe
+
+    problems = billing_stripe.verify_prices(db)
+    if problems:
+        return False, "Nexis Pro is temporarily unavailable."  # the details are logged, never shown to members
+    return True, None
 
 
 def catalog(db: Session) -> dict[str, Any]:
-    """Plans, limits and the real prices from the provider. No price is ever invented: unknown prices are null."""
-    from app.services import billing_stripe
+    """Plans, limits and prices from ``plans.py`` — one source for the pricing page, Settings and checkout."""
+    sellable, reason = _sellable(db)
+    return {**plans.public(), "available": sellable, "unavailable_reason": reason,
+            "payment_methods": ["Visa", "Mastercard", "Apple Pay", "Google Pay"],
+            "cancellation": "Cancel any time. You keep Nexis Pro until the end of the period you've paid for, then return to Free. "
+                            "Your account, My Nexis and discussions are never deleted."}  # fmt: skip
 
-    prices = billing_stripe.prices(db) if configured() else {}
-    return {
-        "configured": configured(),
-        "plans": [{"key": k, **prices[k]} for k in PLANS if k in prices],
-        "limits": entitlements.limits(),
-        "features": _features(),
-        "payment_methods": ["Visa", "Mastercard", "Apple Pay", "Google Pay"],
-        "cancellation": "Cancel any time from Manage subscription. You keep Nexis Pro until the end of the period you've paid for, then return to Free.",
-    }
+
+def _price_label(plan: str | None) -> str | None:
+    p = plans.PRICES.get(plan or "")
+    if not p:
+        return None
+    amount = p["amount_cents"] / 100
+    return f"${amount:,.2f}/{p['interval']}" if amount % 1 else f"${amount:,.0f}/{p['interval']}"
 
 
 def status(db: Session, user: User) -> dict[str, Any]:
     sub = entitlements.subscription(db, user)
     pro = entitlements.sub_is_pro(sub)
     iso = (lambda d: d.isoformat() + "Z" if d else None)  # noqa: E731
+    issue = bool(sub and sub.status in ("past_due", "unpaid"))
     return {
         "plan": "pro" if pro else "free",
         "pro": pro,
         "status": sub.status if sub else None,
-        "interval": {"pro_monthly": "month", "pro_yearly": "year"}.get(sub.plan or "") if sub else None,
+        "billing": _price_label(sub.plan) if pro and sub else None,
+        "billing_plan": sub.plan if pro and sub else None,
         "renews_at": iso(sub.current_period_end) if pro and sub and not sub.cancel_at_period_end else None,
         "access_until": iso(sub.current_period_end) if pro and sub and sub.cancel_at_period_end else None,
-        "cancel_at_period_end": bool(sub and sub.cancel_at_period_end),
-        "payment_issue": bool(sub and (sub.status in ("past_due", "unpaid") or (sub.payment_failed_at and sub.status != "active"))),
+        "cancel_at_period_end": bool(pro and sub and sub.cancel_at_period_end),
+        "payment_issue": issue,
+        "payment_message": "Your payment needs attention. Please update your payment method." if issue else None,
         "can_manage": bool(sub and sub.customer_id),
-        "usage": entitlements.usage(db, user),
+        "can_cancel": bool(pro and sub and sub.subscription_id and not sub.cancel_at_period_end),
+        "can_resume": bool(pro and sub and sub.subscription_id and sub.cancel_at_period_end),
+        **entitlements.get_user_entitlements(db, user),
         "billing_available": configured(),
     }
 
 
 def checkout(db: Session, user: User, plan: str) -> dict[str, str]:
-    if plan not in PLANS:
+    if plan not in PLAN_KEYS:
         raise ValidationFailed("unknown plan")
-    if not configured() or not price_ids().get(plan):
-        raise BillingUnavailable("Nexis Pro isn't available to buy yet.")
     if entitlements.has_pro(db, user):
-        raise ValidationFailed("You already have Nexis Pro. Use Manage subscription to change your plan.")
+        raise AlreadyPro("You're already on Nexis Pro.")
+    sellable, reason = _sellable(db)
+    if not sellable:
+        raise BillingUnavailable(reason or "Nexis Pro isn't available to buy yet.")
     from app.services import billing_stripe
 
     return {"url": billing_stripe.checkout_url(db, user, plan)}
@@ -113,8 +121,21 @@ def portal(db: Session, user: User) -> dict[str, str]:
     return {"url": billing_stripe.portal_url(sub)}
 
 
+def set_cancel(db: Session, user: User, cancel: bool) -> dict[str, Any]:
+    """Cancel at the end of the paid period (or undo that). Pro continues until the period ends."""
+    sub = entitlements.subscription(db, user)
+    if not entitlements.sub_is_pro(sub) or sub is None or not sub.subscription_id:
+        raise ValidationFailed("There's no active Nexis Pro subscription.")
+    if not configured():
+        raise BillingUnavailable("Billing isn't available right now.")
+    from app.services import billing_stripe
+
+    billing_stripe.set_cancel_at_period_end(db, sub, cancel)
+    return status(db, user)
+
+
 def confirm(db: Session, user: User, session_id: str) -> dict[str, Any]:
-    """After checkout: ask the provider (server to server) about this member's session, in case the webhook is late."""
+    """After checkout: ask Stripe (server to server) about this member's session, in case the webhook is late."""
     if configured():
         from app.services import billing_stripe
 

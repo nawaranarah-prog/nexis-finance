@@ -701,7 +701,7 @@ def _participants(db: Session, d: PulseDiscussion) -> int:
 
 def create(db: Session, user: User, title: str, body: str | None, symbol: str | None, stance: str | None, topics: list[str] | None) -> dict[str, Any]:
     require_participant(db, user)
-    ratelimit.hit(db, f"pulse-discussion:{user.id}", get_settings().pulse_discussions_per_day, timedelta(hours=24))
+    ratelimit.hit(db, f"pulse-discussion:{user.id}", get_settings().pulse_discussions_per_day, timedelta(hours=24))  # anti-spam burst
     title = _text(title, 10, 160, "the title")
     body = _text(body, 0, 6000, "the text")
     if stance is not None and stance not in STANCES:
@@ -715,6 +715,9 @@ def create(db: Session, user: User, title: str, body: str | None, symbol: str | 
     if not keys:
         keys = detect_topics(f"{title}\n{body}", symbols)
     flags = pulse_safety.check(f"{title}\n{body}")
+    from app.services import entitlements
+
+    usage = entitlements.consume_usage(db, user, "pulse_discussions")  # the plan's monthly allowance
     now = utcnow()
     d = PulseDiscussion(
         public_id=new_public_id(db), kind="community", author_id=user.id, title=title, body=body, stance=stance,
@@ -722,13 +725,18 @@ def create(db: Session, user: User, title: str, body: str | None, symbol: str | 
         status=pulse_safety.verdict(flags), flagged=bool(flags), flags=flags, last_activity_at=now, created_at=now,
         participant_count=1,
     )  # fmt: skip
-    db.add(d)
-    db.flush()
-    _set_assets(db, d, symbols)
-    _set_topics(db, d, keys)
-    if flags:
-        _log(db, "discussion", d.id, "auto_hold" if d.status == "held" else "auto_flag", ", ".join(f["label"] for f in flags), flags=flags)
-    db.commit()
+    try:
+        db.add(d)
+        db.flush()
+        _set_assets(db, d, symbols)
+        _set_topics(db, d, keys)
+        if flags:
+            _log(db, "discussion", d.id, "auto_hold" if d.status == "held" else "auto_flag", ", ".join(f["label"] for f in flags), flags=flags)
+        db.commit()
+    except Exception:
+        db.rollback()
+        entitlements.refund(db, usage)
+        raise
     if d.status == "visible":
         from app.services import alerts
 
@@ -764,18 +772,26 @@ def comment(db: Session, public_id: str, user: User, body: str, parent_id: int |
             raise NotFoundError("the comment you're replying to isn't available")
         depth = min(parent.depth + 1, MAX_DEPTH)
     flags = pulse_safety.check(body)
+    from app.services import entitlements
+
+    usage = entitlements.consume_usage(db, user, "pulse_comments")  # the plan's monthly allowance
     now = utcnow()
     c = PulseComment(discussion_id=d.id, parent_id=parent.id if parent else None, author_id=user.id, body=body, stance=stance, depth=depth,
                      status=pulse_safety.verdict(flags), flagged=bool(flags), flags=flags, created_at=now)  # fmt: skip
-    db.add(c)
-    db.flush()
-    if c.status == "visible":
-        d.comment_count += 1
-        d.last_activity_at = now
-        d.participant_count = _participants(db, d)
-    if flags:
-        _log(db, "comment", c.id, "auto_hold" if c.status == "held" else "auto_flag", ", ".join(f["label"] for f in flags), flags=flags)
-    db.commit()
+    try:
+        db.add(c)
+        db.flush()
+        if c.status == "visible":
+            d.comment_count += 1
+            d.last_activity_at = now
+            d.participant_count = _participants(db, d)
+        if flags:
+            _log(db, "comment", c.id, "auto_hold" if c.status == "held" else "auto_flag", ", ".join(f["label"] for f in flags), flags=flags)
+        db.commit()
+    except Exception:
+        db.rollback()
+        entitlements.refund(db, usage)
+        raise
     if c.status == "visible":
         from app.services import alerts
 

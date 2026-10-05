@@ -1,3 +1,4 @@
+import { handlePlanError } from "../../components/pro";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,7 +21,7 @@ function Track({ symbol }: { symbol: string }) {
       await participate(() => (watching ? api.del(`/me/watchlist/${encodeURIComponent(symbol)}`) : api.put(`/me/watchlist/${encodeURIComponent(symbol)}`, {})));
       qc.invalidateQueries({ queryKey: ["track", symbol] });
       qc.invalidateQueries({ queryKey: ["watchlist"] });
-    } catch (x) { toast("error", "Couldn't update your watchlist", errorMessage(x)); }
+    } catch (x) { if (!handlePlanError(x)) toast("error", "Couldn't update your watchlist", errorMessage(x)); }
   };
   if (st.data?.holding) return <Link className="btn sm" to={`/my-nexis/asset/${encodeURIComponent(symbol)}`}>In your investments</Link>;
   return <button type="button" className={`btn sm ${watching ? "on" : ""}`} aria-pressed={!!watching} onClick={toggle}>{watching ? "On your watchlist" : "Add to watchlist"}</button>;
