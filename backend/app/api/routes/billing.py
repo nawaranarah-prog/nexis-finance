@@ -49,6 +49,20 @@ def confirm(req: ConfirmIn, user: User = Depends(auth.require_user), db: Session
     return billing.confirm(db, user, req.session_id)
 
 
+@router.post("/billing/cancel")
+def cancel(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Cancel at the end of the paid period. Pro continues until then; nothing is deleted."""
+    ratelimit.hit(db, f"billing-cancel:{user.id}", 20)
+    return billing.set_cancel(db, user, True)
+
+
+@router.post("/billing/resume")
+def resume(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Undo a scheduled cancellation before the period ends."""
+    ratelimit.hit(db, f"billing-cancel:{user.id}", 20)
+    return billing.set_cancel(db, user, False)
+
+
 @router.post("/billing/portal")
 def portal(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, str]:
     ratelimit.hit(db, f"portal:{user.id}", 30)

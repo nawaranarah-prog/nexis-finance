@@ -1,35 +1,36 @@
-"""Who gets Nexis Pro, and how much of each metered feature an account may use. The only place that decides.
+"""Who gets Nexis Pro, and how much of each limited feature an account may use. The only place that decides.
 
-Plans
-* **Free** — everything in Nexis, with monthly allowances for the features that cost money per use (AI).
-* **Nexis Pro** — the same features with much higher, fair-use allowances per billing period.
+Public functions (everything else in Nexis calls these, never checks a plan itself):
 
-Pro access (``has_pro``) follows the payment provider's subscription status:
+* ``get_subscription_status(db, user)`` — the member's subscription row and whether it grants Pro.
+* ``has_pro(db, user)`` — the single Pro check.
+* ``get_user_entitlements(db, user)`` — plan, limits and current usage, for the API and Settings → Billing.
+* ``check_usage_limit(db, user, feature)`` — would one more use be allowed? (no side effects)
+* ``consume_usage(db, user, feature)`` — count one monthly use or refuse; ``refund`` gives it back if the work failed.
+* ``check_capacity(db, user, feature, adding)`` — capacity limits (My Nexis assets): refuses going over, never deletes.
+* ``anonymous_advisor(db, request)`` — the daily allowance for visitors without an account.
 
-=====================  ==========  ===========================================================================
+Limits and prices come from ``app/core/plans.py``. Pro access follows the provider's subscription status:
+
+=====================  ==========  =========================================================================
 status                 Pro access  why
-=====================  ==========  ===========================================================================
-active, trialing       yes         paid (or in a trial)
-past_due               yes         a renewal failed and the provider is retrying; the member is asked to fix it
-incomplete             no          the first payment never completed
-incomplete_expired     no          ...and expired
-unpaid, canceled       no          retries exhausted, or the subscription ended
+=====================  ==========  =========================================================================
+active, trialing       yes         paid
+past_due               yes         a renewal failed and Stripe is retrying; the member is asked to fix it
+canceled, unpaid       no          the subscription ended / retries were exhausted
+incomplete(_expired)   no          the first payment never completed
 paused                 no          no payment is being collected
-=====================  ==========  ===========================================================================
+=====================  ==========  =========================================================================
 
-A subscription the provider still calls active but whose paid period ended more than ``GRACE`` ago (a missed
-webhook) is treated as ended. Cancelling "at period end" keeps Pro until ``current_period_end``.
-
-Metered features are counted server-side in ``usage_events``: a use is *reserved* before the expensive call and
-refunded if the call fails, so parallel requests can never exceed the limit and failures don't cost the member.
-Free allowances reset each calendar month (UTC); Pro allowances each billing period.
+A subscription still marked active whose paid period ended more than ``GRACE`` ago (a missed webhook) is not Pro.
+Cancelling "at period end" keeps Pro until ``current_period_end``. Monthly allowances reset on the 1st of each
+calendar month (UTC) for every plan.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -37,36 +38,15 @@ from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core import plans
 from app.core.errors import NexisError
 from app.db.base import utcnow
 from app.models import Subscription, UsageEvent, User
 
 PRO_STATUSES = frozenset({"active", "trialing", "past_due"})
 GRACE = timedelta(days=2)
-
-
-@dataclass(frozen=True)
-class Feature:
-    key: str
-    label: str  # how a use is counted, e.g. "AI Advisor questions"
-    action: str  # what the member was doing, for the upgrade message
-    value: str  # why it's worth it, in one sentence
-    free_setting: str
-    pro_setting: str
-
-
-FEATURES: dict[str, Feature] = {f.key: f for f in (
-    Feature("advisor", "AI Advisor questions", "ask the AI Advisor",
-            "The Advisor checks live prices, news, analyst ratings and valuations before every answer.",
-            "free_advisor_limit", "pro_advisor_limit"),
-    Feature("report", "PDF research reports", "generate a PDF research report",
-            "Comparison and valuation reports with charts, tables and a written analysis you can keep and share.",
-            "free_report_limit", "pro_report_limit"),
-    Feature("brief", "AI intelligence briefs", "get an AI brief on an asset you track",
-            "A short, sourced note on what just happened to an asset you hold or watch, and why it may matter.",
-            "free_brief_limit", "pro_brief_limit"),
-)}  # fmt: skip
+MONTHLY = tuple(k for k, f in plans.FEATURES.items() if f["monthly"])
+WARN_AT = 0.9
 
 
 class UsageLimitReached(NexisError):
@@ -79,7 +59,7 @@ class SignInRequired(NexisError):
     code = "sign_in_required"
 
 
-# ------------------------------------------------------------------ plan
+# ------------------------------------------------------------------ subscription and plan
 
 
 def subscription(db: Session, user: User | None) -> Subscription | None:
@@ -95,74 +75,93 @@ def sub_is_pro(sub: Subscription | None, now: datetime | None = None) -> bool:
     return not (sub.current_period_end is not None and sub.current_period_end + GRACE < now)
 
 
+def get_subscription_status(db: Session, user: User | None) -> dict[str, Any]:
+    sub = subscription(db, user)
+    return {"subscription": sub, "pro": sub_is_pro(sub), "status": sub.status if sub else None}
+
+
 def has_pro(db: Session, user: User | None) -> bool:
-    """The single entitlement check. Never trust anything the browser says about the plan."""
+    """The single entitlement check. Nothing the browser sends is ever consulted."""
     return sub_is_pro(subscription(db, user))
 
 
-def limit(feature: str, pro: bool) -> int:
-    f = FEATURES[feature]
-    return int(getattr(get_settings(), f.pro_setting if pro else f.free_setting))
+def plan_of(db: Session, user: User | None) -> str:
+    return "pro" if has_pro(db, user) else "free"
 
 
-def limits() -> dict[str, dict[str, int]]:
-    return {k: {"free": limit(k, False), "pro": limit(k, True)} for k in FEATURES}
+def limit(feature: str, plan: str) -> int:
+    return plans.LIMITS[plan][feature]
 
 
-def _month_bounds(now: datetime) -> tuple[datetime, datetime]:
+def month_bounds(now: datetime | None = None) -> tuple[datetime, datetime]:
+    now = now or utcnow()
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = (start + timedelta(days=32)).replace(day=1)
-    return start, end
+    return start, (start + timedelta(days=32)).replace(day=1)
 
 
-def period(db: Session, user: User) -> tuple[datetime, datetime]:
-    """The window usage is counted in: the billing period for Pro, the calendar month (UTC) for Free."""
-    now = utcnow()
-    sub = subscription(db, user)
-    if sub_is_pro(sub, now) and sub and sub.current_period_start and sub.current_period_end and sub.current_period_start <= now:
-        return sub.current_period_start, max(sub.current_period_end, now)
-    return _month_bounds(now)
+# ------------------------------------------------------------------ usage
 
 
-def used(db: Session, user: User, feature: str, since: datetime) -> int:
+def used(db: Session, user: User, feature: str, since: datetime | None = None) -> int:
+    """Monthly features: uses this calendar month. Capacity features: what the member holds right now."""
+    if feature == "my_nexis_assets":
+        from app.services import portfolio
+
+        return len(portfolio.tracked(db, user))
+    since = since or month_bounds()[0]
     return db.scalar(select(func.coalesce(func.sum(UsageEvent.units), 0)).where(
         UsageEvent.user_id == user.id, UsageEvent.feature == feature, UsageEvent.created_at >= since)) or 0  # fmt: skip
 
 
-def usage(db: Session, user: User) -> dict[str, Any]:
-    pro = has_pro(db, user)
-    start, end = period(db, user)
-    out = {}
-    for k, f in FEATURES.items():
-        n, cap = used(db, user, k, start), limit(k, pro)
-        out[k] = {"label": f.label, "used": n, "limit": cap, "remaining": max(0, cap - n), "resets_at": end.isoformat() + "Z"}
-    return out
+def _row(feature: str, n: int, cap: int, resets: datetime | None) -> dict[str, Any]:
+    f = plans.FEATURES[feature]
+    return {"label": f["label"], "unit": f["unit"], "monthly": f["monthly"], "used": n, "limit": cap, "remaining": max(0, cap - n),
+            "near_limit": n >= cap * WARN_AT, "at_limit": n >= cap, "over_capacity": n > cap,
+            "resets_at": resets.isoformat() + "Z" if resets else None}  # fmt: skip
 
 
-# ------------------------------------------------------------------ enforcement
+def get_user_entitlements(db: Session, user: User) -> dict[str, Any]:
+    plan = plan_of(db, user)
+    _, end = month_bounds()
+    usage = {k: _row(k, used(db, user, k), limit(k, plan), end if plans.FEATURES[k]["monthly"] else None) for k in plans.FEATURES}
+    return {"plan": plan, "limits": dict(plans.LIMITS[plan]), "usage": usage}
 
 
-def _limit_error(db: Session, user: User, feature: str, pro: bool, n: int, cap: int, end: datetime) -> UsageLimitReached:
-    f = FEATURES[feature]
-    if pro:
-        msg = f"You've used this billing period's {cap} {f.label}. Your allowance renews on {end:%d %b %Y}."
+def _limit_error(feature: str, plan: str, n: int, cap: int) -> UsageLimitReached:
+    f = plans.FEATURES[feature]
+    pro_cap = limit(feature, "pro")
+    _, end = month_bounds()
+    if not f["monthly"]:
+        msg = (f"You're tracking {n} of {cap} assets on your {'Nexis Pro' if plan == 'pro' else 'Free'} plan. "
+               "Remove one to add another" + ("." if plan == "pro" else f", or upgrade to Nexis Pro for {pro_cap} tracked assets."))  # fmt: skip
+    elif plan == "pro":
+        msg = f"You've used this month's {cap} {f['unit']} on Nexis Pro. Your allowance resets on {end.day} {end:%B %Y}."
     else:
-        msg = f"You've used your {cap} free {f.label} this month."
+        msg = f"You've reached your Free {f['label']} limit."
     return UsageLimitReached(msg, details={
-        "feature": feature, "label": f.label, "action": f.action, "value": f.value, "used": n, "limit": cap, "plan": "pro" if pro else "free",
-        "pro_limit": limit(feature, True), "resets_at": end.isoformat() + "Z", "upgrade": not pro,
+        "feature": feature, "label": f["label"], "unit": f["unit"], "action": f["action"], "value": f["value"], "used": n, "limit": cap,
+        "plan": plan, "pro_limit": pro_cap, "monthly": f["monthly"], "resets_at": end.isoformat() + "Z" if f["monthly"] else None,
+        "upgrade": plan == "free", "upgrade_text": f"Upgrade to Nexis Pro for {pro_cap} {f['unit']}" + ("/month." if f["monthly"] else "."),
     })  # fmt: skip
 
 
-def reserve(db: Session, user: User, feature: str) -> int:
-    """Count one use, or raise ``UsageLimitReached``. Returns the reservation id (for ``refund``).
+def check_usage_limit(db: Session, user: User, feature: str) -> dict[str, Any]:
+    plan = plan_of(db, user)
+    n, cap = used(db, user, feature), limit(feature, plan)
+    return {"allowed": n < cap, "used": n, "limit": cap, "plan": plan}
 
-    The row is written first and the total checked afterwards, so two requests racing each other can't both slip
-    under the limit: if the total is over, this reservation is removed and the request refused.
+
+def consume_usage(db: Session, user: User, feature: str) -> int:
+    """Count one monthly use, or raise ``UsageLimitReached``. Returns the record id (for ``refund``).
+
+    The row is written first and the total checked afterwards, so requests racing each other (several tabs, scripts)
+    can't both slip under the limit: if the total is over, this use is removed and the request refused.
     """
-    pro = has_pro(db, user)
-    start, end = period(db, user)
-    cap = limit(feature, pro)
+    if feature not in MONTHLY:
+        raise ValueError(f"{feature} is not a monthly feature")
+    plan = plan_of(db, user)
+    cap = limit(feature, plan)
+    start, _ = month_bounds()
     ev = UsageEvent(user_id=user.id, feature=feature, created_at=utcnow(), units=1)
     db.add(ev)
     db.commit()
@@ -170,14 +169,14 @@ def reserve(db: Session, user: User, feature: str) -> int:
     if n > cap:
         db.delete(ev)
         db.commit()
-        raise _limit_error(db, user, feature, pro, n - 1, cap, end)
+        raise _limit_error(feature, plan, n - 1, cap)
     return ev.id
 
 
-def refund(db: Session, reservation: int | None) -> None:
-    if reservation is None:
+def refund(db: Session, record: int | None) -> None:
+    if record is None:
         return
-    ev = db.get(UsageEvent, reservation)
+    ev = db.get(UsageEvent, record)
     if ev is not None:
         db.delete(ev)
         db.commit()
@@ -185,8 +184,8 @@ def refund(db: Session, reservation: int | None) -> None:
 
 @contextmanager
 def metered(db: Session, user: User, feature: str) -> Iterator[int]:
-    """Reserve one use for the duration of the block; refunded if the block fails."""
-    rid = reserve(db, user, feature)
+    """Consume one use for the block; refunded if the block fails."""
+    rid = consume_usage(db, user, feature)
     try:
         yield rid
     except Exception:
@@ -195,23 +194,28 @@ def metered(db: Session, user: User, feature: str) -> Iterator[int]:
         raise
 
 
-def require_account(user: User | None, feature: str) -> User:
-    if user is None:
-        f = FEATURES[feature]
-        raise SignInRequired(f"Create a free account to {f.action} — free accounts include {limit(feature, False)} {f.label} a month.",
-                             details={"feature": feature, "free_limit": limit(feature, False)})  # fmt: skip
-    return user
+def check_capacity(db: Session, user: User, feature: str, adding: int = 1) -> None:
+    """Refuse to go over a capacity limit. Existing items are never touched (after a downgrade they all stay)."""
+    plan = plan_of(db, user)
+    n, cap = used(db, user, feature), limit(feature, plan)
+    if n + adding > cap:
+        raise _limit_error(feature, plan, n, cap)
+
+
+# ------------------------------------------------------------------ visitors
 
 
 def anonymous_advisor(db: Session, request: Request) -> None:
-    """Visitors can try the Advisor a few times a day before being asked to create a (free) account."""
+    """Visitors get a few Advisor messages a day (per IP, server-side) before being asked to create a free account."""
     from app.services import ratelimit
 
-    n = get_settings().anonymous_advisor_per_day
+    n = plans.ANONYMOUS["advisor_daily"]
     try:
         ratelimit.hit(db, f"anon-advisor:{ratelimit.client_ip(request)}", n, timedelta(hours=24))
     except ratelimit.RateLimited as exc:
+        free = limit("advisor", "free")
         raise SignInRequired(
-            f"You've tried the AI Advisor {n} times today. Create a free account to keep going — it includes "
-            f"{limit('advisor', False)} questions a month.", details={"feature": "advisor", "free_limit": limit("advisor", False)},
+            "You've reached today's free AI Advisor limit.",
+            details={"feature": "advisor", "free_limit": free,
+                     "next": f"Create a free Nexis account to continue with {free} AI Advisor messages per month."},
         ) from exc
