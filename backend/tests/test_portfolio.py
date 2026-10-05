@@ -208,3 +208,20 @@ def test_today_aggregates_only_what_the_member_tracks(client, db, market, monkey
     assert me["id"]  # the member's own id is visible only to the member, through /auth/me
     client.post("/api/auth/logout")
     client.cookies.clear()
+
+
+def test_linking_the_same_event_twice_in_one_batch_is_safe(client):  # type: ignore[no-untyped-def]
+    """Two sources with the same headline resolve to one event; linking it twice before a flush must not duplicate."""
+    from app.db import session as db_session
+    from app.models import SourceEventAsset
+    from app.services import events
+
+    with db_session.SessionLocal() as db:
+        e = SourceEvent(kind="news", provider="newsfeed", title="Same headline twice", published_at=utcnow(), facts={}, assets=["AAPL"],
+                        topics=[], importance=1, external_key=f"t:dup-link:{utcnow().timestamp()}")  # fmt: skip
+        db.add(e)
+        db.flush()
+        events.link_assets(db, e, ["AAPL"])
+        events.link_assets(db, e, ["AAPL", "MSFT"])
+        db.commit()
+        assert sorted(db.scalars(select(SourceEventAsset.symbol).where(SourceEventAsset.event_id == e.id))) == ["AAPL", "MSFT"]
