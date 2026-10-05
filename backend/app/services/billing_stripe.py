@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -46,6 +47,10 @@ def _key() -> str:
     return key
 
 
+def live_mode() -> bool:
+    return _key().startswith(("sk_live_", "rk_live_"))
+
+
 def _get(obj: Any, *path: str) -> Any:
     for p in path:
         if obj is None:
@@ -70,7 +75,8 @@ def verify_prices(db: Session) -> list[str]:
     recurring and active). Returns the problems found (empty = sellable). Cached for 10 minutes."""
     row = db.get(MarketCache, PRICES_KEY)
     ids = billing.price_ids()
-    if row is not None and utcnow() - row.fetched_at < timedelta(minutes=10) and row.payload.get("ids") == ids:
+    if (row is not None and utcnow() - row.fetched_at < timedelta(minutes=10) and row.payload.get("ids") == ids
+            and row.payload.get("live") == live_mode()):  # fmt: skip
         return list(row.payload.get("problems", []))
     problems: list[str] = []
     for plan, want in plans.PRICES.items():
@@ -89,9 +95,12 @@ def verify_prices(db: Session) -> list[str]:
             problems.append(f"{plan}: Stripe price {pid} is {got}, expected {(want['amount_cents'], want['currency'], want['interval'], 1)}")
         if not _get(p, "active"):
             problems.append(f"{plan}: Stripe price {pid} is archived")
+        if bool(_get(p, "livemode")) != live_mode():
+            problems.append(f"{plan}: Stripe price {pid} is a {'live' if _get(p, 'livemode') else 'test'} price but the secret key is a "
+                            f"{'live' if live_mode() else 'test'} key")
     for msg in problems:
         log.error("nexis pro is not sellable: %s", msg)
-    payload = {"ids": ids, "problems": problems}
+    payload = {"ids": ids, "live": live_mode(), "problems": problems}
     if row is None:
         db.add(MarketCache(key=PRICES_KEY, payload=payload, fetched_at=utcnow()))
     else:
@@ -131,6 +140,15 @@ def _live_stripe_subscription(customer: str) -> Any | None:
     return None
 
 
+def _expire_open_sessions(customer: str) -> None:
+    try:
+        for s in _get(stripe.checkout.Session.list(api_key=_key(), customer=customer, status="open", limit=20), "data") or []:
+            with contextlib.suppress(stripe.InvalidRequestError):  # completed or expired meanwhile (a completed one is caught as a duplicate)
+                stripe.checkout.Session.expire(_get(s, "id"), api_key=_key())
+    except stripe.StripeError as exc:
+        log.warning("could not expire open checkout sessions: %s", exc.__class__.__name__)
+
+
 def checkout_url(db: Session, user: User, plan: str) -> str:
     """One Stripe Checkout Session for one of the two Nexis Pro prices — never a price the browser chose.
 
@@ -157,6 +175,7 @@ def checkout_url(db: Session, user: User, plan: str) -> str:
                 return _get(open_session, "url")
         except stripe.StripeError:
             pass
+    _expire_open_sessions(customer)  # e.g. monthly open in one tab, yearly in another: only the newest can be paid
     try:
         session = stripe.checkout.Session.create(
             api_key=_key(), mode="subscription", customer=customer, client_reference_id=str(user.id),
@@ -230,9 +249,22 @@ def sync(db: Session, obj: Any, user_id: int | None = None) -> Subscription | No
             return None
         row = db.scalars(select(Subscription).where(Subscription.user_id == uid)).first() or Subscription(user_id=uid, provider="stripe")
         db.add(row)
+    elif user_id is not None and row.user_id != user_id:
+        # The checkout says one account, the Stripe customer/subscription belongs to another: never grant Pro on a guess.
+        log.error("stripe subscription %s: checkout account %s but customer belongs to account %s — not applied", sid, user_id, row.user_id)
+        return None
     status = _get(obj, "status")
     if row.subscription_id and row.subscription_id != sid and row.status in billing_live() and status not in billing_live():
         return row  # an older, dead subscription must not overwrite the member's current one
+    if row.subscription_id and row.subscription_id != sid and status in billing_live() and row.status in ("active", "trialing"):
+        # A second live subscription for an account that already has a working one (e.g. two checkouts paid in two
+        # tabs). Keep the first, cancel the second and refund it, so nobody pays twice for the same thing.
+        _cancel_duplicate(db, row, obj)
+        return row
+    if row.subscription_id and row.subscription_id != sid and status in billing_live() and row.status in billing_live():
+        # The member re-subscribed while the old one was failing (past_due): the new one replaces it; stop the old one
+        # so Stripe doesn't keep retrying a card for a subscription they no longer use.
+        _cancel_quietly(row.subscription_id)
     item = (_get(obj, "items", "data") or [None])[0]
     price = _get(item, "price", "id")
     row.provider, row.subscription_id, row.customer_id = "stripe", sid, customer or row.customer_id
@@ -245,6 +277,62 @@ def sync(db: Session, obj: Any, user_id: int | None = None) -> Subscription | No
     if status == "active":
         row.payment_failed_at = None
     return row
+
+
+def _cancel_quietly(sub_id: str) -> None:
+    try:
+        stripe.Subscription.cancel(sub_id, api_key=_key())
+    except stripe.StripeError as exc:
+        log.error("could not cancel superseded subscription %s: %s", sub_id, exc.__class__.__name__)
+
+
+def _refund_latest_payment(obj: Any) -> bool:
+    """Refund what the subscription's latest invoice collected. Works with old and new Stripe API shapes."""
+    inv_id = _get(obj, "latest_invoice")
+    inv_id = inv_id if isinstance(inv_id, str) or inv_id is None else _get(inv_id, "id")
+    if not inv_id:
+        return False
+    inv = stripe.Invoice.retrieve(inv_id, api_key=_key())
+    if not _get(inv, "amount_paid"):
+        return True  # nothing was collected
+    pi = _get(inv, "payment_intent")
+    if not pi:
+        payments = stripe.InvoicePayment.list(api_key=_key(), invoice=inv_id, limit=5)
+        pi = next((_get(p, "payment", "payment_intent") for p in _get(payments, "data") or [] if _get(p, "status") == "paid"), None)
+    pi = pi if isinstance(pi, str) or pi is None else _get(pi, "id")
+    if not pi:
+        return False
+    stripe.Refund.create(api_key=_key(), payment_intent=pi, reason="duplicate", idempotency_key=f"nexis-dup-{inv_id}")
+    return True
+
+
+def _cancel_duplicate(db: Session, row: Subscription, obj: Any) -> None:
+    sid = _get(obj, "id")
+    refunded = False
+    try:
+        try:
+            stripe.Subscription.cancel(sid, api_key=_key())
+        except stripe.InvalidRequestError:
+            if _get(_retrieve(sid), "status") != "canceled":  # already canceled by a concurrent delivery is fine
+                raise
+        refunded = _refund_latest_payment(obj)
+    except stripe.StripeError as exc:
+        log.error("duplicate subscription %s for account %s: cancel/refund failed: %s", sid, row.user_id, exc.__class__.__name__)
+        raise  # the webhook fails and Stripe retries, rather than silently leaving a double charge
+    log.warning("duplicate subscription %s for account %s canceled (refunded=%s); kept %s", sid, row.user_id, refunded, row.subscription_id)
+    if not refunded:
+        log.error("duplicate subscription %s: payment NOT refunded automatically — refund it in the Stripe Dashboard", sid)
+    try:
+        with db.begin_nested():
+            db.add(UserNotification(
+                user_id=row.user_id, category="important", event_type="billing", severity="notable",
+                title="You were only charged once for Nexis Pro",
+                body="A second Nexis Pro checkout was completed for your account. We canceled it" + (" and refunded it" if refunded else "")
+                     + ". Your existing subscription is unchanged.",
+                link="/settings#plan", dedupe_key=f"billing-duplicate:{sid}"[:120], delivery="immediate",
+            ))  # fmt: skip
+    except IntegrityError:
+        pass
 
 
 def billing_live() -> frozenset[str]:
@@ -322,7 +410,9 @@ def handle_webhook(db: Session, payload: bytes, signature: str | None) -> dict[s
         sid = _invoice_subscription(obj)
         if sid:
             row = sync(db, _retrieve(sid))
-            if row is not None and etype == "invoice.payment_failed":
+            if row is not None and row.subscription_id != sid:
+                pass  # an invoice of a superseded or duplicate subscription says nothing about the member's current one
+            elif row is not None and etype == "invoice.payment_failed":
                 row.payment_failed_at = utcnow()
                 db.flush()
                 _notify_failed(db, row, _get(obj, "id") or eid)
