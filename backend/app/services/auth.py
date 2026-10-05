@@ -318,6 +318,23 @@ def optional_user(request: Request, db: Session = Depends(get_db)) -> User | Non
     return None if u is None or u.is_disabled else u
 
 
+def workspace_editor(user: User | None = Depends(optional_user)) -> None:
+    """Changes to the shared research workspace (datasets, portfolios, experiments, connections, API keys, webhooks).
+
+    On a public deployment every visitor shares that workspace, so only Nexis admins may change it; anyone can still
+    view it and use the calculators. A private single-user install (``public_instance`` off) is unaffected.
+    """
+    from app.core.errors import Forbidden
+
+    if get_settings().public_instance and (user is None or user.role != "admin"):
+        raise Forbidden("Changes to the shared research workspace are limited to the Nexis team. You can view everything here.")
+
+
+def compute_limit(request: Request, db: Session = Depends(get_db)) -> None:
+    """Calculators that don't save anything stay open to everyone, within a per-IP hourly limit."""
+    ratelimit.hit(db, f"compute:{ratelimit.client_ip(request)}", 120)
+
+
 def require_user(user: User | None = Depends(optional_user)) -> User:
     if user is None:
         raise AuthenticationRequired("sign in to do that")

@@ -4,6 +4,7 @@ import { ApiError } from "./services/api";
 import { Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { Toaster } from "./components/toast";
 import AppLayout from "./layouts/AppLayout";
+import { ErrorBoundary, NotFound } from "./components/dialog";
 import { Empty, ErrorState, Loading } from "./components/ui";
 import { useWorkspace } from "./hooks/workspace";
 
@@ -113,6 +114,7 @@ export default function App() {
   }
   return (
     <AppLayout>
+      <ErrorBoundary resetKey={location.pathname}>
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -187,9 +189,10 @@ export default function App() {
           <Route path="/finstagram/u/:username" element={<InstaProfile />} />
           <Route path="/finstagram/s/:symbol" element={<InstaTopic kind="symbol" />} />
           <Route path="/finstagram/t/:tag" element={<InstaTopic kind="tag" />} />
-          <Route path="*" element={<Empty>Page not found.</Empty>} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      </ErrorBoundary>
     </AppLayout>
   );
 }

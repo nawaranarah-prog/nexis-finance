@@ -17,7 +17,7 @@ from app.data.synthetic import SyntheticConfig
 from app.db.session import get_db
 from app.models import Asset, DataQualityIssue, DataQualityRun, Dataset, IngestionRun, MarketData
 from app.schemas.requests import IngestRequest
-from app.services import ingestion, market_data, quality
+from app.services import auth, ingestion, market_data, quality
 
 router = APIRouter(tags=["data"])
 
@@ -169,7 +169,7 @@ def get_market_data(
     }
 
 
-@router.post("/market-data/ingest", status_code=201)
+@router.post("/market-data/ingest", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = get_settings()
     if req.provider == "synthetic":
@@ -198,7 +198,7 @@ def ingest(req: IngestRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     return ingestion.serialize_run(run)
 
 
-@router.post("/market-data/upload", status_code=201)
+@router.post("/market-data/upload", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 async def upload_csv(
     file: UploadFile = File(...),
     dataset_code: str = Form(..., pattern=r"^[A-Za-z0-9_.-]{2,64}$"),
@@ -274,7 +274,7 @@ def data_quality(dataset_id: int | None = None, db: Session = Depends(get_db)) -
     }
 
 
-@router.post("/data-quality/run", status_code=201)
+@router.post("/data-quality/run", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 def run_quality(dataset_id: int | None = None, db: Session = Depends(get_db)) -> dict[str, Any]:
     ds = market_data.get_dataset(db, dataset_id)
     return quality.serialize_run(quality.run_quality_check(db, ds.id))

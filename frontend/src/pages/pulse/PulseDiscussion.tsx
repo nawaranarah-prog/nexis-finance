@@ -1,3 +1,4 @@
+import { askConfirm } from "../../components/dialog";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -97,7 +98,7 @@ function Thread({ d }: { d: AnyObj }) {
   const q = useQuery({ queryKey: ["pulse-comments", d.id, sort], queryFn: () => api.get<AnyObj>(`/pulse/discussions/${d.id}/comments`, { sort }) });
   const refresh = () => { qc.invalidateQueries({ queryKey: ["pulse-comments", d.id] }); qc.invalidateQueries({ queryKey: ["pulse-discussion", d.id] }); };
   const remove = async (id: number) => {
-    if (!window.confirm("Delete your comment? The text is erased for good.")) return;
+    if (!(await askConfirm({ title: "Delete your comment?", body: "The text is erased for good.", confirm: "Delete", danger: true }))) return;
     try { await api.del(`/pulse/comments/${id}`); refresh(); } catch (x) { toast("error", "Couldn't delete", errorMessage(x)); }
   };
   const items: AnyObj[] = q.data?.items ?? [];
@@ -165,7 +166,7 @@ function Actions({ d }: { d: AnyObj }) {
     try { await navigator.clipboard.writeText(`${SITE}${d.url}`); toast("success", "Link copied"); } catch { toast("info", `${SITE}${d.url}`); }
   };
   const remove = async () => {
-    if (!window.confirm("Delete your discussion? Its text is erased for good and replies stop being shown.")) return;
+    if (!(await askConfirm({ title: "Delete your discussion?", body: "Its text is erased for good and replies stop being shown.", confirm: "Delete", danger: true }))) return;
     try { await api.del(`/pulse/discussions/${d.id}`); toast("success", "Discussion deleted"); nav("/pulse"); } catch (x) { toast("error", "Couldn't delete", errorMessage(x)); }
   };
   return (

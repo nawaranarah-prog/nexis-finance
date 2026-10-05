@@ -1,3 +1,4 @@
+import { askText } from "../components/dialog";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMe } from "../components/market";
@@ -14,7 +15,7 @@ const ACTION_LABEL: Record<string, string> = {
 function Item({ it }: { it: AnyObj }) {
   const qc = useQueryClient();
   const act = async (action: string) => {
-    const reason = action === "remove" || action === "suspend_author" ? window.prompt("Reason (kept in the moderation log):") ?? "" : "";
+    const reason = action === "remove" || action === "suspend_author" ? (await askText({ title: action === "remove" ? "Remove this content?" : "Pause the author's posting for 7 days?", label: "Reason (kept in the moderation log)", confirm: "Confirm", danger: true })) ?? "" : "";
     if ((action === "remove" || action === "suspend_author") && !reason) return;
     try {
       await api.post("/moderation/actions", { target_type: it.target_type, target_id: it.target_id, action, reason: reason || null, ...(action === "suspend_author" ? { days: 7 } : {}) });

@@ -587,7 +587,8 @@ def test_public_instance_refuses_stored_credentials(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "external_data_enabled", True)
     monkeypatch.setattr(get_settings(), "public_instance", True)
     r = client.post("/api/connections", json={"provider_key": "fred", "credentials": {"api_key": "a" * 32}})
-    assert r.status_code == 422 and "shared public workspace" in r.json()["error"]["message"]
+    # The shared public workspace can't be changed by visitors at all (and stored credentials are refused besides).
+    assert r.status_code == 403 and "shared research workspace" in r.json()["error"]["message"]
     assert client.get("/api/system/config").json()["public_instance"] is True
 
 

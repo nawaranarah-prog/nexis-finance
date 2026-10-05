@@ -129,6 +129,9 @@ class Settings(BaseSettings):
     stripe_pro_yearly_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_YEARLY_PRICE_ID", "STRIPE_PRO_YEARLY_PRICE_ID")
     )
+    # While production uses Stripe TEST keys, only these accounts (comma-separated emails) may check out — anyone else
+    # could otherwise get Pro with Stripe's public test card. Ignored once live keys (sk_live_...) are set.
+    billing_test_emails: str = ""
     # Plan prices and limits live in app/core/plans.py (one source), not here.
     # The public site, used for canonical URLs, sitemaps and the cross-site request check.
     public_site_url: str = "https://nexis-finance-five.vercel.app"

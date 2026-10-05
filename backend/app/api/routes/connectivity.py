@@ -19,7 +19,7 @@ from app.core.errors import ConfigurationError, NotFoundError
 from app.db.base import utcnow
 from app.db.session import get_db
 from app.models import ApiKey, ImportBatch
-from app.services import assistant, audit, book, connections, imports, insights, intel, jobs, webhooks
+from app.services import assistant, audit, auth, book, connections, imports, insights, intel, jobs, webhooks
 
 router = APIRouter(tags=["connectivity & intelligence"])
 SAMPLES_DIR = PROJECT_DIR / "data" / "samples"
@@ -59,28 +59,28 @@ def list_connections(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     return [connections.serialize(c) for c in db.scalars(select(Connection).order_by(Connection.id))]
 
 
-@router.post("/connections", status_code=201)
+@router.post("/connections", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 def create_connection(req: ConnectRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     return connections.serialize(connections.connect(db, req.provider_key, req.display_name, req.credentials, req.config))
 
 
-@router.patch("/connections/{cid}")
+@router.patch("/connections/{cid}", dependencies=[Depends(auth.workspace_editor)])
 def update_connection(cid: int, req: ConfigUpdate, db: Session = Depends(get_db)) -> dict[str, Any]:
     return connections.serialize(connections.update_config(db, cid, req.config))
 
 
-@router.post("/connections/{cid}/disconnect")
+@router.post("/connections/{cid}/disconnect", dependencies=[Depends(auth.workspace_editor)])
 def disconnect(cid: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     return connections.serialize(connections.disconnect(db, cid))
 
 
-@router.delete("/connections/{cid}", status_code=204)
+@router.delete("/connections/{cid}", status_code=204, dependencies=[Depends(auth.workspace_editor)])
 def delete_connection(cid: int, db: Session = Depends(get_db)) -> Response:
     connections.delete(db, cid)
     return Response(status_code=204)
 
 
-@router.post("/connections/{cid}/sync", status_code=202)
+@router.post("/connections/{cid}/sync", status_code=202, dependencies=[Depends(auth.workspace_editor)])
 def sync(cid: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     connections.check_syncable(db, connections.get_connection(db, cid))
     return jobs.serialize(
@@ -107,12 +107,12 @@ async def _read(file: UploadFile) -> bytes:
     return content
 
 
-@router.post("/imports/preview")
+@router.post("/imports/preview", dependencies=[Depends(auth.workspace_editor)])
 async def import_preview(file: UploadFile = File(...), kind: str | None = Form(None)) -> dict[str, Any]:
     return imports.preview(await _read(file), file.filename or "upload.csv", kind or None)
 
 
-@router.post("/imports", status_code=201)
+@router.post("/imports", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 async def import_commit(
     file: UploadFile = File(...),
     source_label: str = Form(..., min_length=2, max_length=160),
@@ -165,7 +165,7 @@ def samples() -> list[dict[str, Any]]:
     return [{**s, "available": (SAMPLES_DIR / s["file"]).exists()} for s in SAMPLE_FILES]
 
 
-@router.post("/imports/samples/load", status_code=201)
+@router.post("/imports/samples/load", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 def load_samples(db: Session = Depends(get_db)) -> dict[str, Any]:
     """Import the bundled, clearly fictional sample statements through the normal import pipeline."""
     results = []
@@ -340,7 +340,7 @@ def list_keys(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     ]
 
 
-@router.post("/developer/api-keys", status_code=201)
+@router.post("/developer/api-keys", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 def create_key(req: KeyRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     if any(s not in ("read",) for s in req.scopes):
         raise ConfigurationError("only the 'read' scope is supported")
@@ -358,7 +358,7 @@ def create_key(req: KeyRequest, db: Session = Depends(get_db)) -> dict[str, Any]
     }
 
 
-@router.post("/developer/api-keys/{kid}/revoke")
+@router.post("/developer/api-keys/{kid}/revoke", dependencies=[Depends(auth.workspace_editor)])
 def revoke_key(kid: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     k = db.get(ApiKey, kid)
     if k is None:
@@ -381,7 +381,7 @@ def list_webhooks(db: Session = Depends(get_db)) -> dict[str, Any]:
     return {"endpoints": webhooks.list_endpoints(db), "events": webhooks.EVENTS, "deliveries": webhooks.list_deliveries(db)}
 
 
-@router.post("/developer/webhooks", status_code=201)
+@router.post("/developer/webhooks", status_code=201, dependencies=[Depends(auth.workspace_editor)])
 def create_webhook(req: WebhookRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     ep, secret = webhooks.create_endpoint(db, req.url, req.events, req.description)
     audit.record(db, "webhook.created", "webhook", ep.id, {"url": req.url, "events": req.events})
@@ -394,14 +394,14 @@ def create_webhook(req: WebhookRequest, db: Session = Depends(get_db)) -> dict[s
     }
 
 
-@router.delete("/developer/webhooks/{wid}", status_code=204)
+@router.delete("/developer/webhooks/{wid}", status_code=204, dependencies=[Depends(auth.workspace_editor)])
 def delete_webhook(wid: int, db: Session = Depends(get_db)) -> Response:
     webhooks.delete_endpoint(db, wid)
     audit.record(db, "webhook.deleted", "webhook", wid)
     return Response(status_code=204)
 
 
-@router.post("/developer/webhooks/test")
+@router.post("/developer/webhooks/test", dependencies=[Depends(auth.workspace_editor)])
 def test_webhook() -> dict[str, Any]:
     return {"queued": webhooks.emit("ping", {"message": "Test event from Nexis Finance"})}
 
@@ -416,6 +416,6 @@ def assistant_suggestions() -> list[str]:
     return assistant.SUGGESTIONS
 
 
-@router.post("/assistant/ask")
+@router.post("/assistant/ask", dependencies=[Depends(auth.compute_limit)])
 def assistant_ask(req: AskRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     return assistant.ask(db, req.question)

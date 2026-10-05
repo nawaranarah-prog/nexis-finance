@@ -1,3 +1,4 @@
+import { askConfirm } from "../components/dialog";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -128,7 +129,7 @@ function Integration({ spec, onChange }: { spec: AnyObj; onChange: () => void })
             <div className="row">
               {c.can_sync && <button className="btn sm" disabled={job.running || c.status === "disconnected" || c.status === "unavailable"} onClick={() => job.run(`/connections/${c.id}/sync`, {})}>Sync now</button>}
               {c.status !== "disconnected" && c.auth_type !== "file" && <button className="btn sm" onClick={() => act(`/connections/${c.id}/disconnect`)}>Disconnect</button>}
-              <button className="btn sm danger" onClick={() => window.confirm(`Remove ${c.display_name}? Imported records stay; the connection and its sync log are removed.`) && act(`/connections/${c.id}`, "del")}>Remove</button>
+              <button className="btn sm danger" onClick={async () => { if (await askConfirm({ title: `Remove ${c.display_name}?`, body: "Imported records stay; the connection and its sync log are removed.", confirm: "Remove", danger: true })) act(`/connections/${c.id}`, "del"); }}>Remove</button>
             </div>
           </div>
         ))}
