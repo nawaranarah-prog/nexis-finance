@@ -119,6 +119,26 @@ class Settings(BaseSettings):
     pulse_public_stocktwits: bool = True  # StockTwits public symbol streams
     # Nexis editorial discussions the background engine may publish or update per run.
     pulse_editorial_per_tick: int = 3
+    # ---- Nexis Pro billing (Stripe Checkout + Billing). Unset keys mean billing is off: Pro can't be bought and
+    # the site says so instead of showing prices. The secret key never reaches the browser.
+    stripe_secret_key: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY"))
+    stripe_webhook_secret: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET"))
+    stripe_pro_monthly_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_MONTHLY_PRICE_ID", "STRIPE_PRO_MONTHLY_PRICE_ID")
+    )
+    stripe_pro_yearly_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_YEARLY_PRICE_ID", "STRIPE_PRO_YEARLY_PRICE_ID")
+    )
+    # ---- Usage limits for the expensive (AI) features: per calendar month for Free, per billing period for Pro.
+    # Pro limits are fair-use ceilings, not marketing numbers. Change them here (or by env var), nowhere else.
+    free_advisor_limit: int = 20
+    pro_advisor_limit: int = 600
+    free_report_limit: int = 2
+    pro_report_limit: int = 60
+    free_brief_limit: int = 5
+    pro_brief_limit: int = 300
+    # Visitors without an account can try the AI Advisor a few times a day before being asked to sign up (free).
+    anonymous_advisor_per_day: int = 3
     # The public site, used for canonical URLs, sitemaps and the cross-site request check.
     public_site_url: str = "https://nexis-finance-five.vercel.app"
     # Seed the demo database in the background when it is empty (hosted demo deployments).

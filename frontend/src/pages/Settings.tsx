@@ -1,3 +1,4 @@
+import { PlanSection } from "../components/pro";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -181,6 +182,11 @@ function AccountSettings() {
   );
 }
 
+function Plan() {
+  const me = useMe().data?.user;
+  return me ? <Card title="Plan and usage"><PlanSection /></Card> : null;
+}
+
 export default function Settings() {
   const { settings, updateSettings } = useWorkspace();
   const { t } = useT();
@@ -191,6 +197,7 @@ export default function Settings() {
     if (linked) toast("success", `${linked === "x" ? "X" : "Reddit"} ${t("account linked")}`);
     if (err) toast("error", t("Couldn't link the account"), err);
     if (linked || err) window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    if (window.location.hash === "#plan") window.setTimeout(() => document.getElementById("plan")?.scrollIntoView({ block: "center" }), 400);
     if (window.location.hash === "#linked") window.setTimeout(() => document.getElementById("linked")?.scrollIntoView({ block: "center" }), 300);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const cfg = useQuery({ queryKey: ["config"], queryFn: () => api.get<AnyObj>("/system/config"), staleTime: Infinity });
@@ -199,6 +206,7 @@ export default function Settings() {
       <PageHead title={t("Settings")} desc="Your account, password and language, plus analysis preferences for the research tools." />
       <div className="grid g2" style={{ marginBottom: 14 }}>
         <AccountSettings />
+        <Plan />
       </div>
       <div className="grid g2">
         <Card title="Analysis defaults">

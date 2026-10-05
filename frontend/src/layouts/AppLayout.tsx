@@ -10,6 +10,7 @@ import type { AnyObj, Notification } from "../types/api";
 import { dt } from "../utils/format";
 import { useT } from "../i18n";
 import { LegalGate } from "../components/pulse";
+import { UpgradeDialog } from "../components/pro";
 
 /** Every route in the app, grouped by task. Pulse, Markets and Research stay open; the rest fold away until needed. */
 export const NAV: { group: string; fixed?: boolean; items: { to: string; label: string }[] }[] = [
@@ -181,6 +182,7 @@ function Account() {
           {(u.role === "moderator" || u.role === "admin") && <button role="menuitem" onClick={() => { setOpen(false); nav("/moderation"); }}>{t("Moderation")}</button>}
           <button role="menuitem" onClick={() => { setOpen(false); nav(`/finstagram/u/${u.username}`); }}>{t("My Finstagram profile")}</button>
           <button role="menuitem" onClick={() => { setOpen(false); nav("/advisor"); }}>{t("AI Advisor")}</button>
+          <button role="menuitem" onClick={() => { setOpen(false); nav("/settings#plan"); }}>{t("Plan and usage")}</button>
           <button role="menuitem" onClick={() => { setOpen(false); nav("/settings"); }}>{t("Account settings")}</button>
           <button role="menuitem" onClick={logout}>{t("Sign out")}</button>
         </div>
@@ -362,6 +364,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       title = "My Nexis · Nexis Finance";
     } else if (path === "/notifications") {
       title = "Notifications · Nexis Finance";
+    } else if (path === "/pro") {
+      title = "Nexis Pro — plans and pricing · Nexis Finance";
+      desc = "Nexis is free to use. Nexis Pro raises the allowances for the AI Advisor, PDF research reports and AI briefs.";
     } else if (path === "/moderation") {
       title = "Moderation · Nexis Pulse";
     } else if (["/terms", "/privacy", "/disclaimer", "/community-guidelines", "/ai-disclosure"].includes(path)) {
@@ -375,13 +380,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     document.title = title;
     document.querySelector('meta[name="description"]')?.setAttribute("content", desc);
     // Private pages are never indexed.
-    const priv = ["/my-nexis", "/notifications", "/settings", "/moderation", "/portfolio"].some((p) => path === p || path.startsWith(`${p}/`));
+    const priv = ["/my-nexis", "/notifications", "/settings", "/moderation", "/portfolio", "/pro/welcome"].some((p) => path === p || path.startsWith(`${p}/`));
     document.querySelector('meta[name="robots"]')?.setAttribute("content", priv ? "noindex, nofollow" : "index, follow, max-image-preview:large");
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", `https://nexis-finance-five.vercel.app${location.pathname}`);
   }, [location.pathname]);
   // The research-dataset picker only matters on the research pages, not on Home, Finstagram, markets or the advisor.
   const consumer = ["/finstagram", "/advisor", "/pulse", "/markets", "/compare", "/valuation", "/login", "/settings", "/my-nexis", "/notifications",
-    "/moderation", "/terms", "/privacy", "/disclaimer", "/community-guidelines", "/ai-disclosure"];
+    "/moderation", "/pro", "/terms", "/privacy", "/disclaimer", "/community-guidelines", "/ai-disclosure"];
   const researchPage = location.pathname !== "/" && !consumer.some((p) => location.pathname.startsWith(p));
   const pages = NAV.flatMap((g) => g.items.map((it) => ({ ...it, label: t(it.label), group: t(g.group) })));
   return (
@@ -397,7 +402,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <div>{t("Information, not investment advice")}</div>
           <nav className="side-legal" aria-label="Legal">
             <Link to="/terms">{t("Terms")}</Link><Link to="/privacy">{t("Privacy")}</Link><Link to="/disclaimer">{t("Disclaimer")}</Link>
-            <Link to="/community-guidelines">{t("Guidelines")}</Link><Link to="/ai-disclosure">{t("AI disclosure")}</Link>
+            <Link to="/community-guidelines">{t("Guidelines")}</Link><Link to="/ai-disclosure">{t("AI disclosure")}</Link><Link to="/pro">{t("Plans")}</Link>
           </nav>
         </div>
       </aside>
@@ -438,6 +443,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={pages} />
       <TabBar />
       <LegalGate />
+      <UpgradeDialog />
       <Toaster />
     </div>
   );

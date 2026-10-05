@@ -1,5 +1,6 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
+from app.models.billing import BillingEvent, Subscription, UsageEvent
 from app.models.community import (
     Comment,
     FeedPreference,
@@ -82,6 +83,7 @@ __all__ = [
     "AuditLog",
     "Backtest",
     "BacktestTrade",
+    "BillingEvent",
     "Comment",
     "CompanyProfile",
     "Connection",
@@ -138,9 +140,11 @@ __all__ = [
     "SourceRecord",
     "Strategy",
     "StressTest",
+    "Subscription",
     "SyncRun",
     "TopicFollow",
     "Transaction",
+    "UsageEvent",
     "User",
     "UserHolding",
     "UserNotification",

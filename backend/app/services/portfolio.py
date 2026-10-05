@@ -374,7 +374,8 @@ Return JSON: {{"what_happened": "2-3 sentences", "why_it_may_matter": "2-3 sente
 "cited_events": [event numbers used]}}"""
 
 
-def brief(db: Session, user: User | None, symbol: str) -> dict[str, Any]:
+def brief(db: Session, user: User | None, symbol: str, metered: bool = False) -> dict[str, Any]:
+    """AI brief for one asset. With ``metered``, a use is counted only when the model actually runs (cache misses)."""
     data = asset_intelligence(db, user, symbol)
     evs = data["events"][:8]
     if not evs:
@@ -397,6 +398,17 @@ def brief(db: Session, user: User | None, symbol: str) -> dict[str, Any]:
     )
 
     def fetch() -> dict[str, Any]:
+        from app.services import entitlements
+
+        rid = entitlements.reserve(db, user, "brief") if metered and user is not None else None
+        try:
+            return _write_brief()
+        except Exception:
+            db.rollback()
+            entitlements.refund(db, rid)
+            raise
+
+    def _write_brief() -> dict[str, Any]:
         try:
             msg = llm.chat([{"role": "system", "content": "You write careful, neutral financial context. Output valid JSON only."},
                             {"role": "user", "content": BRIEF.format(symbol=data["symbol"], facts=facts, discussions=disc)}],

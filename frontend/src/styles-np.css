@@ -320,3 +320,45 @@
 .np-arg-group li:first-child { border-top: 0; }
 .np-arg-group p { margin: 0 0 4px; font-size: 14px; line-height: 1.55; color: var(--text); overflow-wrap: anywhere; }
 @media (max-width: 720px) { .np-args { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Nexis Pro */
+.pro-page { max-width: 980px; }
+.pro-cols { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule); margin: 6px 0 10px; }
+.pro-col { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 18px 24px 22px 0; min-width: 0; }
+.pro-col + .pro-col { border-inline-start: 1px solid var(--rule); padding-inline-start: 24px; padding-inline-end: 0; }
+.pro-col h2 { font-size: 13px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.pro-col.pro h2 { color: var(--accent-ink); }
+.pro-amount { font-size: 26px; font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+.pro-amount.muted { font-size: 16px; color: var(--muted); font-weight: 500; }
+.pro-list { margin: 0; padding: 0; list-style: none; }
+.pro-list li { position: relative; padding: 5px 0 5px 22px; font-size: 13.5px; line-height: 1.45; color: var(--text); }
+.pro-list li::before { content: ""; position: absolute; inset-inline-start: 2px; top: 11px; width: 9px; height: 5px; border-inline-start: 1.5px solid var(--pos); border-bottom: 1.5px solid var(--pos); transform: rotate(-45deg); }
+.pro-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.pro-table th, .pro-table td { text-align: start; padding: 9px 12px 9px 0; border-top: 1px solid var(--rule); }
+.pro-table th { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); border-top: 0; }
+.pro-table td:not(:first-child) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pro-faq dl { margin: 0; }
+.pro-faq dt { font-weight: 600; font-size: 14px; margin-top: 12px; }
+.pro-faq dd { margin: 4px 0 0; font-size: 14px; line-height: 1.55; color: var(--text-2); max-width: 70ch; }
+.pro-modal { width: min(520px, 100%); }
+.pro-eyebrow { font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.pro-price-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0 6px; }
+.pro-price { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pro-usage { font-size: 11.5px; color: var(--muted); }
+.pro-usage.low { color: var(--warn); }
+.chat-usage { padding: 6px 2px 0; text-align: end; }
+.pro-plan h2 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.pro-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 10px; font-size: 13.5px; }
+.pro-kv dt { color: var(--muted); }
+.pro-kv dd { margin: 0; }
+.pro-meters { list-style: none; margin: 8px 0 4px; padding: 0; }
+.pro-meters li { display: grid; grid-template-columns: minmax(0, 1fr) 90px 64px; align-items: center; gap: 10px; padding: 4px 0; font-size: 12.5px; }
+.pro-meters .num { text-align: end; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.pro-bar { height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.pro-bar span { display: block; height: 100%; background: var(--text-2); transform-origin: left; }
+@media (max-width: 720px) {
+  .pro-cols { grid-template-columns: minmax(0, 1fr); }
+  .pro-col { padding-inline-end: 0; }
+  .pro-col + .pro-col { border-inline-start: 0; border-top: 1px solid var(--rule); padding-inline-start: 0; }
+  .pro-table td:not(:first-child) { white-space: normal; }
+}

@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-ro
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Change, fmtPrice, SymbolSearch, useMe } from "../components/market";
 import { ago, assetPath, DiscussionRow, stamp } from "../components/pulse";
+import { handlePlanError } from "../components/pro";
 import { toast } from "../components/toast";
 import { useT } from "../i18n";
 import { api, errorMessage } from "../services/api";
@@ -247,7 +248,8 @@ function Brief({ symbol }: { symbol: string }) {
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true);
-    try { setData(await api.post<AnyObj>(`/intelligence/${encodeURIComponent(symbol)}/brief`)); } catch (x) { setData({ available: false, reason: errorMessage(x) }); } finally { setBusy(false); }
+    try { setData(await api.post<AnyObj>(`/intelligence/${encodeURIComponent(symbol)}/brief`)); }
+    catch (x) { if (!handlePlanError(x)) setData({ available: false, reason: errorMessage(x) }); } finally { setBusy(false); }
   };
   if (!data) return <button type="button" className="btn sm" disabled={busy} onClick={run}>{busy ? "Writing the brief…" : "AI brief on these developments"}</button>;
   if (!data.available) return <p className="pl-empty-line">{data.reason}</p>;
