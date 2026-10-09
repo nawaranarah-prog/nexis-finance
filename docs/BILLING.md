@@ -1,70 +1,76 @@
-# Nexis Pro — billing
+# Nexis billing — Free, Nexis Plus, Nexis Pro
 
-## The plan (single source: `backend/app/core/plans.py`)
+## The plans (single source: `backend/app/core/plans.py`)
 
-| | Visitor | Free | Nexis Pro |
+| | Free | Nexis Plus | Nexis Pro |
 |---|---|---|---|
-| Price | — | $0 | **$9.99/month** or **$99/year** (USD) |
-| AI Advisor | 3/day | 20/month | 600/month |
-| My Nexis tracked assets (capacity) | — | 3 | 100 |
-| Pulse discussions started | — | 3/month | 50/month |
-| Pulse comments / replies | — | 10/month | 100/month |
-| Reading Pulse, sentiment, discussions; search; basic asset pages | unlimited | unlimited | unlimited |
+| Price | AED 0 | AED 29 / month | AED 69 / month |
+| Active investments (My Nexis holdings, distinct assets) | 1 | 10 | 20 |
+| AI Advisor messages / month (reset on the 1st, UTC) | 20 | 200 | 600 |
+| Portfolio insights (`/api/me/portfolio/insights`) | — | ✓ | ✓ |
+| Portfolio risk analytics (`/api/me/portfolio/risk`) | — | — | ✓ |
+| Nexis Pulse (read, post, reply, vote) | unlimited | unlimited | unlimited |
+| Watchlist tickers (anti-abuse cap, not a paid feature) | 50 | 50 | 50 |
+| Help Center articles / AI help answers per day | unlimited / 40 | unlimited / 40 | unlimited / 40 |
 
-Yearly = $8.25/month; twelve monthly payments = $119.88; saving $20.88 (~17%). Computed from the prices, not typed.
-Monthly allowances reset on the 1st of each calendar month (UTC) on every plan (a yearly subscriber gets 600 Advisor
-messages every month). My Nexis is a capacity: removing an asset frees its slot; after a downgrade nothing is deleted,
-only adding beyond the plan's capacity is refused. Fair-use limits apply; nothing numeric is called "unlimited".
+Visitors without an account: 3 AI Advisor messages and 10 AI help answers per day (per IP). Monthly billing only;
+no yearly plan. Pulse is never metered by plan; anti-spam rate limits (`pulse_discussions_per_day`,
+`pulse_comments_per_hour`, no repeated posts) apply to everyone equally.
 
 ## How it works
 
-* `entitlements.py` — the only entitlement logic: `has_pro`, `get_user_entitlements`, `check_usage_limit`,
-  `consume_usage` (+ `refund`), `check_capacity`, `anonymous_advisor`. Usage rows are written first and the total
-  checked after, so parallel requests can't exceed a limit; failed Advisor answers / failed posts are refunded.
-* Pro access by Stripe status: `active`, `trialing`, `past_due` (Stripe retrying; "Your payment needs attention.
-  Please update your payment method.") → Pro. `canceled`, `unpaid`, `incomplete(_expired)`, `paused` → Free. A period
-  that ended more than 2 days ago without a renewal → Free. Cancel = at period end; Pro until `current_period_end`.
-* `billing.py` (provider-neutral) + `billing_stripe.py` (Stripe Checkout, Billing, Customer Portal, webhooks).
-  Checkout only sells the two configured price ids, and only after confirming in Stripe that they are exactly
-  $9.99/month and $99/year USD (otherwise Pro is shown as unavailable and the mismatch is logged).
-  Duplicate protection: an open checkout session is reused; a live Stripe subscription → "You're already on Nexis Pro."
-* Webhooks: signature verified (`STRIPE_WEBHOOK_SECRET`); each event id stored in `billing_events` with status
-  `processed`/`ignored` and the object/customer/subscription ids; repeats are acknowledged and skipped; every event
-  re-reads the subscription from Stripe so out-of-order delivery leaves the latest state. Failures return 500 so
-  Stripe retries.
+* `entitlements.py` — the only plan logic: `tier_of` (free/plus/pro from the provider's subscription state),
+  `require(capability)`, `get_user_entitlements`, `consume_usage` (+ `refund`), `check_capacity`. Usage rows are
+  written first and the total checked after, so parallel requests can't exceed a limit. Adding an investment locks the
+  account row and re-counts before committing.
+* Paid access by Stripe status: `active`, `trialing`, `past_due` (Stripe retrying; the member is asked to update the
+  card) → the subscribed tier. `canceled`, `unpaid`, `incomplete(_expired)`, `paused` → Free. A period that ended more
+  than 2 days ago without renewal → Free. Subscriptions on the earlier USD prices are recognised as Nexis Pro.
+* `investments.py` — downgrades never delete. Before a cancellation ends (or a move to a smaller plan) the member picks
+  which investments stay active (`POST /api/me/investments/keep`). When Stripe confirms the lower plan, the rest are
+  archived (read-only, not counted). No choice on file → nothing is archived; adding/editing waits until they choose
+  (409 `investment_selection_required`), viewing stays open, and they get a notification. Resubscribing restores
+  investments archived by a downgrade, up to the new allowance. Members can archive/restore their own too.
+* `billing.py` (provider-neutral) + `billing_stripe.py` (Checkout, Billing, Customer Portal, plan changes, webhooks).
+  Checkout sells only the two configured price ids, and only after confirming in Stripe that they are exactly
+  AED 29/month and AED 69/month and in the same mode (test/live) as the key. One live subscription per account:
+  a second checkout is refused; a second paid subscription (two tabs) is cancelled and refunded automatically.
+* Plan changes (`POST /api/billing/change-plan`): same subscription, new price. Upgrades are invoiced immediately
+  for the rest of the period and refused if that payment fails; downgrades credit the unused part. Plan changes are
+  disabled in the Stripe portal so they always go through Nexis (which asks which investments to keep).
+* Webhooks: signature verified; each event id stored once; every event re-reads the subscription from Stripe so
+  late/out-of-order events can't downgrade; failures return 500 so Stripe retries; after each event the member's
+  investments are reconciled with the confirmed plan.
 
-Endpoints: `GET /api/billing/plans` (public), `GET /api/billing/status`, `POST /api/billing/checkout {plan}`,
-`POST /api/billing/confirm {session_id}`, `POST /api/billing/cancel`, `POST /api/billing/resume`,
-`POST /api/billing/portal`, `POST /api/billing/webhook` (Stripe only).
+Endpoints: `GET /api/billing/plans`, `GET /api/billing/status`, `POST /api/billing/checkout {plan}`,
+`POST /api/billing/change-plan {plan, keep?}`, `POST /api/billing/confirm {session_id}`, `POST /api/billing/cancel`,
+`POST /api/billing/resume`, `POST /api/billing/portal`, `POST /api/billing/webhook` (Stripe only);
+`GET /api/me/investments`, `POST /api/me/investments/keep`, `POST /api/me/investments/{symbol}/archive|restore`.
 
-## TEST environment (do this first)
+## TEST environment
 
-1. Stripe Dashboard → **Test mode** → Developers → API keys → copy the **test** secret key (`sk_test_...`).
-2. Create the product, prices, webhook and portal settings (idempotent; refuses live keys):
+1. Create (or find) the products and AED prices — idempotent, refuses live keys:
    ```
    cd backend
-   STRIPE_SECRET_KEY=sk_test_... python -m app.cli.stripe_setup --webhook https://nexis-finance-api.vercel.app/api/billing/webhook
+   STRIPE_SECRET_KEY=sk_test_... python -m app.cli.stripe_setup
    ```
-   It prints `STRIPE_PRO_MONTHLY_PRICE_ID`, `STRIPE_PRO_YEARLY_PRICE_ID` and `STRIPE_WEBHOOK_SECRET`.
-   (Manual alternative: one product "Nexis Pro"; recurring prices 9.99 USD monthly and 99 USD yearly; webhook to the
-   URL above with `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`,
-   `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`; Customer Portal: payment method
-   update, invoice history, customer update, cancel **at period end**.)
-3. Settings → Payment methods (test mode): enable Cards, Apple Pay, Google Pay.
-4. Settings → Billing → Subscriptions and emails: Smart Retries on; after the final retry → mark subscription
-   **unpaid** (or cancel); send failed-payment emails.
-5. Vercel → `nexis-finance-api` → Environment Variables: set the four `STRIPE_*` values (test) → redeploy.
-6. Test (test cards only — never a real card):
-   * monthly and yearly checkout: `4242 4242 4242 4242`, any future date, any CVC → `/pro/welcome` → Settings → Billing
-   * failed renewal / past_due: subscribe with `4000 0000 0000 0341`, or use a **test clock** to advance to renewal
-   * 3-D Secure: `4000 0027 6000 3184`
-   * cancellation (Settings → Cancel subscription) → "Access until …"; advance a test clock past period end → Free
-   * renewal: advance a test clock one period → new period end
-   * webhook retries / duplicates: Developers → Webhooks → an event → **Resend**
-   * existing Pro: start checkout again → "You're already on Nexis Pro."; billing portal: Manage billing → update card
+   Test-mode prices already created: `STRIPE_PLUS_MONTHLY_AED_PRICE_ID=price_1UOjNkBMkNzEbwkIWjbss0on`,
+   `STRIPE_PRO_MONTHLY_AED_PRICE_ID=price_1UOjNlBMkNzEbwkIfPxyh7fe`. The webhook endpoint and portal configuration from
+   the earlier setup are reused (same URL, same events).
+2. Vercel → `nexis-finance-api` → Environment Variables (Production): add `STRIPE_PLUS_MONTHLY_AED_PRICE_ID` and
+   `STRIPE_PRO_MONTHLY_AED_PRICE_ID`; keep `STRIPE_PRO_MONTHLY_PRICE_ID` / `STRIPE_PRO_YEARLY_PRICE_ID` (they now only
+   identify earlier subscriptions); redeploy. Until the new variables are set, paid plans show as unavailable.
+3. Test cards only: `4242 4242 4242 4242` (success), `4000 0000 0000 0002` (declined), `4000 0027 6000 3184` (3-D
+   Secure). Test clocks for renewal, failed renewal (`pm_card_chargeCustomerFail`) and expiry.
+4. While the key is a test key, production checkout is limited to `NEXIS_BILLING_TEST_EMAILS`.
 
 ## LIVE environment (only when the founder says so)
 
-1. In **live** mode run the same script with a live key and `--live` (or create the same objects by hand).
-2. Replace the four Vercel variables with the live values; redeploy. Live keys never go into the repository.
-3. Do one real purchase with a founder card, then refund it in the Dashboard, to verify end to end.
+1. Activate the Stripe account (business details, bank account) so charges are enabled; AED must be supported for
+   the account's country.
+2. Run `stripe_setup` with the live key and `--live --webhook https://nexis-finance-api.vercel.app/api/billing/webhook`;
+   set the live `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and both `*_AED_PRICE_ID` values in Vercel; redeploy.
+3. Wallets: enable Apple Pay / Google Pay in the live Dashboard, confirm they appear in a live checkout, then set
+   `NEXIS_BILLING_WALLETS="Apple Pay,Google Pay"` so the pricing page lists them. Until then only cards are listed.
+4. Terms of Use: add subscription, renewal, cancellation and refund terms before taking real payments.
+5. One real purchase with the founder's own card, verified end to end, then refunded.

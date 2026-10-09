@@ -114,7 +114,8 @@ class Settings(BaseSettings):
     pulse_reactions_per_hour: int = 200
     pulse_reports_per_day: int = 30
     # Public discussions collected from other sites (usernames removed, short linked excerpts). Each can be switched off.
-    pulse_public_reddit: bool = True  # Reddit's public RSS feeds; Reddit's terms restrict automated collection
+    # Reddit collection needs Reddit's written permission (User Agreement; Data API Terms for commercial use). Off until then.
+    pulse_public_reddit: bool = False
     pulse_public_hn: bool = True  # Hacker News (public Algolia search API)
     pulse_public_stocktwits: bool = True  # StockTwits public symbol streams
     # Nexis editorial discussions the background engine may publish or update per run.
@@ -123,12 +124,23 @@ class Settings(BaseSettings):
     # the site says so instead of showing prices. The secret key never reaches the browser.
     stripe_secret_key: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY"))
     stripe_webhook_secret: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET"))
+    # The two plans on sale (monthly, AED). New names on purpose: the earlier USD price ids can't be picked up by mistake.
+    stripe_plus_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PLUS_MONTHLY_AED_PRICE_ID", "STRIPE_PLUS_MONTHLY_AED_PRICE_ID")
+    )
+    stripe_pro_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_MONTHLY_AED_PRICE_ID", "STRIPE_PRO_MONTHLY_AED_PRICE_ID")
+    )
+    # Earlier Nexis Pro prices (USD monthly/yearly). No longer sold; subscriptions on them are recognised as Nexis Pro.
     stripe_pro_monthly_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_MONTHLY_PRICE_ID", "STRIPE_PRO_MONTHLY_PRICE_ID")
     )
     stripe_pro_yearly_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_YEARLY_PRICE_ID", "STRIPE_PRO_YEARLY_PRICE_ID")
     )
+    # Wallets shown on the pricing page (comma-separated, e.g. "Apple Pay,Google Pay"). Leave empty until they're
+    # enabled in the Stripe Dashboard and verified at checkout; cards are always shown.
+    billing_wallets: str = ""
     # While production uses Stripe TEST keys, only these accounts (comma-separated emails) may check out — anyone else
     # could otherwise get Pro with Stripe's public test card. Ignored once live keys (sk_live_...) are set.
     billing_test_emails: str = ""

@@ -18,6 +18,7 @@ from app.api.routes import (
     billing,
     connectivity,
     data,
+    help,
     legal,
     markets,
     me,
@@ -180,5 +181,6 @@ for r in (
     me.router,
     legal.router,
     billing.router,
+    help.router,
 ):
     app.include_router(r, prefix="/api")

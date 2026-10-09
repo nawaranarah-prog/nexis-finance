@@ -138,6 +138,7 @@ class PulseSnapshot(Base, TimestampMixin):
 
 class UserHolding(Base, TimestampMixin):
     __tablename__ = "user_holdings"
+    __table_args__ = (Index("ix_user_holdings_user_active", "user_id", "archived_at"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -151,6 +152,10 @@ class UserHolding(Base, TimestampMixin):
     purchase_date: Mapped[date | None] = mapped_column(Date)
     currency: Mapped[str | None] = mapped_column(String(8))
     note: Mapped[str | None] = mapped_column(String(300))
+    # Archived investments are kept (read-only) but don't count toward the plan's allowance. ``archived_reason`` is
+    # "plan" (over the allowance after a downgrade: restored automatically when the allowance grows) or "member".
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime)
+    archived_reason: Mapped[str | None] = mapped_column(String(12))
 
 
 class UserNotification(Base, TimestampMixin):

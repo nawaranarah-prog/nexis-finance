@@ -2,8 +2,11 @@
 
 Sources (each can be switched off in settings; none needs an API key):
 
-* **Reddit** — top threads of the day in finance subreddits, from Reddit's public RSS feeds, with the replies
-  under them. Reddit's terms restrict automated collection; requests are slow and stop when Reddit pushes back.
+* **Reddit** — OFF by default (``pulse_public_reddit``). Reddit's User Agreement prohibits automated collection
+  without Reddit's prior written consent, and its Data API Terms require a separate written agreement for
+  commercial use, so Nexis doesn't collect Reddit content unless that permission exists. While it's off, Reddit
+  threads collected earlier are withdrawn from Pulse (``withdraw_reddit``). Members can still share links to Reddit
+  discussions in their own posts; those open on Reddit.
 * **Hacker News** — recent, well-discussed finance and AI threads, from the public HN Algolia search API.
 * **StockTwits** — today's messages about widely followed tickers that their authors tagged bullish or bearish.
 
@@ -309,6 +312,23 @@ def upsert(
     return d
 
 
+def withdraw_reddit(db: Session) -> int:
+    """Hide previously collected Reddit threads and delete the Reddit text copied into them (quotes, body, title).
+
+    The rows stay — with a neutral title and the link to the original — only so replies Nexis members wrote under them
+    aren't orphaned; nothing written on Reddit is kept. Old threads are pruned as usual."""
+    rows = list(db.scalars(select(PulseDiscussion).where(PulseDiscussion.kind == "public", PulseDiscussion.editorial_key.like("reddit:%"))))
+    n = 0
+    for d in rows:
+        if d.status == "visible" or d.quotes or d.body or d.debate:
+            community = (d.origin or {}).get("community") or "Reddit"
+            d.status, d.quotes, d.body, d.debate = "withdrawn", [], "", None
+            d.title = f"Reddit discussion on {community}"[:200]
+            n += 1
+    db.commit()
+    return n
+
+
 def prune(db: Session) -> int:
     """Old public threads nobody on Nexis replied to are dropped; ones with Nexis replies stay."""
     cutoff = utcnow() - timedelta(days=KEEP_DAYS)
@@ -455,6 +475,8 @@ def collect(db: Session, budget: str = "small") -> dict[str, Any]:
         except (httpx.HTTPError, ET.ParseError, ValueError, KeyError) as exc:
             db.rollback()
             result[name] = {"error": exc.__class__.__name__ + ": " + str(exc)[:160]}
+    if not s.pulse_public_reddit:
+        result["reddit_withdrawn"] = withdraw_reddit(db)
     result["pruned"] = prune(db)
     _save_state(db, **{k: v for k, v in st.items() if k != "paused"}, paused=paused, last_run=utcnow().isoformat(), last_result=result)
     return result

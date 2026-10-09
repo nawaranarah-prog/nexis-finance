@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models import User
-from app.services import alerts, auth, portfolio, ratelimit
+from app.services import alerts, auth, entitlements, investments, portfolio, portfolio_analytics, ratelimit
 
 router = APIRouter(tags=["me"])
 AssetType = Literal["stock", "etf", "fund", "bond", "crypto", "other"]
@@ -85,6 +85,53 @@ def update_holding(
 def delete_holding(hid: int, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> Response:
     portfolio.delete_holding(db, user, hid)
     return Response(status_code=204)
+
+
+# ------------------------------------------------------------------ plan allowance (active / archived investments)
+
+
+class KeepIn(_Base):
+    symbols: list[str] = Field(min_length=1, max_length=20)
+
+
+@router.get("/me/investments")
+def investment_allowance(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return investments.state(db, user)
+
+
+@router.post("/me/investments/keep")
+def keep_investments(req: KeepIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Choose which investments stay active when the plan's allowance shrinks (applied once the plan changes)."""
+    ratelimit.hit(db, f"investments-keep:{user.id}", 30)
+    return investments.choose_keep(db, user, req.symbols)
+
+
+@router.post("/me/investments/{symbol}/archive")
+def archive_investment(symbol: str, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return investments.archive(db, user, symbol)
+
+
+@router.post("/me/investments/{symbol}/restore")
+def restore_investment(symbol: str, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return investments.restore(db, user, symbol)
+
+
+# ------------------------------------------------------------------ paid portfolio analytics (server-enforced)
+
+
+@router.get("/me/portfolio/insights")
+def portfolio_insights(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Nexis Plus and Pro."""
+    entitlements.require(db, user, "portfolio_insights")
+    return portfolio_analytics.insights(db, user)
+
+
+@router.get("/me/portfolio/risk")
+def portfolio_risk(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Nexis Pro."""
+    entitlements.require(db, user, "portfolio_risk")
+    ratelimit.hit(db, f"portfolio-risk:{user.id}", 30)
+    return portfolio_analytics.risk(db, user)
 
 
 # ------------------------------------------------------------------ watchlist

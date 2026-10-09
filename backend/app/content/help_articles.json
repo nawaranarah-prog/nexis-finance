@@ -1,0 +1,565 @@
+{
+  "version": "2026-10-10",
+  "articles": [
+    {
+      "id": "what-is-nexis",
+      "title": "What Nexis Finance does",
+      "contexts": [
+        "general"
+      ],
+      "keywords": [
+        "about",
+        "overview",
+        "what is nexis",
+        "features",
+        "start",
+        "getting started"
+      ],
+      "body": "Nexis Finance is a research platform for UAE and global markets.\n\n- **Markets** — search shares, ETFs, indices, crypto and UAE-listed companies, with delayed public prices and charts.\n- **Nexis Pulse** — discussions about assets and themes, plus a sentiment summary of recent news and discussions.\n- **AI Advisor** — ask research questions; it checks prices, news and valuations before answering.\n- **Compare & Reports** — compare assets over any window and export a PDF report.\n- **My Nexis** — track your investments and watchlist, with alerts.\n\nNexis provides information, not personalised investment advice.",
+      "links": [
+        {
+          "label": "Open Markets",
+          "path": "/markets"
+        },
+        {
+          "label": "Open Nexis Pulse",
+          "path": "/pulse"
+        }
+      ]
+    },
+    {
+      "id": "pulse-basics",
+      "title": "How Nexis Pulse works",
+      "contexts": [
+        "pulse"
+      ],
+      "keywords": [
+        "pulse",
+        "discussion",
+        "discussions",
+        "post",
+        "reply",
+        "comment",
+        "community",
+        "anonymous",
+        "debate",
+        "topics",
+        "trending",
+        "latest"
+      ],
+      "body": "Nexis Pulse is where people discuss assets and market themes.\n\n- Browse **Latest**, **Trending** and **Topics**, or open an asset's Pulse page from its market page.\n- Sign in to start a discussion, reply, follow or save one. Members post anonymously.\n- When you start a discussion you can link an asset, choose a stance (bullish, bearish, neutral or a question) and add topics.\n- Reading and taking part in Pulse is free on every plan. To prevent spam there are rate limits (for example, a number of new discussions per day), and posting the same thing twice is refused.\n- Some threads are collected from public sources and are labelled with their source and linked to the original; they are not posts by Nexis members.\n\nFollow the Community Guidelines; posts that break them can be held for review.",
+      "links": [
+        {
+          "label": "Open Nexis Pulse",
+          "path": "/pulse"
+        },
+        {
+          "label": "Community Guidelines",
+          "path": "/community-guidelines"
+        }
+      ]
+    },
+    {
+      "id": "pulse-sentiment",
+      "title": "How the Pulse sentiment score works",
+      "contexts": [
+        "pulse",
+        "markets"
+      ],
+      "keywords": [
+        "sentiment",
+        "score",
+        "bullish",
+        "bearish",
+        "favourable",
+        "favorable",
+        "coverage",
+        "pulse score",
+        "how is it calculated"
+      ],
+      "body": "An asset's Pulse summarises how positive or negative recent news and discussions about it are.\n\n- Each item is classified as positive, neutral or negative, and recent items count more than older ones.\n- The **coverage** label (none, limited, developing, strong) and the item counts tell you how much evidence the summary rests on. With too little evidence no score is shown, and a small sample shouldn't be read as the view of the whole market.\n- It describes what people are saying. It is not a price prediction, a probability or a recommendation.",
+      "links": [
+        {
+          "label": "Open Nexis Pulse",
+          "path": "/pulse"
+        }
+      ]
+    },
+    {
+      "id": "sentiment-vs-targets",
+      "title": "Sentiment vs. analyst price targets",
+      "contexts": [
+        "pulse",
+        "markets",
+        "compare"
+      ],
+      "keywords": [
+        "analyst",
+        "price target",
+        "target price",
+        "consensus",
+        "rating",
+        "difference",
+        "sentiment vs"
+      ],
+      "body": "They answer different questions.\n\n- **Pulse sentiment** summarises the tone of recent news and discussions — what people are saying now.\n- **Analyst consensus and price targets** (shown with an asset's fundamentals, where the data provider has them) are professional analysts' published estimates of where a price could go.\n\nNeither is a guarantee. Use them as two separate inputs to your own research.",
+      "links": [
+        {
+          "label": "Open Compare & Reports",
+          "path": "/compare"
+        }
+      ]
+    },
+    {
+      "id": "find-asset",
+      "title": "Find and research an asset",
+      "contexts": [
+        "markets",
+        "general"
+      ],
+      "keywords": [
+        "search",
+        "find",
+        "ticker",
+        "symbol",
+        "stock",
+        "company",
+        "asset page",
+        "chart",
+        "uae",
+        "adx",
+        "dfm",
+        "emaar"
+      ],
+      "body": "1. Open **Markets** and type a company name or ticker in the search box (for example `AAPL` or `EMAAR.AE`).\n2. Open the result to see the price, chart, details and news.\n3. From an asset page you can open its Pulse discussions and, for shares, a valuation. Add it to your watchlist or investments from the asset's Pulse page or from My Nexis.\n\nPrices are delayed public market data. Each price shows when it was last updated; if live data isn't available, the page says so instead of guessing.",
+      "links": [
+        {
+          "label": "Open Markets",
+          "path": "/markets"
+        }
+      ]
+    },
+    {
+      "id": "data-timestamps",
+      "title": "Market data timestamps and sources",
+      "contexts": [
+        "markets",
+        "my-nexis",
+        "general"
+      ],
+      "keywords": [
+        "delayed",
+        "timestamp",
+        "source",
+        "data",
+        "price wrong",
+        "stale",
+        "live",
+        "real time",
+        "unavailable"
+      ],
+      "body": "Nexis uses delayed public market data, so prices can lag the exchange.\n\n- Prices show the time they were last updated.\n- When a price can't be fetched, Nexis shows it as unavailable and leaves that holding out of totals rather than inventing a number.\n- News and discussions show their source and link to the original.",
+      "links": [
+        {
+          "label": "Open Markets",
+          "path": "/markets"
+        }
+      ]
+    },
+    {
+      "id": "compare-assets",
+      "title": "Compare assets",
+      "contexts": [
+        "compare"
+      ],
+      "keywords": [
+        "compare",
+        "comparison",
+        "versus",
+        "vs",
+        "correlation",
+        "performance",
+        "ranking",
+        "growth of 100"
+      ],
+      "body": "1. Open **Compare & Reports**.\n2. Add the assets you want to compare (UAE shares, bonds and sukuk, indices and global markets).\n3. Choose the window and interval (hourly, daily, weekly or monthly).\n\nYou'll see growth of 100, a ranking, performance and risk figures, the correlation of returns, and fundamentals and analyst consensus where available.",
+      "links": [
+        {
+          "label": "Open Compare & Reports",
+          "path": "/compare"
+        }
+      ]
+    },
+    {
+      "id": "generate-report",
+      "title": "Generate a PDF report",
+      "contexts": [
+        "compare",
+        "reports"
+      ],
+      "keywords": [
+        "report",
+        "pdf",
+        "export",
+        "download",
+        "generate report",
+        "where are my reports"
+      ],
+      "body": "**From a comparison:** open Compare & Reports, set up your comparison, then choose **Download PDF report**. The PDF downloads to your device.\n\n**Research reports:** the Reports page assembles stored research results (datasets, portfolio configuration, performance, risk, backtests) into a PDF and lists generated reports.\n\nReports are available on every plan.",
+      "links": [
+        {
+          "label": "Open Compare & Reports",
+          "path": "/compare"
+        },
+        {
+          "label": "Open Reports",
+          "path": "/reports"
+        }
+      ]
+    },
+    {
+      "id": "my-nexis",
+      "title": "How My Nexis works",
+      "contexts": [
+        "my-nexis"
+      ],
+      "keywords": [
+        "my nexis",
+        "portfolio",
+        "tracking",
+        "investments",
+        "holdings",
+        "watchlist",
+        "alerts",
+        "today"
+      ],
+      "body": "My Nexis is your private area (sign-in required).\n\n- **Investments** — the assets you hold, with quantity and optional purchase price and date. Nexis values them with delayed prices and live FX.\n- **Watchlist** — tickers you follow without holding them.\n- **Today** and **Alerts** — news, filings, price moves and Pulse activity for what you track.\n\nOnly you can see your investments. Holdings are entered by you; Nexis doesn't connect to brokers or move money.",
+      "links": [
+        {
+          "label": "Open My Nexis",
+          "path": "/my-nexis"
+        }
+      ]
+    },
+    {
+      "id": "add-investment",
+      "title": "Add an investment",
+      "contexts": [
+        "my-nexis"
+      ],
+      "keywords": [
+        "add investment",
+        "add holding",
+        "new position",
+        "track",
+        "buy",
+        "enter",
+        "how do i add"
+      ],
+      "body": "1. Open **My Nexis → Investments**.\n2. Choose to add an investment and enter the ticker and quantity. Purchase price and date are optional but needed for gain/loss.\n3. Save.\n\nAnother lot of an asset you already track doesn't use a new slot. Each plan includes a number of active investments: **Free 1, Nexis Plus 10, Nexis Pro 20**.",
+      "links": [
+        {
+          "label": "Open My Investments",
+          "path": "/my-nexis/investments"
+        }
+      ]
+    },
+    {
+      "id": "investment-limit",
+      "title": "Why can't I add another investment?",
+      "contexts": [
+        "my-nexis",
+        "billing"
+      ],
+      "keywords": [
+        "limit",
+        "another investment",
+        "add another investment",
+        "can't add",
+        "cannot add",
+        "why can't i add",
+        "allowance",
+        "maximum",
+        "full",
+        "upgrade",
+        "slots",
+        "archived"
+      ],
+      "body": "Each plan includes a number of **active** investments: Free 1, Nexis Plus 10, Nexis Pro 20.\n\nWhen you're at your limit you can:\n- **Archive** an investment you no longer want active (it's kept, read-only, and can be restored later), or remove it; or\n- upgrade to a plan with a higher allowance.\n\nIf your plan changed and you have more active investments than it allows, Nexis asks you to choose which to keep. Adding or editing investments waits until you choose; nothing is deleted.",
+      "links": [
+        {
+          "label": "Open My Investments",
+          "path": "/my-nexis/investments"
+        },
+        {
+          "label": "Compare plans",
+          "path": "/pricing"
+        }
+      ]
+    },
+    {
+      "id": "advisor",
+      "title": "Use the AI Advisor",
+      "contexts": [
+        "advisor"
+      ],
+      "keywords": [
+        "advisor",
+        "ai",
+        "ask",
+        "question",
+        "chat",
+        "messages",
+        "allowance",
+        "limit"
+      ],
+      "body": "Open **AI Advisor** and ask a research question about an asset, market or theme. Before answering it checks prices, news, analyst ratings and valuations, and it shows its sources.\n\nMonthly allowance: **Free 20, Nexis Plus 200, Nexis Pro 600** messages, reset on the 1st of each month (UTC). Visitors without an account get 3 per day.\n\nThe Advisor provides general information, not personalised financial advice, and it can be wrong — check important facts.",
+      "links": [
+        {
+          "label": "Open AI Advisor",
+          "path": "/advisor"
+        },
+        {
+          "label": "AI disclosure",
+          "path": "/ai-disclosure"
+        }
+      ]
+    },
+    {
+      "id": "plans",
+      "title": "Free, Nexis Plus and Nexis Pro",
+      "contexts": [
+        "billing",
+        "general",
+        "my-nexis"
+      ],
+      "keywords": [
+        "plans",
+        "pricing",
+        "price",
+        "cost",
+        "free",
+        "plus",
+        "pro",
+        "difference",
+        "subscription",
+        "aed",
+        "upgrade",
+        "how much"
+      ],
+      "body": "All prices are monthly in UAE dirhams.\n\n- **Free — AED 0:** 1 active investment, 20 AI Advisor messages a month, full access to Nexis Pulse.\n- **Nexis Plus — AED 29/month:** 10 active investments, 200 AI Advisor messages a month, and portfolio insights (concentration, currency exposure, diversification, gain drivers).\n- **Nexis Pro — AED 69/month:** 20 active investments, 600 AI Advisor messages a month, portfolio insights, and portfolio risk analytics (volatility, drawdown, beta, correlations).\n\nNexis Pulse, Markets, Compare & Reports and this Help Center are available on every plan.",
+      "links": [
+        {
+          "label": "Compare plans",
+          "path": "/pricing"
+        }
+      ]
+    },
+    {
+      "id": "upgrade-change-plan",
+      "title": "Upgrade or change your plan",
+      "contexts": [
+        "billing"
+      ],
+      "keywords": [
+        "upgrade",
+        "subscribe",
+        "buy",
+        "checkout",
+        "change plan",
+        "switch",
+        "downgrade",
+        "plus to pro",
+        "pro to plus",
+        "payment methods",
+        "card",
+        "apple pay"
+      ],
+      "body": "**Subscribe:** open the pricing page, choose Plus or Pro, and pay on Stripe's secure checkout. Your plan updates once Stripe confirms the payment.\n\n**Switch between Plus and Pro:** go to **Settings → Billing → Change plan**. Upgrading charges the difference for the rest of the month now; if that payment fails, your plan doesn't change. Moving to Plus credits the unused part to your next invoice. If you have more active investments than Plus allows, you choose which to keep first.\n\nPayment methods available are shown on the pricing page.",
+      "links": [
+        {
+          "label": "Compare plans",
+          "path": "/pricing"
+        },
+        {
+          "label": "Open Billing settings",
+          "path": "/settings#plan"
+        }
+      ]
+    },
+    {
+      "id": "cancel",
+      "title": "Cancel your subscription",
+      "contexts": [
+        "billing"
+      ],
+      "keywords": [
+        "cancel",
+        "cancellation",
+        "stop",
+        "unsubscribe",
+        "end subscription",
+        "refund",
+        "resume",
+        "keep subscription"
+      ],
+      "body": "1. Open **Settings → Billing**.\n2. Choose **Cancel subscription** and confirm.\n\nYou keep your plan until the end of the month you've paid for, then move to Free. Before then, choose which investment stays active on Free; the others are archived (read-only), not deleted, and are restored if you subscribe again. Changed your mind? Choose **Keep my subscription** before the period ends.\n\nThe Help Center can't cancel or refund for you. For a billing question it can't answer, use **Manage billing** to see invoices and payment details.",
+      "links": [
+        {
+          "label": "Open Billing settings",
+          "path": "/settings#plan"
+        }
+      ]
+    },
+    {
+      "id": "payment-failed",
+      "title": "My payment failed",
+      "contexts": [
+        "billing"
+      ],
+      "keywords": [
+        "payment failed",
+        "declined",
+        "card declined",
+        "past due",
+        "update card",
+        "payment method",
+        "billing problem"
+      ],
+      "body": "If a renewal payment fails, you keep your plan while Stripe retries, and Nexis shows *Your payment needs attention*.\n\n1. Open **Settings → Billing → Manage billing**.\n2. Update your payment method in Stripe's billing portal.\n\nIf the retries all fail, the subscription ends and the account moves to Free. Your data isn't deleted.",
+      "links": [
+        {
+          "label": "Open Billing settings",
+          "path": "/settings#plan"
+        }
+      ]
+    },
+    {
+      "id": "plan-not-showing",
+      "title": "My plan isn't showing correctly",
+      "contexts": [
+        "billing"
+      ],
+      "keywords": [
+        "not showing",
+        "still free",
+        "paid but",
+        "plan wrong",
+        "subscription not working",
+        "didn't upgrade",
+        "not updated"
+      ],
+      "body": "After checkout your plan updates as soon as Stripe confirms the payment — usually within a few seconds.\n\n1. Reload the page or open **Settings → Billing**.\n2. If it still shows Free after a minute, open **Manage billing** to check that the payment went through.\n3. A declined or abandoned checkout doesn't change your plan, and you aren't charged.\n\nNexis never grants a plan just because the success page opened — only Stripe's confirmation does.",
+      "links": [
+        {
+          "label": "Open Billing settings",
+          "path": "/settings#plan"
+        }
+      ]
+    },
+    {
+      "id": "account-settings",
+      "title": "Account settings and deleting your account",
+      "contexts": [
+        "account",
+        "billing"
+      ],
+      "keywords": [
+        "settings",
+        "account",
+        "password",
+        "email",
+        "delete account",
+        "notifications",
+        "preferences",
+        "sign out",
+        "privacy"
+      ],
+      "body": "Open **Settings** for your account, billing and preferences, and **Notifications** for alerts.\n\nDeleting your account (Settings) cancels any active subscription first, then removes your account. Read the Privacy Policy for how data is handled.",
+      "links": [
+        {
+          "label": "Open Settings",
+          "path": "/settings"
+        },
+        {
+          "label": "Privacy Policy",
+          "path": "/privacy"
+        }
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Troubleshooting common problems",
+      "contexts": [
+        "general"
+      ],
+      "keywords": [
+        "not loading",
+        "slow",
+        "error",
+        "broken",
+        "bug",
+        "blank",
+        "problem",
+        "doesn't work",
+        "stuck",
+        "loading"
+      ],
+      "body": "- **First load is slow:** Nexis's server sleeps when idle; the first request can take up to about 20 seconds. Later pages are quick.\n- **A price says unavailable:** the market data provider didn't return it; try again later.\n- **You were signed out:** sign in again; sessions end after a while for security.\n- **A page shows an error:** reload it. If it keeps happening, note the page and what you did.",
+      "links": []
+    },
+    {
+      "id": "reddit",
+      "title": "Reddit discussions in Pulse",
+      "contexts": [
+        "pulse"
+      ],
+      "keywords": [
+        "embed",
+        "external",
+        "hacker news",
+        "reddit",
+        "reddit link",
+        "share reddit",
+        "show reddit post",
+        "sources",
+        "stocktwits",
+        "subreddit",
+        "twitter",
+        "wallstreetbets",
+        "x"
+      ],
+      "body": "You can share a Reddit discussion in Pulse: when you start a discussion, paste the link to the Reddit post in **Reddit discussion** (or include it in your text). Everyone, on every plan, can then open it on Reddit or choose **Show the Reddit post here** to see it through Reddit's official embed.\n\nNexis doesn't collect Reddit discussions automatically. Reddit requires written permission for automated collection and commercial use, and Nexis doesn't have it yet. Reddit content shown in an embed comes from Reddit, not Nexis; if a post is removed on Reddit, it disappears from the embed too.",
+      "links": [
+        {
+          "label": "Open Nexis Pulse",
+          "path": "/pulse"
+        }
+      ]
+    },
+    {
+      "id": "advice",
+      "title": "Is Nexis financial advice?",
+      "contexts": [
+        "general",
+        "advisor"
+      ],
+      "keywords": [
+        "advice",
+        "should i buy",
+        "should i sell",
+        "recommendation",
+        "guarantee",
+        "returns",
+        "invest"
+      ],
+      "body": "No. Nexis provides research tools and general information. It doesn't know your circumstances, doesn't give personalised advice and never guarantees returns. For questions about a specific asset, use Markets, Pulse, Compare and the AI Advisor as inputs to your own research, and consider a licensed adviser.",
+      "links": [
+        {
+          "label": "Read the disclaimer",
+          "path": "/disclaimer"
+        }
+      ]
+    }
+  ]
+}

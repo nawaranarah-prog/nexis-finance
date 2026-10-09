@@ -44,7 +44,10 @@ def _signup(client, tag: str) -> dict:  # type: ignore[no-untyped-def]
     return {"identifier": mail, "password": "folio-pass-123", **client.get("/api/auth/me").json()["user"]}
 
 
-def test_portfolio_values_privacy_and_validation(client, market):
+def test_portfolio_values_privacy_and_validation(client, market, monkeypatch):
+    from app.services import entitlements
+
+    monkeypatch.setattr(entitlements, "tier_of", lambda db, user: "pro")  # several investments (plan limits: test_billing)
     assert client.get("/api/me/portfolio").status_code == 401  # private: needs a session
     _signup(client, "folio")
     a = client.post(

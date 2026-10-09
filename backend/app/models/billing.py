@@ -29,7 +29,7 @@ class Subscription(Base, TimestampMixin):
     customer_id: Mapped[str | None] = mapped_column(String(80), unique=True)
     subscription_id: Mapped[str | None] = mapped_column(String(80), unique=True)
     price_id: Mapped[str | None] = mapped_column(String(80))
-    plan: Mapped[str | None] = mapped_column(String(16))  # pro_monthly | pro_yearly
+    plan: Mapped[str | None] = mapped_column(String(16))  # plus_monthly | pro_monthly (older: pro_yearly)
     # The provider's status, verbatim: active | trialing | past_due | canceled | incomplete | incomplete_expired | unpaid | paused
     status: Mapped[str | None] = mapped_column(String(24), index=True)
     current_period_start: Mapped[datetime | None] = mapped_column(DateTime)
@@ -38,6 +38,9 @@ class Subscription(Base, TimestampMixin):
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
     # Set when the latest invoice failed and cleared when one is paid (drives the "update your payment method" notice).
     payment_failed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # The investments (symbols) the member chose to keep active when their plan's allowance shrinks (cancellation or
+    # a move to a smaller plan). Applied only once the provider confirms the change; never chosen by Nexis.
+    downgrade_keep: Mapped[list | None] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
 

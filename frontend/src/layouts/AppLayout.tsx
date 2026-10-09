@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../services/api";
@@ -12,6 +12,8 @@ import { useT } from "../i18n";
 import { LegalGate } from "../components/pulse";
 import { UpgradeDialog } from "../components/pro";
 import { DialogHost } from "../components/dialog";
+
+const HelpAgent = lazy(() => import("../components/HelpAgent"));
 
 /** Every route in the app, grouped by task. Pulse, Markets and Research stay open; the rest fold away until needed. */
 export const NAV: { group: string; fixed?: boolean; items: { to: string; label: string }[] }[] = [
@@ -365,9 +367,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       title = "My Nexis · Nexis Finance";
     } else if (path === "/notifications") {
       title = "Notifications · Nexis Finance";
-    } else if (path === "/pro") {
-      title = "Nexis Pro — plans and pricing · Nexis Finance";
-      desc = "Nexis is free to use. Nexis Pro raises the allowances for the AI Advisor, PDF research reports and AI briefs.";
+    } else if (path === "/pro" || path === "/pricing") {
+      title = "Plans and pricing — Free, Nexis Plus, Nexis Pro · Nexis Finance";
+      desc = "Nexis is free to use, including Nexis Pulse. Nexis Plus (AED 29/month) and Nexis Pro (AED 69/month) track more investments, raise the AI Advisor allowance and add portfolio analytics.";
     } else if (path === "/moderation") {
       title = "Moderation · Nexis Pulse";
     } else if (["/terms", "/privacy", "/disclaimer", "/community-guidelines", "/ai-disclosure"].includes(path)) {
@@ -445,6 +447,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <TabBar />
       <LegalGate />
       <UpgradeDialog />
+      <Suspense fallback={null}><HelpAgent /></Suspense>
       <DialogHost />
       <Toaster />
     </div>
