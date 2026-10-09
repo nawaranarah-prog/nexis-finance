@@ -12,6 +12,10 @@
   period end).
 
 Prints the environment variables to set on the API.
+
+``--check`` changes nothing (safe with a live key, no ``--live`` needed): it reports whether the account can take
+payments, whether both prices exist with the exact amounts, whether the webhook endpoint is registered for the six
+events, and whether the Customer Portal is set up the way Nexis expects. Secrets are never printed.
 """
 
 from __future__ import annotations
@@ -25,24 +29,91 @@ import stripe
 from app.core import plans
 from app.services.billing_stripe import HANDLED
 
-DESCRIPTIONS = {"plus": "Ten active investments, a higher AI Advisor allowance and portfolio insights.",
-                "pro": "Twenty active investments, the highest AI Advisor allowance, portfolio insights and risk analytics."}
+DESCRIPTIONS = {
+    "plus": "Ten active investments, a higher AI Advisor allowance and portfolio insights.",
+    "pro": "Twenty active investments, the highest AI Advisor allowance, portfolio insights and risk analytics.",
+}
 PORTAL_FEATURES = {
     "payment_method_update": {"enabled": True},
     "invoice_history": {"enabled": True},
     "customer_update": {"enabled": True, "allowed_updates": ["email", "address", "name", "tax_id"]},
     "subscription_cancel": {"enabled": True, "mode": "at_period_end"},
+    "subscription_update": {"enabled": False},  # plan changes go through Nexis (it asks which investments to keep)
 }
+
+
+WEBHOOK_URL = "https://nexis-finance-api.vercel.app/api/billing/webhook"
+
+
+def check(mode: str, url: str) -> int:
+    """Read-only readiness report. Returns the number of problems."""
+    problems = 0
+
+    def line(ok: bool | None, text: str) -> None:
+        nonlocal problems
+        problems += ok is False
+        print(f"  [{'PASS' if ok else 'FAIL' if ok is False else 'INFO'}] {text}")
+
+    print(f"Stripe {mode} readiness for Nexis")
+    acct = stripe.Account.retrieve().to_dict()
+    req = acct.get("requirements") or {}
+    line(None, f"account country {acct.get('country')}, default currency {str(acct.get('default_currency')).upper()}")
+    line(bool(acct.get("details_submitted")), "account details submitted (activation form completed)")
+    line(bool(acct.get("charges_enabled")), "charges enabled (can take real payments)" if mode == "LIVE" else "charges enabled")
+    line(bool(acct.get("payouts_enabled")), "payouts enabled (bank account connected and verified)")
+    if req.get("currently_due"):
+        line(False, f"{len(req['currently_due'])} verification item(s) currently due in the Dashboard")
+    if req.get("disabled_reason"):
+        line(False, f"account restricted: {req['disabled_reason']}")
+    found = {
+        p.lookup_key: p for p in stripe.Price.list(lookup_keys=[v["lookup_key"] for v in plans.PRICES.values()], limit=10).data
+    }
+    for key, want in plans.PRICES.items():
+        p = found.get(want["lookup_key"])
+        if p is None:
+            line(False, f"{key}: no price with lookup key {want['lookup_key']} (run this script without --check to create it)")
+            continue
+        got = (p.unit_amount, p.currency, p.recurring.interval if p.recurring else None, p.active, p.livemode)
+        line(
+            got == (want["amount_cents"], want["currency"], want["interval"], True, mode == "LIVE"),
+            f"{key}: {p.id} = {p.unit_amount / 100:.2f} {p.currency.upper()}/{got[2]}, active={p.active}, livemode={p.livemode}",
+        )
+    hooks = [w for w in stripe.WebhookEndpoint.list(limit=100).data if w.url == url]
+    if not hooks:
+        line(False, f"no webhook endpoint for {url}")
+    for w in hooks:
+        missing = sorted(set(HANDLED) - set(w.enabled_events)) if "*" not in w.enabled_events else []
+        line(
+            w.status == "enabled" and not missing,
+            f"webhook {w.id} {w.status}" + (f", missing events: {', '.join(missing)}" if missing else ", all 6 events"),
+        )
+    cfgs = [c for c in stripe.billing_portal.Configuration.list(limit=10, active=True).data if c.is_default]
+    if not cfgs:
+        line(False, "no default Customer Portal configuration")
+    for c in cfgs:
+        f = c.features
+        line(f.subscription_cancel.enabled and f.subscription_cancel.mode == "at_period_end", "portal: cancel at period end")
+        line(f.payment_method_update.enabled, "portal: update payment method")
+        line(
+            not f.subscription_update.enabled,
+            "portal: plan switching OFF (Nexis handles Plus/Pro changes and asks which investments to keep)",
+        )
+    print(f"{problems} problem(s)")
+    return problems
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--webhook", help="create the webhook endpoint for this URL")
     ap.add_argument("--live", action="store_true", help="allow a live secret key (creates LIVE objects)")
+    ap.add_argument("--check", action="store_true", help="report readiness only; changes nothing")
     a = ap.parse_args()
     key = os.environ.get("STRIPE_SECRET_KEY") or os.environ.get("NEXIS_STRIPE_SECRET_KEY")
     if not key:
         sys.exit("Set STRIPE_SECRET_KEY to your Stripe TEST secret key (sk_test_...).")
+    if a.check:
+        stripe.api_key = key
+        sys.exit(1 if check("LIVE" if key.startswith(("sk_live_", "rk_live_")) else "TEST", a.webhook or WEBHOOK_URL) else 0)
     if key.startswith(("sk_live_", "rk_live_")) and not a.live:
         sys.exit("Refusing to use a LIVE key. This script is for test mode; pass --live only when you mean it.")
     stripe.api_key = key
@@ -57,14 +128,18 @@ def main() -> None:
             products[tier] = stripe.Product.create(id=prod["id"], name=prod["name"], description=DESCRIPTIONS[tier])
             print(f"[{mode}] created product {prod['id']}")
 
-    found = {p.lookup_key: p for p in stripe.Price.list(lookup_keys=[v["lookup_key"] for v in plans.PRICES.values()], limit=10).data}
+    found = {
+        p.lookup_key: p for p in stripe.Price.list(lookup_keys=[v["lookup_key"] for v in plans.PRICES.values()], limit=10).data
+    }
     ids: dict[str, str] = {}
     for plan, want in plans.PRICES.items():
         p = found.get(want["lookup_key"])
         if p is None:
             p = stripe.Price.create(product=products[want["tier"]].id, unit_amount=want["amount_cents"], currency=want["currency"],
                                     recurring={"interval": want["interval"]}, lookup_key=want["lookup_key"], nickname=want["nickname"])  # fmt: skip
-            print(f"[{mode}] created {plan}: {p.id}  {want['amount_cents'] / 100:.2f} {want['currency'].upper()}/{want['interval']}")
+            print(
+                f"[{mode}] created {plan}: {p.id}  {want['amount_cents'] / 100:.2f} {want['currency'].upper()}/{want['interval']}"
+            )
         else:
             got = (p.unit_amount, p.currency, p.recurring.interval if p.recurring else None)
             if got != (want["amount_cents"], want["currency"], want["interval"]):
