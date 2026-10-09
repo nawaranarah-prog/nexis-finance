@@ -7,7 +7,17 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "test:e2e": "playwright test --project=chromium --project=firefox --project=webkit",
+    "test:responsive": "playwright test --project=responsive",
+    "test:a11y": "playwright test --project=a11y",
+    "test:links": "playwright test --project=links",
+    "test:all": "npm run typecheck && npm run lint && npm test && playwright test --project=chromium --project=firefox --project=webkit --project=responsive --project=a11y --project=links",
+    "test:live": "playwright test --project=live-smoke",
+    "fixtures:record": "playwright test --project=record",
+    "lighthouse": "node tests/lighthouse/run.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.0",
@@ -17,12 +27,18 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.3",
     "@types/plotly.js": "^3.0.14",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "lighthouse": "^13.5.0",
+    "linkinator": "^8.1.0",
+    "oxlint": "^1.87.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1"
+    "vite": "^8.3.1",
+    "vitest": "^5.0.3"
   }
 }
