@@ -108,7 +108,7 @@ function AccountSettings() {
     toast("success", "Signed out of other devices", `${r.signed_out_sessions} other session${r.signed_out_sessions === 1 ? "" : "s"} ended.`);
   });
   const deleteAccount = () => run("delete", async () => {
-    if (!(await askConfirm({ title: "Delete your account?", body: "Your account, posts, comments, saved items and My Nexis data are deleted permanently. An active Nexis Pro subscription is canceled first.", confirm: "Delete account", danger: true }))) return;
+    if (!(await askConfirm({ title: "Delete your account?", body: "Your account, posts, comments, saved items and My Nexis data are deleted permanently. An active Nexis Plus or Pro subscription is canceled first.", confirm: "Delete account", danger: true }))) return;
     await api.post("/auth/me/delete", { password: u.has_password ? confirmDelete : "DELETE" });
     await qc.invalidateQueries({ queryKey: ["me"] });
     qc.invalidateQueries({ queryKey: ["social"] });

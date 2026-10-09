@@ -4,7 +4,7 @@ import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-ro
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Change, fmtPrice, SymbolSearch, useMe } from "../components/market";
 import { ago, assetPath, DiscussionRow, stamp } from "../components/pulse";
-import { handlePlanError, useBilling } from "../components/pro";
+import { handlePlanError, KeepPicker, useBilling } from "../components/pro";
 import { toast } from "../components/toast";
 import { useT } from "../i18n";
 import { api, errorMessage } from "../services/api";
@@ -151,7 +151,16 @@ function Investments({ add }: { add: boolean }) {
   const [adding, setAdding] = useState<boolean>(add);
   const [editing, setEditing] = useState<AnyObj | null>(null);
   useEffect(() => { if (add) setAdding(true); }, [add]);
-  const refresh = () => { qc.invalidateQueries({ queryKey: ["portfolio"] }); qc.invalidateQueries({ queryKey: ["my-today"] }); qc.invalidateQueries({ queryKey: ["billing-status"] }); };
+  const refresh = () => ["portfolio", "my-today", "billing-status", "investments", "portfolio-insights", "portfolio-risk"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  const archive = async (h: AnyObj) => {
+    if (!(await askConfirm({ title: `Archive ${h.symbol}?`, body: "Archived investments are kept, read-only, and don't count toward your plan. You can restore it later.", confirm: "Archive" }))) return;
+    try { await api.post(`/me/investments/${encodeURIComponent(h.symbol)}/archive`); refresh(); toast("success", `${h.symbol} archived`); }
+    catch (x) { toast("error", "Couldn't archive", errorMessage(x)); }
+  };
+  const restore = async (sym: string) => {
+    try { await api.post(`/me/investments/${encodeURIComponent(sym)}/restore`); refresh(); toast("success", `${sym} restored`); }
+    catch (x) { if (!handlePlanError(x)) toast("error", "Couldn't restore", errorMessage(x)); }
+  };
   const remove = async (h: AnyObj) => {
     if (!(await askConfirm({ title: `Remove ${h.symbol} from your investments?`, body: "This removes the investment from My Nexis. It doesn't affect anything outside Nexis.", confirm: "Remove", danger: true }))) return;
     try { await api.del(`/me/holdings/${h.id}`); refresh(); toast("success", "Investment removed"); } catch (x) { toast("error", "Couldn't remove", errorMessage(x)); }
@@ -197,7 +206,7 @@ function Investments({ add }: { add: boolean }) {
                     <td className="r num">{h.value != null ? fmtPrice(h.value) : "—"}</td>
                     <td className={`r num ${h.gain > 0 ? "pos" : h.gain < 0 ? "neg" : ""}`}>{h.gain != null ? <>{fmtPrice(h.gain)}<div className="xs">{pct(h.gain_pct)}</div></> : <span className="xs muted">{h.purchase_price == null ? "no cost entered" : "—"}</span>}</td>
                     <td className="r num hide-xs">{h.weight != null ? `${(h.weight * 100).toFixed(1)}%` : "—"}</td>
-                    <td className="r pt-actions"><button type="button" className="link-btn xs" onClick={() => setEditing(h)}>Edit</button><button type="button" className="link-btn xs neg" onClick={() => remove(h)}>Remove</button></td>
+                    <td className="r pt-actions"><button type="button" className="link-btn xs" onClick={() => setEditing(h)}>Edit</button><button type="button" className="link-btn xs" onClick={() => archive(h)}>Archive</button><button type="button" className="link-btn xs neg" onClick={() => remove(h)}>Remove</button></td>
                   </tr>
                 </Fragment>
               ))}
@@ -206,7 +215,66 @@ function Investments({ add }: { add: boolean }) {
         </div>
       )}
       {d && <p className="hm-fine">{d.note}</p>}
+      {d && d.archived?.length > 0 && (
+        <section className="mn-archived" aria-labelledby="arch-h">
+          <h2 id="arch-h" className="pl-mini-h">Archived · {d.archived.length}</h2>
+          <p className="xs muted">Kept and read-only. They don't count toward your plan; restore one when you have room.</p>
+          <ul>{Object.values(d.archived.reduce((m: Record<string, AnyObj[]>, h: AnyObj) => ({ ...m, [h.symbol]: [...(m[h.symbol] ?? []), h] }), {})).map((lots) => {
+            const h = (lots as AnyObj[])[0];
+            return <li key={h.symbol}><span className="mono wl-tk">{h.symbol}</span> <span className="wl-name">{h.name ?? ""}</span>
+              <span className="xs muted"> · {(lots as AnyObj[]).length > 1 ? `${(lots as AnyObj[]).length} lots · ` : ""}{h.archived_reason === "plan" ? "archived when your plan changed" : "archived by you"}</span>
+              <button type="button" className="link-btn xs" onClick={() => restore(h.symbol)}>Restore</button></li>;
+          })}</ul>
+        </section>
+      )}
+      {d && d.holdings.length > 0 && <Analytics />}
     </>
+  );
+}
+
+const pctN = (v: number | null | undefined, digits = 1) => (v == null ? "—" : `${(v * 100).toFixed(digits)}%`);
+
+/** Portfolio insights (Nexis Plus and Pro) and risk analytics (Nexis Pro). The server decides; this only displays. */
+function Analytics() {
+  const b = useBilling();
+  const caps = b.data?.capabilities ?? {};
+  const ins = useQuery({ queryKey: ["portfolio-insights"], queryFn: () => api.get<AnyObj>("/me/portfolio/insights"), enabled: !!caps.portfolio_insights, staleTime: 120_000 });
+  const risk = useQuery({ queryKey: ["portfolio-risk"], queryFn: () => api.get<AnyObj>("/me/portfolio/risk"), enabled: !!caps.portfolio_risk, staleTime: 600_000 });
+  if (!b.data) return null;
+  const i = ins.data, r = risk.data;
+  return (
+    <section className="mn-analytics" aria-labelledby="an-h">
+      <h2 id="an-h" className="pl-mini-h">Portfolio analytics</h2>
+      {!caps.portfolio_insights ? (
+        <p className="xs muted">Concentration, currency exposure and gain drivers come with Nexis Plus; volatility, drawdown, beta and correlations with Nexis Pro. <Link to="/pricing">See plans</Link></p>
+      ) : ins.isLoading ? <div className="wire-skel"><span className="skel w70" /></div>
+        : ins.isError ? <p className="hm-error" role="alert">{errorMessage(ins.error)}</p>
+        : i && !i.available ? <p className="xs muted">{i.reason}</p>
+        : i && (
+          <div className="mn-an-grid">
+            <div><span className="pl-mini-h">Largest position</span><b>{i.concentration.largest.symbol} · {pctN(i.concentration.largest.weight)}</b><span className="xs muted">Top 3: {pctN(i.concentration.top3_weight)}</span></div>
+            <div><span className="pl-mini-h">Diversification</span><b className="num">{i.concentration.effective_positions.toFixed(1)}</b><span className="xs muted">effective positions of {i.weights.length}</span></div>
+            <div><span className="pl-mini-h">Currency exposure</span><span className="small">{i.currency_exposure.map((c: AnyObj) => `${c.currency} ${pctN(c.weight, 0)}`).join(" · ")}</span></div>
+            <div><span className="pl-mini-h">Gain drivers</span><span className="small">{[...i.gain_drivers.top.map((g: AnyObj) => `${g.symbol} +${usd(g.gain_usd)}`), ...i.gain_drivers.bottom.map((g: AnyObj) => `${g.symbol} −${usd(Math.abs(g.gain_usd))}`)].join(" · ") || "Add purchase prices to see what drives gains"}</span></div>
+            {i.observations.length > 0 && <ul className="mn-an-obs">{i.observations.map((o: string) => <li key={o}>{o}</li>)}</ul>}
+          </div>
+        )}
+      {caps.portfolio_insights && !caps.portfolio_risk && <p className="xs muted">Volatility, drawdown, beta and correlations come with Nexis Pro. <Link to="/settings#plan">Change plan</Link></p>}
+      {caps.portfolio_risk && (risk.isLoading ? <div className="wire-skel"><span className="skel w70" /></div>
+        : risk.isError ? <p className="hm-error" role="alert">{errorMessage(risk.error)}</p>
+        : r && !r.available ? <p className="xs muted">{r.reason}</p>
+        : r && (
+          <div className="mn-an-grid">
+            <div><span className="pl-mini-h">Volatility (1y)</span><b className="num">{pctN(r.portfolio.volatility)}</b><span className="xs muted">annualised</span></div>
+            <div><span className="pl-mini-h">Max drawdown</span><b className="num neg">{pctN(r.portfolio.max_drawdown)}</b><span className="xs muted">{r.portfolio.max_drawdown_date}</span></div>
+            <div><span className="pl-mini-h">Beta vs S&P 500</span><b className="num">{r.portfolio.beta == null ? "—" : r.portfolio.beta.toFixed(2)}</b></div>
+            <div><span className="pl-mini-h">Return (1y, today's weights)</span><b className="num">{pctN(r.portfolio.return_1y)}</b></div>
+            {r.correlations.length > 0 && <div className="mn-an-wide"><span className="pl-mini-h">Most correlated</span><span className="small">{r.correlations.slice(0, 3).map((c: AnyObj) => `${c.a}–${c.b} ${c.correlation?.toFixed(2)}`).join(" · ")}</span></div>}
+            <p className="xs muted mn-an-wide">{r.days} trading days, {r.start} to {r.end}. {r.method}{r.excluded.length ? ` Not enough history: ${r.excluded.join(", ")}.` : ""}</p>
+          </div>
+        ))}
+      {(i || r) && <p className="xs muted">{(i ?? r)?.note}</p>}
+    </section>
   );
 }
 
@@ -390,15 +458,51 @@ function Activity() {
   );
 }
 
-/** Capacity on the current plan (from the server): shown before anyone hits it, and after a downgrade. */
-function Capacity() {
+/** The plan's investment allowance (from the server), and the member's choice when it shrinks. */
+function PlanAllowance() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["investments"], queryFn: () => api.get<AnyObj>("/me/investments") });
+  const [keep, setKeep] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const st = q.data;
+  if (!st) return null;
+  const up = st.upcoming;
+  const choosing = st.selection_required || up?.choice_needed || (up && st.keep.length > 0);
+  const limit = st.selection_required ? st.limit : up?.limit ?? st.limit;
+  const value = keep ?? (st.keep.length ? st.keep : []);
+  const save = async () => {
+    setBusy(true);
+    try {
+      qc.setQueryData(["investments"], await api.post<AnyObj>("/me/investments/keep", { symbols: value }));
+      ["portfolio", "billing-status", "my-today"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      toast("success", st.selection_required ? "Done — the others are archived" : "Saved — applied when your plan changes");
+      setKeep(null);
+    } catch (x) { toast("error", "Couldn't save your choice", errorMessage(x)); } finally { setBusy(false); }
+  };
+  return (
+    <section id="plan-allowance" className={choosing ? "mn-allowance choose" : "mn-allowance"} aria-live="polite">
+      <p className={`pro-usage ${st.active >= st.limit ? "low" : ""}`}>
+        {st.active} of {st.limit} active investment{st.limit === 1 ? "" : "s"} on {st.plan_name}{st.archived.length ? ` · ${st.archived.length} archived` : ""}
+        {st.active >= st.limit && st.plan !== "pro" && !choosing && <> · <Link to="/pricing">See plans</Link></>}
+      </p>
+      {choosing && (
+        <div className="np-note">
+          {st.selection_required
+            ? <p><b>Choose which investment{st.limit === 1 ? "" : "s"} to keep active.</b> Your {st.plan_name} plan includes {st.limit}. The others are archived — kept, read-only — and come back if you upgrade. Adding or editing investments waits until you choose.</p>
+            : <p><b>Your plan changes on {new Date(up.ends_at).toLocaleDateString(undefined, { day: "numeric", month: "long" })}.</b> {up.plan_name} includes {up.limit} active investment{up.limit === 1 ? "" : "s"}. Choose which to keep; nothing changes until then{st.keep.length ? ` (saved: ${st.keep.join(", ")})` : ""}.</p>}
+          <KeepPicker symbols={st.symbols} limit={limit} value={value} onChange={setKeep} />
+          <button type="button" className="btn primary sm" disabled={busy || value.length === 0} onClick={save}>{busy ? "…" : st.selection_required ? "Keep these, archive the rest" : "Save my choice"}</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WatchCapacity() {
   const b = useBilling();
-  const u = b.data?.usage?.my_nexis_assets;
-  if (!u) return null;
-  if (u.over_capacity) {
-    return <p className="np-note">You're tracking {u.used} assets and your plan includes {u.limit}. Everything you track stays saved and keeps working; to add another, remove some or <Link to="/pro">upgrade to Nexis Pro</Link>.</p>;
-  }
-  return <p className={`pro-usage ${u.near_limit ? "low" : ""}`}>{u.used} of {u.limit} tracked assets on your plan{u.at_limit && b.data?.plan === "free" ? <> · <Link to="/pro">More with Nexis Pro</Link></> : null}</p>;
+  const u = b.data?.usage?.watchlist;
+  if (!u || !u.near_limit) return null;
+  return <p className="pro-usage low">{u.used} of {u.limit} watchlist tickers.</p>;
 }
 
 export default function MyNexis() {
@@ -426,7 +530,8 @@ export default function MyNexis() {
         {SECTIONS.map((x) => <NavLink key={x.key} to={x.to} end className={() => (current === x.key ? "on" : "")}>{x.label}</NavLink>)}
       </nav>
       {current === "today" && <Today />}
-      {(current === "investments" || current === "watchlist") && <Capacity />}
+      {current === "investments" && <PlanAllowance />}
+      {current === "watchlist" && <WatchCapacity />}
       {current === "investments" && <Investments add={sp.get("add") === "1"} />}
       {current === "watchlist" && <Watchlist />}
       {current === "alerts" && <Alerts />}

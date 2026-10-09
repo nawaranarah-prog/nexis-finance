@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import NexisError, NotFoundError, ProviderError, ValidationFailed
 from app.db.base import utcnow
 from app.models import TopicFollow, User, UserHolding
-from app.services import events, llm, markets, pulse, social
+from app.services import entitlements, events, investments, llm, markets, pulse, social
 
 ASSET_TYPES = ("stock", "etf", "fund", "bond", "crypto", "other")
 MAX_HOLDINGS = 200
@@ -48,6 +48,8 @@ def _holding(h: UserHolding) -> dict[str, Any]:
         "id": h.id, "portfolio": h.portfolio, "symbol": h.symbol, "name": h.name, "asset_type": h.asset_type, "quantity": h.quantity,
         "purchase_price": h.purchase_price, "purchase_date": h.purchase_date.isoformat() if h.purchase_date else None,
         "currency": h.currency, "note": h.note,
+        "archived": h.archived_at is not None, "archived_at": h.archived_at.isoformat() + "Z" if h.archived_at else None,
+        "archived_reason": h.archived_reason,
     }  # fmt: skip
 
 
@@ -58,21 +60,42 @@ def _mine(db: Session, user: User, hid: int) -> UserHolding:
     return h
 
 
+def active_symbols(db: Session, user: User) -> list[str]:
+    return investments.active_symbols(db, user)
+
+
+def watch_symbols(db: Session, user: User) -> list[str]:
+    return list(db.scalars(select(TopicFollow.value).where(TopicFollow.user_id == user.id, TopicFollow.kind == "symbol")))
+
+
+def _lock(db: Session, user: User) -> None:
+    """Serialise allowance checks per account (Postgres row lock; SQLite runs one writer at a time anyway)."""
+    db.execute(select(User.id).where(User.id == user.id).with_for_update())
+
+
 def add_holding(db: Session, user: User, data: dict[str, Any]) -> dict[str, Any]:
     if db.query(UserHolding).filter(UserHolding.user_id == user.id).count() >= MAX_HOLDINGS:
         raise ValidationFailed(f"a portfolio can hold up to {MAX_HOLDINGS} positions")
+    investments.ensure_editable(db, user)
     sym = markets.clean_symbol(data["symbol"])
-    if sym not in tracked(db, user):  # another lot of an asset already tracked doesn't use a new slot
-        from app.services import entitlements
-
-        entitlements.check_capacity(db, user, "my_nexis_assets")
+    new_investment = sym not in active_symbols(db, user)  # another lot of an active investment doesn't use a new slot
+    if new_investment:
+        entitlements.check_capacity(db, user, "investments")
     try:
         quote = (markets.quotes(db, [sym]) or [None])[0]
     except NexisError:
         quote = None
+    _lock(db, user)
     h = UserHolding(user_id=user.id, symbol=sym)
     _apply(h, data, quote)
     db.add(h)
+    db.flush()
+    if new_investment:  # re-count inside the lock: two simultaneous requests can't both take the last slot
+        tier = entitlements.tier_of(db, user)
+        n, cap = len(active_symbols(db, user)), entitlements.limit("investments", tier)
+        if n > cap:
+            db.rollback()
+            raise entitlements.limit_error("investments", tier, cap, cap)
     db.commit()
     return _holding(h)
 
@@ -112,6 +135,9 @@ def _apply(h: UserHolding, data: dict[str, Any], quote: dict[str, Any] | None) -
 
 def update_holding(db: Session, user: User, hid: int, data: dict[str, Any]) -> dict[str, Any]:
     h = _mine(db, user, hid)
+    if h.archived_at is not None:
+        raise ValidationFailed("archived investments are read-only; restore it to edit")
+    investments.ensure_editable(db, user)
     _apply(h, data, None)
     db.commit()
     return _holding(h)
@@ -140,9 +166,12 @@ def _usd_rates(db: Session, currencies: set[str]) -> dict[str, float]:
 
 
 def summary(db: Session, user: User) -> dict[str, Any]:
-    rows = list(
+    investments.reconcile(db, user)  # self-healing if a plan change arrived while nobody was looking
+    every = list(
         db.scalars(select(UserHolding).where(UserHolding.user_id == user.id).order_by(UserHolding.portfolio, UserHolding.symbol))
     )
+    rows = [h for h in every if h.archived_at is None]
+    archived = [_holding(h) for h in every if h.archived_at is not None]
     syms = list(dict.fromkeys(h.symbol for h in rows))
     try:
         quotes = {q["symbol"]: q for q in markets.quotes(db, syms)} if syms else {}
@@ -180,6 +209,8 @@ def summary(db: Session, user: User) -> dict[str, Any]:
             alloc[r["asset_type"]] = alloc.get(r["asset_type"], 0) + r["value_usd"]
     return {
         "holdings": out,
+        "archived": archived,
+        "allowance": investments.state(db, user),
         "portfolios": sorted({h.portfolio for h in rows}),
         "totals": {
             "value_usd": total_usd if total_usd else None,
@@ -219,10 +250,8 @@ def watchlist(db: Session, user: User) -> dict[str, Any]:
 
 def watch(db: Session, user: User, symbol: str, on: bool) -> dict[str, Any]:
     sym = markets.clean_symbol(symbol)
-    if on and sym not in tracked(db, user):
-        from app.services import entitlements
-
-        entitlements.check_capacity(db, user, "my_nexis_assets")
+    if on and sym not in watch_symbols(db, user):
+        entitlements.check_capacity(db, user, "watchlist")
     exists = db.scalars(
         select(TopicFollow).where(TopicFollow.user_id == user.id, TopicFollow.kind == "symbol", TopicFollow.value == sym)
     ).first()
@@ -237,7 +266,7 @@ def tracked(db: Session, user: User) -> dict[str, str]:
         s: "watchlist"
         for s in db.scalars(select(TopicFollow.value).where(TopicFollow.user_id == user.id, TopicFollow.kind == "symbol"))
     }
-    out.update({s: "holding" for s in db.scalars(select(UserHolding.symbol).where(UserHolding.user_id == user.id))})
+    out.update({s: "holding" for s in active_symbols(db, user)})
     return out
 
 

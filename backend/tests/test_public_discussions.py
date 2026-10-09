@@ -66,6 +66,7 @@ def feeds(monkeypatch):  # type: ignore[no-untyped-def]
 
 
 def test_reddit_thread_is_collected_without_any_account(client, db, feeds):
+    """The collector itself (only runs if Reddit permission exists and ``pulse_public_reddit`` is switched on)."""
     out = pd.collect_reddit(db, ["stocks"], posts_per_sub=5, with_comments=2)
     assert out == {"threads": 1, "skipped": 0}
     d = db.scalars(select(PulseDiscussion).where(PulseDiscussion.editorial_key == "reddit:abc123")).one()
@@ -99,6 +100,28 @@ def test_reddit_thread_is_collected_without_any_account(client, db, feeds):
     db.commit()
     pd.collect_reddit(db, ["stocks"], posts_per_sub=5, with_comments=2)
     assert db.get(PulseDiscussion, d.id).status == "removed"
+
+
+def test_reddit_is_off_by_default_and_earlier_threads_are_withdrawn(client, db, feeds, monkeypatch):
+    """Reddit requires written permission for automated collection and commercial use: off unless that exists."""
+    from app.core.config import get_settings
+
+    s = get_settings()
+    assert s.pulse_public_reddit is False
+    monkeypatch.setattr(s, "pulse_public_hn", False)
+    monkeypatch.setattr(s, "pulse_public_stocktwits", False)
+    pd.upsert(db, "reddit:old1", platform="reddit", community="r/stocks", url="https://www.reddit.com/r/stocks/comments/old1/", title="Old Reddit thread about banks",
+              body="", posted_at=None, quotes=[pd._quote(f"a real argument about why bank margins could keep falling next year, point {i}", f"https://www.reddit.com/x{i}", None, "support") for i in range(3)])
+    hn = pd.upsert(db, "hn:keep1", platform="hn", community=None, url="https://news.ycombinator.com/item?id=9", title="HN thread about bank margins",
+                   body="", posted_at=None, quotes=[pd._quote(f"another real argument about how deposit costs squeeze bank margins, point {i}", f"https://news.ycombinator.com/x{i}", None, "context") for i in range(3)])
+    called: list[str] = []
+    monkeypatch.setattr(pd, "collect_reddit", lambda *a, **k: called.append("reddit") or {})
+    out = pd.collect(db)
+    assert called == [] and "reddit" not in out and out["reddit_withdrawn"] >= 1
+    old = db.scalars(select(PulseDiscussion).where(PulseDiscussion.editorial_key == "reddit:old1")).one()
+    assert old.status == "withdrawn" and db.get(PulseDiscussion, hn.id).status == "visible"
+    assert client.get(f"/api/pulse/discussions/{old.public_id}").status_code == 404
+    assert old.public_id not in [x["id"] for x in client.get("/api/pulse/feed", params={"kind": "public"}).json()["items"]]
 
 
 def test_threads_need_real_arguments_and_clean_titles(client, db):

@@ -1,4 +1,4 @@
-"""Stripe implementation of Nexis Pro billing: Checkout, Billing, Customer Portal and webhooks.
+"""Stripe implementation of Nexis Plus / Pro billing: Checkout, Billing, Customer Portal, plan changes and webhooks.
 
 * Checkout collects the card (and Apple Pay / Google Pay where Stripe offers them) — Nexis never sees card data.
   Payment methods come from the Stripe Dashboard's payment method settings, not from code.
@@ -150,7 +150,7 @@ def _expire_open_sessions(customer: str) -> None:
 
 
 def checkout_url(db: Session, user: User, plan: str) -> str:
-    """One Stripe Checkout Session for one of the two Nexis Pro prices — never a price the browser chose.
+    """One Stripe Checkout Session for one of the plans on sale — never a price the browser chose.
 
     Duplicate protection: if Stripe already has a live subscription for this customer (for example a webhook
     hasn't arrived yet), it's synced and the member is told they're already on Pro; and a still-open session for
@@ -165,7 +165,8 @@ def checkout_url(db: Session, user: User, plan: str) -> str:
     if live is not None:
         sync(db, live, user.id)
         db.commit()
-        raise billing.AlreadyPro("You're already on Nexis Pro.")
+        reconcile_quietly(db, user.id)
+        raise billing.AlreadyPro("You already have a paid Nexis plan. To switch between Plus and Pro, use Change plan in Settings.")
     pending_key = f"billing:checkout:{user.id}"
     pending = db.get(MarketCache, pending_key)
     if pending is not None and pending.payload.get("plan") == plan and utcnow() - pending.fetched_at < timedelta(hours=1):
@@ -206,6 +207,58 @@ def set_cancel_at_period_end(db: Session, sub: Subscription, cancel: bool) -> No
         raise billing.BillingUnavailable("We couldn't update your subscription. Please try again, or use Manage billing.") from exc
     sync(db, updated, sub.user_id)
     db.commit()
+    if cancel:
+        from app.services import investments
+
+        user = db.get(User, sub.user_id)
+        if user is not None:
+            investments.remind_before_downgrade(db, user)
+
+
+def change_plan(db: Session, sub: Subscription, plan: str) -> None:
+    """Move a live subscription between Plus and Pro (same subscription, new price).
+
+    Upgrades are charged now for the rest of the period (Stripe proration, invoiced immediately) and refused if that
+    payment fails, so nobody gets Pro for a payment that didn't go through. Downgrades take effect now with the unused
+    part credited to the next invoice. Stripe's answer is what's saved.
+    """
+    price = billing.price_ids()[plan]
+    try:
+        current = _retrieve(sub.subscription_id)
+        item = (_get(current, "items", "data") or [None])[0]
+        if item is None:
+            raise billing.BillingUnavailable("We couldn't read your subscription. Please try again.")
+        upgrade = plans.rank(plans.PRICES[plan]["tier"]) > plans.rank(plans.tier_of(sub.plan) or "pro")
+        updated = stripe.Subscription.modify(
+            sub.subscription_id, api_key=_key(), items=[{"id": _get(item, "id"), "price": price}],
+            proration_behavior="always_invoice" if upgrade else "create_prorations",
+            payment_behavior="error_if_incomplete" if upgrade else "allow_incomplete",
+            cancel_at_period_end=False, metadata={"nexis_user_id": str(sub.user_id), "nexis_plan": plan},
+            idempotency_key=f"nexis-plan-{sub.subscription_id}-{plan}-{int(utcnow().timestamp() // 60)}",
+        )  # fmt: skip
+    except stripe.CardError as exc:
+        raise billing.PaymentFailed("Your card was declined, so your plan wasn't changed. Update your payment method and try again.") from exc
+    except stripe.StripeError as exc:
+        log.warning("stripe plan change failed: %s", exc.__class__.__name__)
+        raise billing.BillingUnavailable("We couldn't change your plan. Please try again in a moment.") from exc
+    sync(db, updated, sub.user_id)
+    db.commit()
+    reconcile_quietly(db, sub.user_id)
+
+
+def reconcile_quietly(db: Session, user_id: int | None) -> None:
+    """Apply the plan the provider confirmed to the member's investments. Never fails the caller."""
+    if user_id is None:
+        return
+    from app.services import investments
+
+    try:
+        user = db.get(User, user_id)
+        if user is not None:
+            investments.reconcile(db, user)
+    except Exception as exc:
+        db.rollback()
+        log.error("investment reconcile failed for account %s: %s", user_id, exc.__class__.__name__)
 
 
 def portal_url(sub: Subscription) -> str:
@@ -223,7 +276,7 @@ def cancel_now(sub: Subscription) -> None:
     except stripe.InvalidRequestError:
         return  # already gone at Stripe
     except stripe.StripeError as exc:
-        raise billing.BillingUnavailable("We couldn't cancel your Nexis Pro subscription, so the account wasn't deleted. "
+        raise billing.BillingUnavailable("We couldn't cancel your Nexis subscription, so the account wasn't deleted. "
                                          "Cancel it in Manage subscription, then try again.") from exc  # fmt: skip
     sub.status = "canceled"
 
@@ -232,7 +285,10 @@ def cancel_now(sub: Subscription) -> None:
 
 
 def _plan_for(price_id: str | None) -> str | None:
-    return next((k for k, v in billing.price_ids().items() if v and v == price_id), None)
+    hit = next((k for k, v in billing.price_ids().items() if v and v == price_id), None)
+    if hit:
+        return hit
+    return "pro_legacy" if price_id and price_id in billing.legacy_price_ids() else None
 
 
 def sync(db: Session, obj: Any, user_id: int | None = None) -> Subscription | None:
@@ -326,8 +382,8 @@ def _cancel_duplicate(db: Session, row: Subscription, obj: Any) -> None:
         with db.begin_nested():
             db.add(UserNotification(
                 user_id=row.user_id, category="important", event_type="billing", severity="notable",
-                title="You were only charged once for Nexis Pro",
-                body="A second Nexis Pro checkout was completed for your account. We canceled it" + (" and refunded it" if refunded else "")
+                title="You were only charged once",
+                body="A second Nexis checkout was completed for your account. We canceled it" + (" and refunded it" if refunded else "")
                      + ". Your existing subscription is unchanged.",
                 link="/settings#plan", dedupe_key=f"billing-duplicate:{sid}"[:120], delivery="immediate",
             ))  # fmt: skip
@@ -336,9 +392,9 @@ def _cancel_duplicate(db: Session, row: Subscription, obj: Any) -> None:
 
 
 def billing_live() -> frozenset[str]:
-    from app.services.entitlements import PRO_STATUSES
+    from app.services.entitlements import PAID_STATUSES
 
-    return PRO_STATUSES
+    return PAID_STATUSES
 
 
 def _retrieve(sub_id: str) -> Any:
@@ -375,7 +431,7 @@ def _notify_failed(db: Session, row: Subscription, invoice_id: str) -> None:
             db.add(UserNotification(
                 user_id=row.user_id, category="important", event_type="billing", severity="high",
                 title="Your payment needs attention",
-                body="Your payment needs attention. Please update your payment method to keep Nexis Pro.",
+                body="Your payment needs attention. Please update your payment method to keep your Nexis plan.",
                 link="/settings#plan", dedupe_key=f"billing-failed:{invoice_id}"[:120], delivery="immediate",
             ))  # fmt: skip
     except IntegrityError:
@@ -427,5 +483,7 @@ def handle_webhook(db: Session, payload: bytes, signature: str | None) -> dict[s
     except IntegrityError:  # the same event processed concurrently: its state is already saved
         db.rollback()
         return {"received": True, "duplicate": True}
+    if row is not None:
+        reconcile_quietly(db, row.user_id)
     return {"received": True, "handled": etype in HANDLED}
 

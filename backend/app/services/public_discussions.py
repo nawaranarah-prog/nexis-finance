@@ -2,8 +2,11 @@
 
 Sources (each can be switched off in settings; none needs an API key):
 
-* **Reddit** — top threads of the day in finance subreddits, from Reddit's public RSS feeds, with the replies
-  under them. Reddit's terms restrict automated collection; requests are slow and stop when Reddit pushes back.
+* **Reddit** — OFF by default (``pulse_public_reddit``). Reddit's User Agreement prohibits automated collection
+  without Reddit's prior written consent, and its Data API Terms require a separate written agreement for
+  commercial use, so Nexis doesn't collect Reddit content unless that permission exists. While it's off, Reddit
+  threads collected earlier are withdrawn from Pulse (``withdraw_reddit``). Members can still share links to Reddit
+  discussions in their own posts; those open on Reddit.
 * **Hacker News** — recent, well-discussed finance and AI threads, from the public HN Algolia search API.
 * **StockTwits** — today's messages about widely followed tickers that their authors tagged bullish or bearish.
 
@@ -33,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -309,6 +312,14 @@ def upsert(
     return d
 
 
+def withdraw_reddit(db: Session) -> int:
+    """Hide previously collected Reddit threads while Reddit collection isn't permitted (reversible; pruned later)."""
+    res = db.execute(update(PulseDiscussion).where(PulseDiscussion.kind == "public", PulseDiscussion.editorial_key.like("reddit:%"),
+                                                  PulseDiscussion.status == "visible").values(status="withdrawn"))  # fmt: skip
+    db.commit()
+    return res.rowcount or 0
+
+
 def prune(db: Session) -> int:
     """Old public threads nobody on Nexis replied to are dropped; ones with Nexis replies stay."""
     cutoff = utcnow() - timedelta(days=KEEP_DAYS)
@@ -455,6 +466,8 @@ def collect(db: Session, budget: str = "small") -> dict[str, Any]:
         except (httpx.HTTPError, ET.ParseError, ValueError, KeyError) as exc:
             db.rollback()
             result[name] = {"error": exc.__class__.__name__ + ": " + str(exc)[:160]}
+    if not s.pulse_public_reddit:
+        result["reddit_withdrawn"] = withdraw_reddit(db)
     result["pruned"] = prune(db)
     _save_state(db, **{k: v for k, v in st.items() if k != "paused"}, paused=paused, last_run=utcnow().isoformat(), last_result=result)
     return result

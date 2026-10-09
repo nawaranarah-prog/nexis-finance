@@ -117,6 +117,7 @@
 .tick.down { background: var(--neg-soft); transition-duration: 0ms; }
 
 .spark { display: inline-block; flex: none; overflow: visible; }
+.strip-row .spark { flex: 0 1 auto; min-width: 0; max-width: 48%; }  /* narrow phones: the sparkline shrinks instead of widening the page */
 .spark path { fill: none; stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; animation: spark-in 700ms var(--ease-out); }
 .spark.up path { stroke: var(--pos); } .spark.down path { stroke: var(--neg); }
 .spark-wait { border-bottom: 1px dashed var(--border-strong); height: 0 !important; align-self: center; }

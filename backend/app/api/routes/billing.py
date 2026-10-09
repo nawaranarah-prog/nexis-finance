@@ -1,4 +1,4 @@
-"""Nexis Pro: plans and prices, the member's plan and usage, checkout, billing management, and Stripe webhooks."""
+"""Nexis plans (Free, Plus, Pro): plans and prices, the member's plan and usage, checkout, billing management, and Stripe webhooks."""
 
 from __future__ import annotations
 
@@ -20,7 +20,12 @@ class _Base(BaseModel):
 
 
 class CheckoutIn(_Base):
-    plan: Literal["pro_monthly", "pro_yearly"]
+    plan: Literal["plus_monthly", "pro_monthly"]
+
+
+class ChangePlanIn(_Base):
+    plan: Literal["plus_monthly", "pro_monthly"]
+    keep: list[str] | None = Field(default=None, max_length=20)
 
 
 class ConfirmIn(_Base):
@@ -43,6 +48,13 @@ def checkout(req: CheckoutIn, request: Request, user: User = Depends(auth.requir
     return billing.checkout(db, user, req.plan)
 
 
+@router.post("/billing/change-plan")
+def change_plan(req: ChangePlanIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Switch between Plus and Pro on the same subscription (prorated by Stripe)."""
+    ratelimit.hit(db, f"billing-change:{user.id}", 10)
+    return billing.change_plan(db, user, req.plan, req.keep)
+
+
 @router.post("/billing/confirm")
 def confirm(req: ConfirmIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     ratelimit.hit(db, f"billing-confirm:{user.id}", 60)
@@ -51,7 +63,7 @@ def confirm(req: ConfirmIn, user: User = Depends(auth.require_user), db: Session
 
 @router.post("/billing/cancel")
 def cancel(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Cancel at the end of the paid period. Pro continues until then; nothing is deleted."""
+    """Cancel at the end of the paid period. The plan continues until then; nothing is deleted."""
     ratelimit.hit(db, f"billing-cancel:{user.id}", 20)
     return billing.set_cancel(db, user, True)
 
