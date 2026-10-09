@@ -6,6 +6,7 @@ import { Change, fmtPrice } from "../../components/market";
 import {
   ago, assetPath, Byline, DiscussionRow, KindLabel, Reactions, ReportButton, SectionHead, Stance, STANCE_GROUPS, stamp, Topics, useParticipate,
 } from "../../components/pulse";
+import { RedditEmbed } from "../../components/RedditEmbed";
 import { toast } from "../../components/toast";
 import { ErrorState } from "../../components/ui";
 import { useT } from "../../i18n";
@@ -328,6 +329,7 @@ export default function PulseDiscussion() {
         {d.kind === "editorial" ? <Editorial d={d} /> : d.kind === "public" ? <PublicThread d={d} /> : (
           <section className="np-sec">
             <div className="np-prose"><Paras text={d.body} /></div>
+            {d.reddit && <RedditEmbed reddit={d.reddit} />}
             <Reactions type="discussion" id={d.id} counts={d.counts} mine={d.viewer.reactions} own={d.viewer.is_mine} />
           </section>
         )}

@@ -269,6 +269,10 @@ def serialize_cards(db: Session, ds: list[PulseDiscussion], viewer: User | None)
         return []
     st = _viewer_state(db, viewer, ds)
     topics = _topics_of(db, [d.id for d in ds])
+    from app.services import reddit_links
+
+    shared = {did: url for did, url in db.execute(select(PulseDiscussionSource.discussion_id, PulseDiscussionSource.url).where(
+        PulseDiscussionSource.discussion_id.in_([d.id for d in ds]), PulseDiscussionSource.publisher == reddit_links.PUBLISHER))}  # fmt: skip
     out = []
     for d in ds:
         editorial = d.kind == "editorial"
@@ -281,6 +285,7 @@ def serialize_cards(db: Session, ds: list[PulseDiscussion], viewer: User | None)
             "author": dict(NEXIS) if editorial else _public_author(d) if d.kind == "public" else dict(ANONYMOUS),
             "ai_assisted": d.ai_assisted if d.kind != "community" else False,
             "origin": _origin(d),
+            "reddit": reddit_links.parse(shared.get(d.id)),
             "counts": {"comments": d.comment_count, "participants": d.participant_count, "followers": d.follower_count,
                        "agree": d.agree_count, "disagree": d.disagree_count, "interesting": d.interesting_count},
             "debate": {"bull": len(d.bull_case or []), "bear": len(d.bear_case or []), "open": len(d.open_questions or [])} if editorial else None,
@@ -344,6 +349,7 @@ def serialize_full(db: Session, d: PulseDiscussion, viewer: User | None) -> dict
                            + (" Replies were sorted into arguments with AI assistance." if d.ai_assisted else "")),
         } if d.kind == "public" else None,
         "sources": srcs,
+        "reddit": card["reddit"],
         "updates": [{"id": u.id, "kind": u.kind, "headline": u.headline, "body": u.body, "source_ids": [s for s in u.source_ids or [] if s in valid],
                      "created_at": _iso(u.created_at)} for u in updates],
     }
@@ -722,7 +728,8 @@ def _not_repeated_comment(db: Session, user: User, discussion_id: int, body: str
             raise ValidationFailed("you already posted this reply here")
 
 
-def create(db: Session, user: User, title: str, body: str | None, symbol: str | None, stance: str | None, topics: list[str] | None) -> dict[str, Any]:
+def create(db: Session, user: User, title: str, body: str | None, symbol: str | None, stance: str | None, topics: list[str] | None,
+           reddit_url: str | None = None) -> dict[str, Any]:  # fmt: skip
     require_participant(db, user)
     ratelimit.hit(db, f"pulse-discussion:{user.id}", get_settings().pulse_discussions_per_day, timedelta(hours=24))  # anti-spam burst
     title = _text(title, 10, 160, "the title")
@@ -739,6 +746,11 @@ def create(db: Session, user: User, title: str, body: str | None, symbol: str | 
         keys = detect_topics(f"{title}\n{body}", symbols)
     flags = pulse_safety.check(f"{title}\n{body}")
     _not_repeated(db, user, title, body)
+    from app.services import reddit_links
+
+    reddit = reddit_links.parse(reddit_url) if reddit_url else reddit_links.first_in(f"{title}\n{body}")
+    if reddit_url and reddit is None:
+        raise ValidationFailed("That isn't a link to a Reddit post. Paste the full link, e.g. https://www.reddit.com/r/stocks/comments/…")
     now = utcnow()
     d = PulseDiscussion(
         public_id=new_public_id(db), kind="community", author_id=user.id, title=title, body=body, stance=stance,
@@ -751,6 +763,8 @@ def create(db: Session, user: User, title: str, body: str | None, symbol: str | 
         db.flush()
         _set_assets(db, d, symbols)
         _set_topics(db, d, keys)
+        if reddit:  # only the link is kept; Reddit's own embed shows the post to readers
+            db.add(PulseDiscussionSource(discussion_id=d.id, title=reddit["title"], url=reddit["url"], publisher=reddit_links.PUBLISHER, retrieved_at=now))
         if flags:
             _log(db, "discussion", d.id, "auto_hold" if d.status == "held" else "auto_flag", ", ".join(f["label"] for f in flags), flags=flags)
         db.commit()

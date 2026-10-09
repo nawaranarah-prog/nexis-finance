@@ -119,7 +119,9 @@ def test_reddit_is_off_by_default_and_earlier_threads_are_withdrawn(client, db, 
     out = pd.collect(db)
     assert called == [] and "reddit" not in out and out["reddit_withdrawn"] >= 1
     old = db.scalars(select(PulseDiscussion).where(PulseDiscussion.editorial_key == "reddit:old1")).one()
+    db.refresh(old)
     assert old.status == "withdrawn" and db.get(PulseDiscussion, hn.id).status == "visible"
+    assert old.quotes == [] and old.body == "" and old.title == "Reddit discussion on r/stocks"  # copied Reddit text deleted
     assert client.get(f"/api/pulse/discussions/{old.public_id}").status_code == 404
     assert old.public_id not in [x["id"] for x in client.get("/api/pulse/feed", params={"kind": "public"}).json()["items"]]
 

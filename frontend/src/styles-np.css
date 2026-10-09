@@ -491,3 +491,12 @@
   .help-dots i { animation: none; opacity: 0.6; }
 }
 @media print { .help-launcher, .help-panel { display: none; } }
+
+/* ---------------------------------------------------------------- Reddit posts shared by members (Reddit's own embed) */
+.np-reddit { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.np-reddit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.np-reddit-head .np-orig { margin-inline-start: auto; }
+.np-reddit-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: #c53a00; color: #fff; font-size: 11px; font-weight: 650; letter-spacing: 0.01em; white-space: nowrap; }
+.np-reddit-gate { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; }
+.np-reddit-embed { margin-top: 10px; max-width: 100%; overflow: hidden; }
+.np-reddit-embed iframe { max-width: 100%; border: 0; }

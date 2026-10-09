@@ -112,6 +112,7 @@ const PRIVACY: Doc = {
         <li><b>Moderators</b> see reported or flagged content and the reasons, but not who wrote or reported it. Actions affecting an account (for example pausing posting) are applied through the content without revealing identity to the moderator.</li>
         <li><b>Only you</b> see your investments, watchlist, notes, notifications, saved and followed discussions, and the list of your own Pulse posts.</li>
         <li><b>Service providers</b> that host, store or process data for us (for example cloud hosting, databases, and AI model providers for editorial and summarisation features) act under contract. We send AI providers public market information and public discussion text, not your account details or private investments.</li>
+        <li><b>Reddit</b>, only if you choose "Show the Reddit post here" on a discussion that links to Reddit: your browser then loads Reddit's official embed from reddit.com, so Reddit receives your IP address and browser information and may set cookies under its own privacy policy. Nothing from Reddit loads until you choose, and Nexis does not send Reddit your account information.</li>
         <li><b>Authorities</b>, where required by law or valid legal process, as described in the Terms.</li>
       </ul>
       <p>We do not sell your personal information.</p>

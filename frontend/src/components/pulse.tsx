@@ -7,6 +7,7 @@ import { useT } from "../i18n";
 import { api, ApiError, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
 import { handlePlanError } from "./pro";
+import { RedditEmbed } from "./RedditEmbed";
 
 // ------------------------------------------------------------------ time
 
@@ -199,6 +200,7 @@ export function DiscussionRow({ d, showAsset = true }: { d: AnyObj; showAsset?: 
           ? <span>{c.comments ? `${plural(c.comments, "reply", "replies")} on Nexis` : `Discuss on Nexis`}</span>
           : <span>{c.comments ? plural(c.comments, "reply", "replies") : "No replies yet"}</span>}
         {d.kind === "public" && d.origin?.url && <a href={d.origin.url} target="_blank" rel="noreferrer noopener nofollow" className="np-orig">Original on {PLATFORM_NAME[d.origin.platform] ?? "source"} ↗</a>}
+        {d.reddit && <RedditEmbed reddit={d.reddit} compact />}
         {c.comments > 0 && c.participants > 1 && <span>{plural(c.participants, "person", "people")}</span>}
         {c.agree + c.disagree > 0 && <span>{c.agree} agree · {c.disagree} disagree</span>}
         <Topics topics={(d.topics ?? []).slice(0, 2)} />
@@ -296,6 +298,7 @@ export function Composer({ symbol, topic, onClose }: { symbol?: string; topic?: 
   const [asset, setAsset] = useState<AnyObj | null>(symbol ? { symbol } : null);
   const [stance, setStance] = useState<string>("question");
   const [topics, setTopics] = useState<string[]>(topic ? [topic] : []);
+  const [reddit, setReddit] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const primary: AnyObj[] = (meta.data?.topics ?? []).filter((t: AnyObj) => t.primary);
@@ -304,7 +307,7 @@ export function Composer({ symbol, topic, onClose }: { symbol?: string; topic?: 
     e.preventDefault();
     setBusy(true); setErr(null);
     try {
-      const d = await participate(() => api.post<AnyObj>("/pulse/discussions", { title, body, symbol: asset?.symbol ?? null, stance, topics }));
+      const d = await participate(() => api.post<AnyObj>("/pulse/discussions", { title, body, symbol: asset?.symbol ?? null, stance, topics, reddit_url: reddit.trim() || null }));
       if (d) {
         qc.invalidateQueries({ queryKey: ["pulse-feed"] });
         if (d.viewer?.pending_review) toast("info", "Waiting for review", "Your post matched one of our safety checks, so a moderator will look at it before it's public.");
@@ -341,6 +344,10 @@ export function Composer({ symbol, topic, onClose }: { symbol?: string; topic?: 
           <button key={t.key} type="button" className={`np-topic ${topics.includes(t.key) ? "on" : ""}`} aria-pressed={topics.includes(t.key)} onClick={() => toggle(t.key)}>{t.label}</button>
         ))}</div>
       </div>
+      <label className="np-field"><span className="np-label">Reddit discussion <span className="muted">· optional link to a Reddit post you want to discuss</span></span>
+        <input className="input" type="url" inputMode="url" maxLength={600} placeholder="https://www.reddit.com/r/stocks/comments/…" value={reddit}
+          onChange={(e) => setReddit(e.target.value)} />
+      </label>
       {err && <div className="banner error small">{err}</div>}
       <div className="np-compose-foot">
         <span className="xs muted">Your name and account are never shown. Follow the <Link to="/community-guidelines" target="_blank">Community Guidelines</Link> — no promises of returns, inside information or coordinated trading.</span>

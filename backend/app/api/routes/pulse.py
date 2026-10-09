@@ -34,6 +34,7 @@ class DiscussionIn(_Base):
     symbol: str | None = Field(default=None, max_length=32)
     stance: Literal["bullish", "bearish", "neutral", "question"] | None = None
     topics: list[str] = Field(default_factory=list, max_length=5)
+    reddit_url: str | None = Field(default=None, max_length=600)  # a Reddit post a member wants to discuss (link only)
 
 
 class CommentIn(_Base):
@@ -132,7 +133,7 @@ def related(pid: str, viewer: User | None = Depends(auth.optional_user), db: Ses
 
 @router.post("/pulse/discussions", status_code=201)
 def create(req: DiscussionIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
-    return pulse.create(db, user, req.title, req.body, req.symbol, req.stance, req.topics)
+    return pulse.create(db, user, req.title, req.body, req.symbol, req.stance, req.topics, req.reddit_url)
 
 
 @router.delete("/pulse/discussions/{pid}", status_code=204)

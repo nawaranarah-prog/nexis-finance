@@ -36,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -313,11 +313,20 @@ def upsert(
 
 
 def withdraw_reddit(db: Session) -> int:
-    """Hide previously collected Reddit threads while Reddit collection isn't permitted (reversible; pruned later)."""
-    res = db.execute(update(PulseDiscussion).where(PulseDiscussion.kind == "public", PulseDiscussion.editorial_key.like("reddit:%"),
-                                                  PulseDiscussion.status == "visible").values(status="withdrawn"))  # fmt: skip
+    """Hide previously collected Reddit threads and delete the Reddit text copied into them (quotes, body, title).
+
+    The rows stay — with a neutral title and the link to the original — only so replies Nexis members wrote under them
+    aren't orphaned; nothing written on Reddit is kept. Old threads are pruned as usual."""
+    rows = list(db.scalars(select(PulseDiscussion).where(PulseDiscussion.kind == "public", PulseDiscussion.editorial_key.like("reddit:%"))))
+    n = 0
+    for d in rows:
+        if d.status == "visible" or d.quotes or d.body or d.debate:
+            community = (d.origin or {}).get("community") or "Reddit"
+            d.status, d.quotes, d.body, d.debate = "withdrawn", [], "", None
+            d.title = f"Reddit discussion on {community}"[:200]
+            n += 1
     db.commit()
-    return res.rowcount or 0
+    return n
 
 
 def prune(db: Session) -> int:
