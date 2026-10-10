@@ -217,7 +217,7 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
               {kind === "transactions" && <Field label="Date format"><label className="check"><input type="checkbox" checked={opts.dayfirst} onChange={(e) => setOpts({ ...opts, dayfirst: e.target.checked })} /> Day first (DD/MM/YYYY)</label></Field>}
             </div>
             <div className="field-label">Column mapping (confidence from automatic detection)</div>
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
               <table className="dt">
                 <thead><tr><th>Nexis field</th><th>Source column</th><th className="r">Confidence</th><th>Sample value</th></tr></thead>
                 <tbody>
@@ -238,7 +238,7 @@ function ImportWizard({ onDone }: { onDone: () => void }) {
               </table>
             </div>
             <details><summary className="small text2" style={{ cursor: "pointer" }}>Preview first rows</summary>
-              <div className="table-wrap" style={{ maxHeight: 240 }}><table className="dt"><thead><tr>{prev.columns.map((c: string) => <th key={c}>{c}</th>)}</tr></thead>
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table" style={{ maxHeight: 240 }}><table className="dt"><thead><tr>{prev.columns.map((c: string) => <th key={c}>{c}</th>)}</tr></thead>
                 <tbody>{prev.sample_rows.map((r: AnyObj, i: number) => <tr key={i}>{prev.columns.map((c: string) => <td key={c}>{String(r[c] ?? "")}</td>)}</tr>)}</tbody></table></div>
             </details>
             <div className="row">

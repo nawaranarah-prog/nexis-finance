@@ -14,6 +14,9 @@ type View = { kind: "home" } | { kind: "article"; id: string; from: "home" | "ch
 type Failure = { message: string; question: string; retry: boolean; code?: string };
 
 const MAX = 800;
+const OPEN_EVENT = "nexis:help-open";
+/** Opens the Help panel from anywhere (e.g. a page header button). */
+export const openHelp = () => window.dispatchEvent(new Event(OPEN_EVENT));
 const TIMEOUT_MS = 30_000;
 const MOBILE = "(max-width: 640px)";
 
@@ -78,7 +81,9 @@ export default function HelpAgent() {
   const context = contextFor(loc.pathname, loc.hash);
   const suggestions = useMemo(() => suggestionsFor(context, list), [context, list]);
   const results = useMemo(() => (query.trim() ? searchArticles(list, query, context) : []), [list, query, context]);
-  const raised = loc.pathname.startsWith("/advisor") || loc.pathname.startsWith("/assistant");  // keep clear of the chat composer
+  // AI chat pages have their own composer in the bottom-right corner: no floating launcher there at any size; the
+  // page header's Help button opens the panel instead (openHelp()).
+  const chatPage = loc.pathname.startsWith("/advisor") || loc.pathname.startsWith("/assistant");
 
   const close = useCallback(() => {
     abort.current?.abort();
@@ -131,6 +136,12 @@ export default function HelpAgent() {
 
   useEffect(() => () => abort.current?.abort(), []);
 
+  useEffect(() => {
+    const h = () => setOpen(true);
+    window.addEventListener(OPEN_EVENT, h);
+    return () => window.removeEventListener(OPEN_EVENT, h);
+  }, []);
+
   const send = async (raw: string, isRetry = false) => {
     const question = raw.trim();
     if (!question || pending || question.length > MAX) return;
@@ -181,8 +192,9 @@ export default function HelpAgent() {
   };
 
   if (!open) {
+    if (chatPage) return null;
     return (
-      <button ref={launcher} type="button" className={`help-launcher ${raised ? "raised" : ""}`} aria-label="Help and support" title="Help and support"
+      <button ref={launcher} type="button" className="help-launcher" aria-label="Help and support" title="Help and support"
         aria-haspopup="dialog" aria-expanded={false} onClick={() => setOpen(true)}>
         <Icon d={HELP_ICON} size={22} />
       </button>
@@ -202,7 +214,7 @@ export default function HelpAgent() {
   );
 
   return (
-    <div ref={panel} className={`help-panel ${raised ? "raised" : ""}`} role="dialog" aria-modal={mobile} aria-labelledby={titleId}>
+    <div ref={panel} className={`help-panel ${chatPage ? "raised" : ""}`} role="dialog" aria-modal={mobile} aria-labelledby={titleId}>
       <header className="help-head">
         {view.kind !== "home" && (
           <button type="button" className="help-icon-btn" aria-label="Back" onClick={() => setView(view.kind === "article" && view.from === "chat" ? { kind: "chat" } : { kind: "home" })}>

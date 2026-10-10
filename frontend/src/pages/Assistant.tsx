@@ -35,7 +35,8 @@ export default function Assistant() {
 
   return (
     <>
-      <PageHead title="Research Assistant" desc="Ask about your portfolios, risk, anomalies, backtests and regimes. Every answer is assembled from stored metrics and shows its evidence; anything it cannot verify, it says so." />
+      <PageHead title="Research Assistant" desc="Ask about your portfolios, risk, anomalies, backtests and regimes. Every answer is assembled from stored metrics and shows its evidence; anything it cannot verify, it says so."
+        actions={<button type="button" className="btn ghost" onClick={() => window.dispatchEvent(new Event("nexis:help-open"))}>Help</button>} />
       <div className="banner neutral small" style={{ marginBottom: 12 }}>
         <span aria-hidden>ⓘ</span>
         <span>Deterministic retrieval over the application's own data — no generative model writes these numbers. Answers are descriptive, not investment advice.</span>

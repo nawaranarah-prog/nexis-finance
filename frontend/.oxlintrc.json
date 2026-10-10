@@ -1,7 +1,60 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "react-hooks", "jsx-a11y"],
-  "categories": { "correctness": "error", "suspicious": "warn" },
-  "rules": { "react/react-in-jsx-scope": "off" },
-  "ignorePatterns": ["dist", "node_modules", "test-results", "playwright-report"]
+  "plugins": [
+    "typescript",
+    "react",
+    "react-hooks",
+    "jsx-a11y"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "jsx-a11y/no-noninteractive-tabindex": [
+      "error",
+      {
+        "roles": [
+          "tabpanel",
+          "region"
+        ],
+        "tags": []
+      }
+    ],
+    "jsx-a11y/control-has-associated-label": [
+      "error",
+      {
+        "ignoreElements": [
+          "audio",
+          "canvas",
+          "embed",
+          "input",
+          "textarea",
+          "tr",
+          "td",
+          "video"
+        ],
+        "ignoreRoles": [
+          "grid",
+          "listbox",
+          "menu",
+          "menubar",
+          "radiogroup",
+          "row",
+          "tablist",
+          "toolbar",
+          "tree",
+          "treegrid"
+        ]
+      }
+    ]
+  },
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "test-results",
+    "playwright-report"
+  ]
 }

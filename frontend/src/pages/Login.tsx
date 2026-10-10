@@ -118,20 +118,20 @@ export default function Login() {
           <form onSubmit={submit} className="stack" style={{ gap: 10 }}>
             {method === "email" ? (
               <label className="fld"><span>{mode === "signin" ? t("Email or username") : t("Email")}</span>
-                <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoFocus /></label>
+                <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
             ) : (
               <label className="fld"><span>{t("Mobile number")}</span>
                 <div className="phone-field" dir="ltr">
                   <span className="phone-cc" aria-hidden>🇦🇪 +971</span>
                   <input className="input" type="tel" inputMode="tel" autoComplete="tel" required placeholder="50 123 4567" value={f.phone} disabled={otp && codeSent}
-                    onChange={(e) => setF({ ...f, phone: e.target.value })} autoFocus />
+                    onChange={(e) => setF({ ...f, phone: e.target.value })} />
                 </div>
                 <span className="xs muted">UAE numbers can be typed as 050 123 4567. For other countries start with + and the country code.</span>
               </label>
             )}
             {otp ? (codeSent && (
               <label className="fld"><span>Code from the SMS</span>
-                <input className="input" inputMode="numeric" autoComplete="one-time-code" required maxLength={10} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} autoFocus /></label>
+                <input className="input" inputMode="numeric" autoComplete="one-time-code" required maxLength={10} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} /></label>
             )) : (
               <label className="fld"><span>{t("Password")}</span>
                 <input className="input" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} required minLength={mode === "signup" ? 8 : 1} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
@@ -155,7 +155,7 @@ export default function Login() {
                 : <>{t("Already have an account?")} <button className="link-btn" onClick={() => { setMode("signin"); setErr(null); }}>{t("Sign in")}</button></>}
             </div>
           )}
-          <div className="xs muted" style={{ marginTop: 18, textAlign: "center" }}><Link to="/">{t("Continue without an account →")}</Link></div>
+          <div className="xs muted" style={{ marginTop: 18, textAlign: "center" }}><Link className="touch-link" to="/">{t("Continue without an account →")}</Link></div>
         </div>
       </main>
     </div>

@@ -43,6 +43,9 @@ const PRESETS: { group: string; items: { label: string; s: string[] }[] }[] = [
 const p = (v: number | null | undefined, d = 1, signed = true) => (v === null || v === undefined ? "—" : `${signed && v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
 const n2 = (v: number | null | undefined) => (v === null || v === undefined ? "—" : v.toFixed(2));
 
+// Phones: correlation values are read by tapping a cell (Plotly would shrink them to unreadable sizes).
+const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 480px)").matches;
+
 export default function Compare() {
   const [params, setParams] = useSearchParams();
   const [symbols, setSymbols] = useState<string[]>(() => (params.get("s") ?? "FAB.AD,EMIRATESNBD.AE,ADCB.AD,ADIB.AD,DIB.AE").split(",").filter(Boolean).slice(0, 8));
@@ -135,8 +138,8 @@ export default function Compare() {
             </Card>
           )}
           <Card title="Performance & risk" flush>
-            <div className="table-wrap"><table className="dt">
-              <thead><tr><th></th>{r.symbols.map((s: string) => <th key={s} className="r">{s}</th>)}</tr></thead>
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table"><table className="dt">
+              <thead><tr><th><span className="sr-only">Measure</span></th>{r.symbols.map((s: string) => <th key={s} className="r">{s}</th>)}</tr></thead>
               <tbody>
                 {([["Total return", "total_return", p], ["Annualised return", "annualized_return", p], ["Annualised volatility", "annualized_volatility", (v: number) => p(v, 1, false)],
                   ["Sharpe ratio", "sharpe_ratio", n2], ["Sortino ratio", "sortino_ratio", n2], ["Max drawdown", "max_drawdown", p], ["Best bar", "best_period", p], ["Worst bar", "worst_period", p],
@@ -152,7 +155,7 @@ export default function Compare() {
           </Card>
           <div className="grid g2">
             <Card title={`Returns by ${r.bucket}`} flush>
-              <div className="table-wrap" style={{ maxHeight: 420 }}><table className="dt heat">
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table" style={{ maxHeight: 420 }}><table className="dt heat">
                 <thead><tr><th>Period</th>{r.symbols.map((s: string) => <th key={s} className="r">{s}</th>)}</tr></thead>
                 <tbody>{[...r.periodic_returns].reverse().map((row: AnyObj) => (
                   <tr key={row.period}><td className="nowrap">{row.period}</td>{r.symbols.map((s: string) => {
@@ -165,13 +168,13 @@ export default function Compare() {
             </Card>
             <Card title="Correlation of returns">
               <Plot height={320} data={[{ type: "heatmap", x: r.symbols, y: r.symbols, z: r.symbols.map((a: string) => r.symbols.map((b: string) => r.correlation[a][b])),
-                zmin: -1, zmax: 1, colorscale: [[0, "#dc2626"], [0.5, "#f5f5f4"], [1, "#2563eb"]], texttemplate: "%{z:.2f}", hovertemplate: "%{y} / %{x}: %{z:.2f}<extra></extra>" } as AnyObj]}
+                zmin: -1, zmax: 1, colorscale: [[0, "#dc2626"], [0.5, "#f5f5f4"], [1, "#2563eb"]], texttemplate: phone ? "" : "%{z:.2f}", hovertemplate: "%{y} / %{x}: %{z:.2f}<extra></extra>" } as AnyObj]}
                 layout={{ margin: { l: 90, r: 10, t: 10, b: 80 }, yaxis: { autorange: "reversed" } as AnyObj }} />
             </Card>
           </div>
           <Card title="Fundamentals & analyst consensus" flush>
-            <div className="table-wrap"><table className="dt">
-              <thead><tr><th></th>{r.symbols.map((s: string) => <th key={s} className="r">{s}</th>)}</tr></thead>
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table"><table className="dt">
+              <thead><tr><th><span className="sr-only">Measure</span></th>{r.symbols.map((s: string) => <th key={s} className="r">{s}</th>)}</tr></thead>
               <tbody>
                 {([["Name", "name"], ["Price", "price"], ["Market cap", "market_cap"], ["P/E (ttm)", "pe_trailing"], ["P/E (fwd)", "pe_forward"], ["P/B", "price_to_book"],
                   ["EV/EBITDA", "ev_to_ebitda"], ["Dividend yield", "dividend_yield"], ["Beta", "beta"], ["52-week position", "week52_position"],

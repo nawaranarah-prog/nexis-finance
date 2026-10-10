@@ -1,5 +1,6 @@
+import { fs } from "../components/charts";
 import { handlePlanError } from "../components/pro";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Plot from "../components/Plot";
@@ -32,7 +33,8 @@ export default function Valuation() {
   const [peers, setPeers] = useState<string[] | null>(null);
   const [wacc, setWacc] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setOverrides({}); setDraft({}); setPeers(null); setWacc(""); }, [sym]);
+  const [forSym, setForSym] = useState(sym);
+  if (forSym !== sym) { setForSym(sym); setOverrides({}); setDraft({}); setPeers(null); setWacc(""); }  // a new company starts clean
   const body = { overrides: { ...overrides, ...(wacc ? { wacc: Number(wacc) / 100 } : {}) }, peers };
   const q = useQuery({ queryKey: ["valuation", sym, body], queryFn: () => api.post<AnyObj>(`/valuation/${encodeURIComponent(sym!)}`, body), enabled: !!sym, retry: false });
 
@@ -89,7 +91,7 @@ export default function Valuation() {
                 marker: { color: "#111827", size: 9, symbol: "line-ns-open", line: { width: 2 } }, name: "mid", hovertemplate: "mid %{x:.2f}<extra></extra>" } as AnyObj,
             ]} layout={{ showlegend: false, margin: { l: 210, r: 20, t: 10, b: 36 }, yaxis: { autorange: "reversed" } as AnyObj,
               shapes: [{ type: "line", x0: v.price, x1: v.price, yref: "paper", y0: 0, y1: 1, line: { color: "#dc2626", width: 2, dash: "dot" } }],
-              annotations: [{ x: v.price, yref: "paper", y: 1.02, text: `price ${v.price.toFixed(2)}`, showarrow: false, font: { color: "#dc2626", size: 11 } }] } as AnyObj} />
+              annotations: [{ x: v.price, yref: "paper", y: 1.02, text: `price ${v.price.toFixed(2)}`, showarrow: false, font: { color: "#dc2626", size: fs(11) } }] } as AnyObj} />
           </Card>
           <div className="grid g2">
             <Card title="Assumptions" sub="edit and recalculate" actions={<><button className="btn sm" onClick={() => { setDraft({}); setOverrides({}); setWacc(""); }}>Reset</button><button className="btn sm primary" onClick={apply}>Recalculate</button></>}>
@@ -110,7 +112,7 @@ export default function Valuation() {
               </div>
             </Card>
             <Card title="DCF projection" sub={`${v.financial_currency}${v.fx_to_trading_currency !== 1 ? ` → ${v.currency} at ${v.fx_to_trading_currency.toFixed(4)}` : ""}`} flush>
-              <table className="dt">
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="DCF projection"><table className="dt">
                 <thead><tr><th>Year</th><th className="r">Growth</th><th className="r">FCF</th><th className="r">DF</th><th className="r">PV</th></tr></thead>
                 <tbody>
                   {v.dcf.projection.map((r: AnyObj) => <tr key={r.year}><td>{r.year}</td><td className="r num">{p(r.growth)}</td><td className="r num">{fmtBig(r.fcf)}</td><td className="r num">{r.discount_factor.toFixed(3)}</td><td className="r num">{fmtBig(r.pv)}</td></tr>)}
@@ -119,12 +121,12 @@ export default function Valuation() {
                   <tr><td>− debt + cash</td><td colSpan={3}></td><td className="r num">{fmtBig(v.assumptions.cash - v.assumptions.debt)}</td></tr>
                   <tr className="strong"><td>Equity value</td><td colSpan={3}></td><td className="r num">{fmtBig(v.dcf.equity_value)}</td></tr>
                 </tbody>
-              </table>
+              </table></div>
             </Card>
           </div>
           <div className="grid g2">
             <Card title="Sensitivity" sub="value per share · rows WACC, columns terminal growth" flush>
-              <table className="dt heat">
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Sensitivity"><table className="dt heat">
                 <thead><tr><th>WACC \ g</th>{v.sensitivity.terminal_growth.map((g: number) => <th key={g} className="r">{p(g)}</th>)}</tr></thead>
                 <tbody>{v.sensitivity.wacc.map((w: number, i: number) => (
                   <tr key={w}><td>{p(w)}</td>{v.sensitivity.value_per_share[i].map((x: number | null, j: number) => {
@@ -132,22 +134,22 @@ export default function Valuation() {
                     return <td key={j} className="r num" style={{ background: x === null ? undefined : up >= 0 ? `rgba(22,163,74,${0.06 + Math.min(up, 1) * 0.3})` : `rgba(220,38,38,${0.06 + Math.min(-up, 1) * 0.3})`, fontWeight: i === 2 && j === 2 ? 700 : undefined }}>{x === null ? "—" : x.toFixed(2)}</td>;
                   })}</tr>
                 ))}</tbody>
-              </table>
+              </table></div>
             </Card>
             <Card title="Trading comparables" sub={`${v.comparables.source} — edit below`} flush>
-              <div className="table-wrap"><table className="dt">
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Trading comparables"><table className="dt">
                 <thead><tr><th>Peer</th><th className="r">Mkt cap</th><th className="r">P/E</th><th className="r">EV/EBITDA</th><th className="r">P/B</th><th className="r">EBITDA mgn</th></tr></thead>
                 <tbody>{v.comparables.peers.map((c: AnyObj) => (
                   <tr key={c.symbol}><td><Link className="mono" to={`/markets/${encodeURIComponent(c.symbol)}`}>{c.symbol}</Link></td><td className="r num">{fmtBig(c.market_cap)}</td>
                     <td className="r num">{c.pe?.toFixed(1) ?? "—"}</td><td className="r num">{c.ev_ebitda?.toFixed(1) ?? "—"}</td><td className="r num">{c.pb?.toFixed(2) ?? "—"}</td><td className="r num">{p(c.ebitda_margin)}</td></tr>
                 ))}</tbody>
               </table></div>
-              <table className="dt" style={{ marginTop: 8 }}>
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Implied prices"><table className="dt" style={{ marginTop: 8 }}>
                 <thead><tr><th>Multiple</th><th className="r">Peer median</th><th className="r">{v.symbol}</th><th className="r">Implied price</th></tr></thead>
                 <tbody>{Object.values(v.comparables.implied).map((c) => { const x = c as AnyObj; return (
                   <tr key={x.label}><td>{x.label}</td><td className="r num">{x.peer_median.toFixed(2)}</td><td className="r num">{x.target_multiple?.toFixed(2) ?? "—"}</td><td className="r num">{x.implied_price.toFixed(2)}</td></tr>
                 ); })}</tbody>
-              </table>
+              </table></div>
               <div className="card-body">
                 <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                   {(peers ?? v.comparables.peers.map((c: AnyObj) => c.symbol)).map((s: string) => (

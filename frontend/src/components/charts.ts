@@ -44,20 +44,23 @@ export function sectorColor(theme: "light" | "dark", sector: string | null | und
   return i >= 0 ? SERIES[theme][i] : INK[theme].neutral;
 }
 
+/** Chart text follows the same rule as page text: never under 14px on phones. */
+export const fs = (n: number) => (typeof window !== "undefined" && window.matchMedia("(max-width: 480px)").matches ? Math.max(n, 14) : n);
+
 export function baseLayout(theme: "light" | "dark", overrides: Partial<Layout> = {}): Partial<Layout> {
   const c = INK[theme];
   const axis = {
-    gridcolor: c.grid, linecolor: c.axis, zerolinecolor: c.axis, tickfont: { color: c.muted, size: 10.5 },
-    title: { font: { color: c.text2, size: 11 } }, automargin: true,
+    gridcolor: c.grid, linecolor: c.axis, zerolinecolor: c.axis, tickfont: { color: c.muted, size: fs(10.5) },
+    title: { font: { color: c.text2, size: fs(11) } }, automargin: true,
   };
   return {
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
-    font: { family: 'system-ui, -apple-system, "Segoe UI", sans-serif', size: 11.5, color: c.text2 },
+    font: { family: 'system-ui, -apple-system, "Segoe UI", sans-serif', size: fs(11.5), color: c.text2 },
     margin: { l: 52, r: 16, t: 12, b: 36 },
     hovermode: "x unified",
-    hoverlabel: { bgcolor: c.surface, bordercolor: c.axis, font: { color: c.text, size: 11.5 } },
-    legend: { orientation: "h", x: 0, y: 1.08, font: { size: 11, color: c.text2 }, bgcolor: "rgba(0,0,0,0)" },
+    hoverlabel: { bgcolor: c.surface, bordercolor: c.axis, font: { color: c.text, size: fs(11.5) } },
+    legend: { orientation: "h", x: 0, y: 1.08, font: { size: fs(11), color: c.text2 }, bgcolor: "rgba(0,0,0,0)" },
     xaxis: { ...axis },
     yaxis: { ...axis },
     colorway: SERIES[theme],
@@ -72,14 +75,14 @@ export function dateAxis(theme: "light" | "dark", withSelector = true): Partial<
     type: "date",
     gridcolor: c.grid,
     linecolor: c.axis,
-    tickfont: { color: c.muted, size: 10.5 },
+    tickfont: { color: c.muted, size: fs(10.5) },
     automargin: true,
     ...(withSelector
       ? {
           rangeselector: {
             x: 1, xanchor: "right", y: 1.02, yanchor: "bottom",
             bgcolor: theme === "dark" ? "#222220" : "#f3f3f0", activecolor: theme === "dark" ? "#2c2c2a" : "#dfe3ea",
-            bordercolor: c.axis, borderwidth: 1, font: { size: 10.5, color: c.text2 },
+            bordercolor: c.axis, borderwidth: 1, font: { size: fs(10.5), color: c.text2 },
             buttons: [
               { count: 1, label: "1M", step: "month", stepmode: "backward" },
               { count: 6, label: "6M", step: "month", stepmode: "backward" },

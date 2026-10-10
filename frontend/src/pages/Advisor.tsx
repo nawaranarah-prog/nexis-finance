@@ -158,7 +158,10 @@ export default function Advisor() {
   return (
     <>
       <PageHead title={t("AI Financial Advisor")} desc="Talk to it like you would to a private banker: it researches live prices, fundamentals, analyst ratings and today's news before answering, then gives you a clear view and the numbers behind it."
-        actions={turns.length > 0 && <button className="btn" onClick={() => { setTurns([]); pending.current = ""; }}>{t("New chat")}</button>} />
+        actions={<>
+          <button type="button" className="btn ghost" onClick={() => window.dispatchEvent(new Event("nexis:help-open"))}>{t("Help")}</button>
+          {turns.length > 0 && <button className="btn" onClick={() => { setTurns([]); pending.current = ""; }}>{t("New chat")}</button>}
+        </>} />
       {s && !s.available && (
         <div className="banner neutral small" style={{ marginBottom: 12 }}>
           <span aria-hidden>ⓘ</span>

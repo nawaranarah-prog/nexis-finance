@@ -47,7 +47,8 @@ export async function measure(page: Page): Promise<LayoutReport> {
       if (r.right > W + 1 && !scroller(el) && !fixed(el) && !(el instanceof SVGElement && el.closest("svg") !== el)) out.pastRightEdge.push(`${label(el)} right=${Math.round(r.right)}`);
       const s = getComputedStyle(el);
       const ownText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim());
-      if (ownText && (s.overflowX === "hidden" || s.overflowX === "clip") && s.textOverflow !== "ellipsis" && el.scrollWidth > el.clientWidth + 1)
+      const srOnly = r.width <= 1 && r.height <= 1;  // visually hidden on purpose (screen-reader text), not clipped content
+      if (ownText && !srOnly && (s.overflowX === "hidden" || s.overflowX === "clip") && s.textOverflow !== "ellipsis" && el.scrollWidth > el.clientWidth + 1)
         out.clippedText.push(`${label(el)} ${el.scrollWidth}>${el.clientWidth}`);
       if (W <= 480 && ownText && onScreen(el) && !["script", "style", "code", "kbd", "sup", "sub"].includes(el.tagName.toLowerCase()) && parseFloat(s.fontSize) < 14)
         out.smallText.push(`${label(el)} ${s.fontSize}`);
@@ -55,9 +56,14 @@ export async function measure(page: Page): Promise<LayoutReport> {
     if (W <= 768) {
       const targets = all.filter(onScreen).filter((el) => el.matches("a[href], button, input:not([type=hidden]), select, textarea, [role=button], [role=tab], [role=radio], summary"));
       for (const el of targets) {
-        const inline = el.tagName === "A" && el.parentElement && [...el.parentElement.childNodes].some((n) => n !== el && n.nodeType === 3 && n.textContent!.trim().length > 2);
-        if (inline) continue;  // links inside a sentence are exempt (WCAG 2.5.8 inline exception)
-        const r = el.getBoundingClientRect();
+        // Links inside a sentence are exempt (WCAG 2.5.5/2.5.8 "inline" exception): an inline link whose parent holds
+        // more text than the link itself (the sentence around it), e.g. "$NVDA" or "#ai" in a post, "sign in" in a line.
+        const parentText = (el.parentElement?.textContent ?? "").trim().length;
+        const inline = el.tagName === "A" && getComputedStyle(el).display === "inline" && parentText > (el.textContent ?? "").trim().length + 8;
+        if (inline) continue;
+        // A checkbox/radio inside a <label> is tapped through its label: measure the label (the real target).
+        const box = el.matches("input[type=checkbox], input[type=radio]") && el.closest("label") ? el.closest("label")! : el;
+        const r = box.getBoundingClientRect();
         if (r.width < 44 || r.height < 44) out.smallTargets.push(`${label(el)} ${Math.round(r.width)}×${Math.round(r.height)}`);
       }
     }

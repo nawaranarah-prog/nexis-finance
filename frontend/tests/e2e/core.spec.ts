@@ -90,14 +90,17 @@ test("sign up, sign out and sign in again", async ({ page }) => {
   const mail = `e2e${Date.now()}${Math.floor(Math.random() * 1e4)}@example.com`;
   await page.setExtraHTTPHeaders({ "x-forwarded-for": `198.18.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` });
   await page.goto("/login?mode=signup&next=/my-nexis");
+  await page.waitForLoadState("networkidle");  // the login page re-renders once the session check returns
   await page.fill("input[type=email]", mail);
   await page.fill("input[type=password]", "e2e-pass-12345");
   await page.check(".login-terms input");
+  await expect(page.locator(".login-terms input")).toBeChecked();
   await page.click("button.login-submit");
   await page.waitForURL((u) => u.pathname === "/my-nexis");  // the path, not the ?next= in the login URL
   expect((await (await page.request.get("/api/auth/me")).json()).user.email).toBe(mail);
   await page.request.post("/api/auth/logout");
   await page.goto("/login?next=/my-nexis");
+  await page.waitForLoadState("networkidle");
   await page.fill("input[autocomplete=username]", mail);
   await page.fill("input[type=password]", "e2e-pass-12345");
   await page.click("button.login-submit");
