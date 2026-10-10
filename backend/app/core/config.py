@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     external_data_enabled: bool = True
     # SEC fair-access policy requires a descriptive User-Agent with contact details.
     sec_user_agent: str = "NexisFinance research contact@example.com"
+    # Wikidata asks for a descriptive User-Agent with a way to reach the operator (set a real contact in production).
+    wikidata_user_agent: str = "NexisFinance/1.0 (https://nexis-finance-five.vercel.app) httpx"
 
     # Fernet key (urlsafe base64, 32 bytes) used to encrypt connection credentials at rest.
     # Development falls back to a generated key in backend/.nexis_secret (git-ignored).

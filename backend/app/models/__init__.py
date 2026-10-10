@@ -47,6 +47,15 @@ from app.models.intelligence import (
     UserHolding,
     UserNotification,
 )
+from app.models.knowledge import (
+    EvidenceRecord,
+    FinEntity,
+    FinEntityAlias,
+    FinRelationship,
+    RelationshipEvidence,
+    ResearchItem,
+    ResearchRun,
+)
 from app.models.market import Asset, DataQualityIssue, DataQualityRun, Dataset, IngestionRun, MarketData
 from app.models.ops import Job, Notification, Report
 from app.models.portfolio import Portfolio, PortfolioPosition, PortfolioReturn, RiskMetric, StressTest
@@ -94,9 +103,13 @@ __all__ = [
     "DigestRecord",
     "EconomicObservation",
     "EconomicSeries",
+    "EvidenceRecord",
     "Experiment",
     "ExperimentMetric",
     "FeedPreference",
+    "FinEntity",
+    "FinEntityAlias",
+    "FinRelationship",
     "Follow",
     "Fundamental",
     "Holding",
@@ -132,7 +145,10 @@ __all__ = [
     "PulseSave",
     "PulseSnapshot",
     "RateEvent",
+    "RelationshipEvidence",
     "Report",
+    "ResearchItem",
+    "ResearchRun",
     "RiskMetric",
     "Save",
     "SourceEvent",

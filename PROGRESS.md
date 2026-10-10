@@ -88,3 +88,40 @@ Screenshots reviewed: join sheet at 320 and 1440, Advisor visitor view, forgot-p
 **Open / needs you:** an SMTP sender (`NEXIS_SMTP_HOST`, `NEXIS_SMTP_PORT`, `NEXIS_SMTP_USERNAME`,
 `NEXIS_SMTP_PASSWORD`, `NEXIS_SMTP_FROM`) for verification and reset emails. Email verification is shown but not
 required to use features (requiring it before a sender exists would lock everyone out).
+
+## Phase 2 — shared data and evidence foundation
+
+**What changed**
+* Migration **0018** (additive only: seven new tables, nothing existing altered; downgrade drops exactly those):
+  `fin_entities`, `fin_entity_aliases`, `evidence_records`, `fin_relationships`, `relationship_evidence`,
+  `research_items`, `research_runs` (`app/models/knowledge.py`). Tested up/down/up on SQLite. `alembic check`
+  reports no drift from the models. **Not applied to production.** It applies on the next API deploy, because the app
+  runs migrations at start-up.
+* Wikidata provider (`app/connectivity/providers/wikidata.py`): official, keyless, CC0. Entity search plus one query
+  per company for parent/subsidiary, ownership, listing (with ticker), industry and country, including start/end dates
+  and cited references. It sends a descriptive User-Agent, makes one request at a time at least 1 s apart, reports 429
+  without retrying, and makes no request when external data is off. The first query design timed out on the Query
+  Service. It was rewritten as explicit per-property patterns with a fixed join order, and now takes about 1 s.
+* Entity and evidence service (`app/services/knowledge.py`):
+  * Names are normalised (case, accents, punctuation and legal forms like PJSC/Inc are ignored).
+  * Local aliases are checked first. Anything else comes back as **choices**: never auto-picked.
+  * A member's confirmed choice is remembered.
+  * Listing tickers link Nexis symbols (EMAAR → `EMAAR.AE`) for DFM, ADX, NYSE and Nasdaq only.
+  * Evidence records are deduplicated and bounded (600-character excerpt; only http(s) links are stored).
+  * No edge without evidence.
+  * Each edge has a status:
+    * `verified`: the statement cites a reference.
+    * `uncertain`: the statement exists but cites nothing.
+    * `historical`: the statement has ended.
+    * `inferred`: reserved for numbers Nexis computes.
+  * Relationships are cached for 7 days and search results for 1 day, with a stale fallback.
+* [DATA-SOURCES.md](DATA-SOURCES.md) started (Wikidata, SEC EDGAR, and what free sources can't tell us). Step 3
+  completes it.
+
+**Results:** backend 327/327 (14 new, offline from Wikidata responses recorded for Emaar Properties); ruff clean.
+Playwright Chromium functional 17/17 against the migrated stack (no frontend files changed in this phase). On the
+real data, 17 Emaar statements came back: 1 cites a reference (Burj Khalifa → skyscrapercenter.com) and 16 cite none,
+so most edges will honestly show as "unreferenced".
+
+**Needs you:** a contact for `NEXIS_WIKIDATA_USER_AGENT` / `NEXIS_SEC_USER_AGENT` in production (a URL or email
+address in the User-Agent string; both services ask for one).
