@@ -50,6 +50,7 @@ export const NAV: { group: string; fixed?: boolean; items: { to: string; label: 
     fixed: true,
     items: [
       { to: "/world-graph", label: "World Graph" },
+      { to: "/time-machine", label: "Time Machine" },
       { to: "/asset-research", label: "Asset Research" },
       { to: "/compare", label: "Compare & Reports" },
       { to: "/valuation", label: "Valuation" },

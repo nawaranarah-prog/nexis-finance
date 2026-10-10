@@ -14,6 +14,7 @@ import "./styles-pulse.css";
 import "./styles-intel.css";
 import "./styles-np.css";
 import "./styles-graph.css";
+import "./styles-tm.css";
 
 const client = new QueryClient({
   defaultOptions: {

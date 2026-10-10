@@ -10,7 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationFailed
-from app.models import FinEntity, ResearchItem, User
+from app.db.base import utcnow
+from app.models import FinEntity, ResearchItem, ResearchRun, User
 from app.services import knowledge
 
 KINDS = ("graph", "scenario", "thesis", "report")
@@ -94,3 +95,41 @@ def update(db: Session, user: User, item_id: int, changes: dict[str, Any]) -> Re
 def delete(db: Session, user: User, item_id: int) -> None:
     db.delete(get_item(db, user, item_id))
     db.commit()
+
+
+# ---------------------------------------------------------------------------------------------- runs (immutable)
+
+
+def add_run(db: Session, item: ResearchItem, run_type: str, result: dict[str, Any], status: str = "completed") -> ResearchRun:
+    """Store one execution: its inputs, the data it used, the model version and the output. Never updated later."""
+    r = ResearchRun(item_id=item.id, run_type=run_type, model_version=result["model_version"], inputs=result["inputs"],
+                    snapshot=result["snapshot"], output=result["output"], status=status)  # fmt: skip
+    db.add(r)
+    item.updated_at = utcnow()
+    db.commit()
+    return r
+
+
+def run_json(r: ResearchRun, full: bool = True) -> dict[str, Any]:
+    out = {"id": r.id, "item_id": r.item_id, "run_type": r.run_type, "model_version": r.model_version, "status": r.status,
+           "created_at": r.created_at.isoformat() + "Z"}  # fmt: skip
+    if full:
+        out.update(inputs=r.inputs, snapshot=r.snapshot, output=r.output)
+    else:
+        out["summary"] = (r.output or {}).get("portfolio")
+    return out
+
+
+def runs(db: Session, user: User, item_id: int) -> list[ResearchRun]:
+    get_item(db, user, item_id)
+    return list(
+        db.scalars(select(ResearchRun).where(ResearchRun.item_id == item_id).order_by(ResearchRun.id.desc()).limit(50)).all()
+    )
+
+
+def get_run(db: Session, user: User, run_id: int) -> ResearchRun:
+    r = db.get(ResearchRun, run_id)
+    if r is None:
+        raise NotFoundError("Run not found.")
+    get_item(db, user, r.item_id)  # 404 unless the caller owns the item
+    return r

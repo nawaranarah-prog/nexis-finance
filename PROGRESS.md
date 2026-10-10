@@ -174,3 +174,58 @@ address in the User-Agent string; both services ask for one).
 
 **Not deployed.** Vercel's Preview environment uses the same Postgres database as Production, so any deploy of this
 branch would run migrations 0017 and 0018 on the live database. That needs your go-ahead.
+
+## Deployed: Phases 1–3 (PR #16, merged 2026-10-10)
+
+Production was checked after the merge (both Vercel projects were Ready):
+* As a visitor, the World Graph API and the AI chat return 401.
+* A temporary member account searched "Emaar" against live Wikidata and opened its graph: 17 entities, 1 referenced
+  link, 15 unreferenced, linked to `EMAAR.AE`. This confirms migrations 0017 and 0018 ran.
+* It saved and deleted an investigation, and the account was then deleted.
+
+## Phase 4 — Time Machine
+
+**What changed**
+* `/time-machine` (members only; visitors see what it is and the join sheet). Holdings come from "My investments"
+  (USD, latest delayed prices) or a list the member enters.
+* The member sets moves for oil, the S&P 500, the DFM index, gold, EUR/USD and the US 10-year yield (with presets),
+  their own move for any single holding, and the history window (1, 2 or 3 years).
+* Four deterministic methods, each named on every result line:
+  1. **Your move:** applied as given.
+  2. **Measured sensitivity:** OLS of weekly (Friday) returns on the shocked factors, giving β ± 95%, R², the number
+     of weeks and the dates, and an impact range from the betas' covariance.
+  3. **Bond duration:** modified duration and convexity, for bonds with known coupon, maturity and yield.
+  4. **DCF check:** the existing valuation model re-run with growth, discount-rate and long-run-growth changes.
+* Flags:
+  * The move is larger than any 3-month move in the data, so the result extrapolates.
+  * The 95% range includes zero: the data can't tell the direction.
+  * Weak relationship (R² below 0.2).
+  * Not enough history (fewer than 26 weeks): no number is given.
+  * A factor has no data: the move isn't applied, and the page says so.
+* No probabilities, Monte Carlo or AI. The same inputs and the same data give the same output.
+* Saved scenarios are research items. Each run is immutable (inputs, data snapshot, model version, output). "Run again
+  on today's data" adds a run; runs can be compared (first against latest) and a scenario duplicated and edited.
+  Private: another member gets 404.
+* API: `/api/time-machine/{factors,run,scenarios,scenarios/{id},scenarios/{id}/rerun,runs/{id},compare}`. All are
+  401 for visitors, and runs are rate-limited (40 per hour).
+* Checked on live data (locally):
+  * Oil −30% with the S&P 500 −10%: XOM −12.4% (range −16.5 to −8.2) and AAPL −13.4%.
+  * Emaar +7.4%, but its range (−0.3 to +15.0) includes zero and R² is 0.14. The page says the direction is unclear
+    and the relationship is weak.
+  * Rates +100bp: TLT −13.5% (R² 0.89); the UAE 2034 bond −6.0% (duration 6.2).
+  * Two rule changes came from this check. Moves are now compared with 3-month moves, because the old single-week
+    comparison flagged every preset. Ranges that cross zero are now called out.
+* No database migration: scenarios and runs use the Phase 2 tables.
+* Also fixed: the link checker's deduplication. It compared route patterns with concrete URLs, so it never
+  deduplicated and opened every story. The fix keeps it inside its 10-minute limit.
+
+**Results**
+* Backend: 364/364 (19 new Time Machine tests). These use synthetic series with known sensitivities and check that
+  the regression recovers them; bond duration and convexity are checked against full repricing. Ruff clean.
+* Playwright, full run: 350 passed. The only failure was the link checker's time limit; with the fix it passes on
+  its own (8.1 min, no broken links).
+* The Time Machine spec passes 12/12 in Chromium, Firefox and WebKit. It includes layout and axe checks at 375 and
+  1440 in light and dark.
+* Unit tests 6/6; build and typecheck pass; lint on touched files 0 errors.
+* Screenshots at 375 and 1440 reviewed. Fixed after review: full-width selects, a stretched history-window control,
+  and the remove button wrapping on phones.
