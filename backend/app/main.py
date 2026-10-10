@@ -30,6 +30,7 @@ from app.api.routes import (
     seo,
     social,
     system,
+    world_graph,
 )
 from app.core.config import APP_VERSION, get_settings
 from app.core.errors import NexisError
@@ -182,5 +183,6 @@ for r in (
     legal.router,
     billing.router,
     help.router,
+    world_graph.router,
 ):
     app.include_router(r, prefix="/api")

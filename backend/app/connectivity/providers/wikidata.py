@@ -11,9 +11,11 @@ without one is reported as unreferenced — never as verified.
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from app.connectivity.base import FinancialConnectionProvider, ProviderSpec
@@ -177,6 +179,8 @@ class WikidataProvider(FinancialConnectionProvider):
         text = (text or "").strip()[:120]
         if not text:
             return []
+        if get_settings().wikidata_fixtures_dir:
+            return _recorded_search(text)
         data = self._get(
             API,
             {
@@ -193,6 +197,8 @@ class WikidataProvider(FinancialConnectionProvider):
 
     def relations(self, qid: str) -> list[dict[str, Any]]:
         qid = check_qid(qid)
+        if get_settings().wikidata_fixtures_dir:
+            return parse_relations(qid, _recorded(f"wikidata_relations_{qid}.json"))
         data = self._get(SPARQL, {"query": relations_query(qid), "format": "json"}, accept="application/sparql-results+json")
         return parse_relations(qid, data)
 
@@ -205,3 +211,25 @@ def parse_search(data: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         out.append({"qid": q, "name": (r.get("label") or q)[:200], "description": (r.get("description") or None)})
     return out
+
+
+# ---- recorded responses (tests only; enabled by NEXIS_WIKIDATA_FIXTURES_DIR, never set in production)
+
+
+def _recorded(name: str) -> Any:
+    f = Path(get_settings().wikidata_fixtures_dir or "") / name
+    if not f.is_file():
+        raise ProviderError(f"Wikidata: no recorded response ({name})")
+    return json.loads(f.read_text(encoding="utf-8"))
+
+
+def _recorded_search(text: str) -> list[dict[str, Any]]:
+    if QID.match(text.upper()):  # look an id up in every recorded search
+        for f in sorted(Path(get_settings().wikidata_fixtures_dir or "").glob("wikidata_search_*.json")):
+            hit = [r for r in parse_search(json.loads(f.read_text(encoding="utf-8"))) if r["qid"] == text.upper()]
+            if hit:
+                return hit
+        return []
+    slug = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    f = Path(get_settings().wikidata_fixtures_dir or "") / f"wikidata_search_{slug}.json"
+    return parse_search(json.loads(f.read_text(encoding="utf-8"))) if f.is_file() else []

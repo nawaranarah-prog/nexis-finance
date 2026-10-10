@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     sec_user_agent: str = "NexisFinance research contact@example.com"
     # Wikidata asks for a descriptive User-Agent with a way to reach the operator (set a real contact in production).
     wikidata_user_agent: str = "NexisFinance/1.0 (https://nexis-finance-five.vercel.app) httpx"
+    # Tests only: answer Wikidata calls from recorded responses in this directory instead of the network.
+    wikidata_fixtures_dir: str | None = None
 
     # Fernet key (urlsafe base64, 32 bytes) used to encrypt connection credentials at rest.
     # Development falls back to a generated key in backend/.nexis_secret (git-ignored).
@@ -132,8 +134,12 @@ class Settings(BaseSettings):
     pulse_editorial_per_tick: int = 3
     # ---- Nexis Pro billing (Stripe Checkout + Billing). Unset keys mean billing is off: Pro can't be bought and
     # the site says so instead of showing prices. The secret key never reaches the browser.
-    stripe_secret_key: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY"))
-    stripe_webhook_secret: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET"))
+    stripe_secret_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY")
+    )
+    stripe_webhook_secret: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET")
+    )
     # The two plans on sale (monthly, AED). New names on purpose: the earlier USD price ids can't be picked up by mistake.
     stripe_plus_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PLUS_MONTHLY_AED_PRICE_ID", "STRIPE_PLUS_MONTHLY_AED_PRICE_ID")

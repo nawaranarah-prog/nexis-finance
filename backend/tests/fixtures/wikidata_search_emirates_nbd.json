@@ -1,0 +1,33 @@
+{
+ "searchinfo": {
+  "search": "Emirates NBD"
+ },
+ "search": [
+  {
+   "id": "Q5372575",
+   "title": "Q5372575",
+   "pageid": 5138821,
+   "concepturi": "http://www.wikidata.org/entity/Q5372575",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q5372575",
+   "display": {
+    "label": {
+     "value": "Emirates NBD",
+     "language": "en"
+    },
+    "description": {
+     "value": "Middle Eastern banking group",
+     "language": "en"
+    }
+   },
+   "label": "Emirates NBD",
+   "description": "Middle Eastern banking group",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "Emirates NBD"
+   }
+  }
+ ],
+ "success": 1
+}

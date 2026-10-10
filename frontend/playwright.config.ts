@@ -41,6 +41,7 @@ export default defineConfig({
       env: {
         NEXIS_DATABASE_URL: `sqlite:///${DB}`, NEXIS_ENV: "development", NEXIS_LLM_API_KEY: "", AI_GATEWAY_API_KEY: "",
         STRIPE_SECRET_KEY: "", NEXIS_STRIPE_SECRET_KEY: "",
+        NEXIS_WIKIDATA_FIXTURES_DIR: join(BACKEND, "tests", "fixtures"),  // World Graph: recorded Wikidata answers, no network
         HTTP_PROXY: DEAD_PROXY, HTTPS_PROXY: DEAD_PROXY, ALL_PROXY: DEAD_PROXY, NO_PROXY: "127.0.0.1,localhost",
       },
     },

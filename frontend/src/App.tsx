@@ -56,6 +56,7 @@ const Markets = lazy(() => import("./pages/Markets"));
 const Instrument = lazy(() => import("./pages/Instrument"));
 const Advisor = lazy(() => import("./pages/Advisor"));
 const Compare = lazy(() => import("./pages/Compare"));
+const WorldGraph = lazy(() => import("./pages/WorldGraph"));
 const Valuation = lazy(() => import("./pages/Valuation"));
 const Finstagram = lazy(() => import("./pages/Finstagram"));
 const InstaPost = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.PostPage })));
@@ -187,6 +188,8 @@ export default function App() {
           <Route path="/ai-disclosure" element={<Legal />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/compare" element={<Compare />} />
+          <Route path="/world-graph" element={<WorldGraph />} />
+          <Route path="/world-graph/:id" element={<WorldGraph />} />
           <Route path="/valuation" element={<Valuation />} />
           <Route path="/valuation/:symbol" element={<Valuation />} />
           <Route path="/finstagram" element={<Finstagram />} />

@@ -6,7 +6,7 @@ import { Link, useLocation } from "react-router-dom";
    signing up; anything they had typed is kept and offered again (never sent automatically). The server enforces all of
    this independently: these prompts are only the friendly version of a 401. */
 
-export type AccountReason = "ai" | "pulse" | "finstagram" | "report" | "save" | "general";
+export type AccountReason = "ai" | "pulse" | "finstagram" | "report" | "save" | "graph" | "general";
 const EVENT = "nexis:account-required";
 const PENDING = "nexis.pending.";
 
@@ -16,6 +16,7 @@ const COPY: Record<AccountReason, { title: string; body: string }> = {
   finstagram: { title: "Join the Nexis community", body: "Create a free account to like, comment and follow news pages." },
   report: { title: "Create a free account to make reports", body: "Reports are saved privately to your account, so you need one to create and download them." },
   save: { title: "Create a free account to save research", body: "Saved investigations, scenarios and theses are private to your account." },
+  graph: { title: "Create a free account to use the World Graph", body: "The World Graph is a free research tool for members: search a company, see who owns and controls it, and where each link comes from." },
   general: { title: "Join the Nexis community", body: "Create a free account to join discussions, save research and use the AI." },
 };
 

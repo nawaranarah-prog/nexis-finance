@@ -13,6 +13,7 @@ export const PAGES: TestPage[] = [
   { name: "valuation-emaar", path: "/valuation/EMAAR.AE", ready: "main h1" },
   { name: "bond", path: "/markets/UAE0734USD.BOND", ready: "main h1" },
   { name: "compare", path: "/compare", ready: "main h1" },
+  { name: "world-graph", path: "/world-graph", ready: "main h1" },
   { name: "assistant", path: "/advisor", ready: "main h1, main textarea" },
   { name: "pulse", path: "/pulse", ready: "main h1" },
   { name: "pulse-story", path: PULSE_STORY, ready: "main h1" },

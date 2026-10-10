@@ -3,8 +3,8 @@
 Rules this module enforces:
 
 * **Ambiguity is never guessed.** A name that matches more than one entity, or anything not yet known locally,
-  comes back as a list of choices. A member's confirmed choice is remembered as an alias, so it resolves directly
-  next time.
+  comes back as a list of choices. Only names the source gives (label, listing ticker, Nexis symbol) resolve
+  directly; what a member typed is never stored as a shared alias.
 * **No edge without evidence.** Every relationship is written together with the evidence record(s) it came from.
 * **Status says how sure we are.** ``verified`` — the source statement cites a reference; ``uncertain`` — the
   statement exists in the source but cites nothing; ``historical`` — it has an end date in the past; ``inferred``
@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.connectivity.providers.wikidata import WikidataProvider, check_qid
@@ -83,20 +84,34 @@ def add_alias(db: Session, entity: FinEntity, alias: str, source: str) -> None:
         return
     exists = db.scalar(select(FinEntityAlias.id).where(FinEntityAlias.entity_id == entity.id, FinEntityAlias.alias_norm == key))
     if exists is None:
-        db.add(FinEntityAlias(entity_id=entity.id, alias_norm=key, source=source))
+        insert_once(db, FinEntityAlias(entity_id=entity.id, alias_norm=key, source=source))
+
+
+def insert_once(db: Session, row: object) -> bool:
+    """Insert ``row`` now, inside a savepoint. Returns False (and leaves the session usable) when a concurrent request
+    already inserted the same unique row — two members opening the same company at once is normal, not an error."""
+    try:
+        with db.begin_nested():
+            db.add(row)
+            db.flush()
+        return True
+    except IntegrityError:
+        return False
 
 
 def upsert_entity(db: Session, qid: str, name: str, description: str | None = None, kind: str = "other") -> FinEntity:
     qid = check_qid(qid)
     kind = kind if kind in KINDS else "other"
-    e = db.scalar(select(FinEntity).where(FinEntity.wikidata_qid == qid))
+    find = select(FinEntity).where(FinEntity.wikidata_qid == qid)
+    e = db.scalar(find)
     if e is None:
-        e = FinEntity(
+        new = FinEntity(
             wikidata_qid=qid, name=(name or qid)[:200], description=(description or None) and description[:300], kind=kind
         )
-        db.add(e)
-        db.flush()
-    else:
+        e = new if insert_once(db, new) else db.scalar(find)  # lost a race: use the row the other request made
+        if e is None:
+            raise ValidationFailed("Couldn't save that entity; please try again.")
+    if e.wikidata_qid == qid:
         if e.name == e.wikidata_qid and name and name != qid:
             e.name = name[:200]  # a real label replaces a bare id
         if not e.description and description:
@@ -180,8 +195,12 @@ def resolve(db: Session, query: str, provider: WikidataProvider | None = None) -
     }
 
 
-def confirm(db: Session, qid: str, query: str | None, provider: WikidataProvider | None = None) -> FinEntity:
-    """A member picked ``qid`` for ``query``: create/refresh the entity and remember the query as an alias."""
+def confirm(db: Session, qid: str, provider: WikidataProvider | None = None) -> FinEntity:
+    """A member picked ``qid`` from the choices: make sure the entity exists locally.
+
+    What the member typed is deliberately *not* stored as an alias: aliases are shared by everyone, so only names the
+    source itself gives (label, listing ticker, Nexis symbol) become aliases. Otherwise one member could make a search
+    term resolve to the wrong company for every other member."""
     qid = check_qid(qid)
     e = db.scalar(select(FinEntity).where(FinEntity.wikidata_qid == qid))
     if e is None:
@@ -190,11 +209,6 @@ def confirm(db: Session, qid: str, query: str | None, provider: WikidataProvider
         if hit is None:
             raise NotFoundError("That Wikidata item wasn't found.")
         e = upsert_entity(db, qid, hit["name"], hit.get("description"), "organization")
-    if query:
-        if re.match(r"^[A-Za-z0-9^=.\-]{1,24}$", query.strip()) and "." in query:
-            link_symbol(db, e, query)
-        else:
-            add_alias(db, e, query, "name")
     db.commit()
     return e
 
@@ -228,9 +242,10 @@ def upsert_evidence(
     if url and not re.match(r"^https?://", url, re.I):
         url = None  # only web links are stored as links
     h = _hash(source_kind, external_id, url if not external_id else None)
-    ev = db.scalar(select(EvidenceRecord).where(EvidenceRecord.content_hash == h))
+    find = select(EvidenceRecord).where(EvidenceRecord.content_hash == h)
+    ev = db.scalar(find)
     if ev is None:
-        ev = EvidenceRecord(
+        new = EvidenceRecord(
             source_kind=source_kind,
             content_hash=h,
             title=title[:500],
@@ -240,8 +255,11 @@ def upsert_evidence(
             published_at=published_at,
             excerpt=excerpt and excerpt[:600],
         )
-        db.add(ev)
-        db.flush()
+        if insert_once(db, new):
+            return new
+        ev = db.scalar(find)  # a concurrent request stored the same source item first
+        if ev is None:
+            raise ValidationFailed("Couldn't save the evidence; please try again.")
     else:
         ev.retrieved_at = utcnow()
         ev.title, ev.url = title[:500], url and url[:1500]
@@ -294,14 +312,14 @@ def upsert_edge(
         raise ValidationFailed("A relationship needs at least one evidence record.")
     if source.id == target.id:
         raise ValidationFailed("An entity can't be related to itself.")
-    edge = db.scalar(
-        select(FinRelationship).where(
-            FinRelationship.source_id == source.id, FinRelationship.target_id == target.id, FinRelationship.rel_type == rel_type
-        )
+    find = select(FinRelationship).where(
+        FinRelationship.source_id == source.id, FinRelationship.target_id == target.id, FinRelationship.rel_type == rel_type
     )
+    edge = db.scalar(find)
     now = utcnow()
+    created = False
     if edge is None:
-        edge = FinRelationship(
+        new = FinRelationship(
             source_id=source.id,
             target_id=target.id,
             rel_type=rel_type,
@@ -312,9 +330,11 @@ def upsert_edge(
             first_seen=now,
             last_verified=now,
         )
-        db.add(edge)
-        db.flush()
-    else:
+        created = insert_once(db, new)
+        edge = new if created else db.scalar(find)  # lost a race: update the other request's edge instead
+        if edge is None:
+            raise ValidationFailed("Couldn't save the relationship; please try again.")
+    if not created:
         if STATUS_RANK.get(status, 0) > STATUS_RANK.get(edge.status, 0):
             edge.status = status  # the best-supported statement decides
         edge.valid_from = min(filter(None, [edge.valid_from, valid_from]), default=None)
@@ -323,7 +343,7 @@ def upsert_edge(
         edge.last_verified = now
     for ev in evidence:
         if db.get(RelationshipEvidence, (edge.id, ev.id)) is None:
-            db.add(RelationshipEvidence(relationship_id=edge.id, evidence_id=ev.id))
+            insert_once(db, RelationshipEvidence(relationship_id=edge.id, evidence_id=ev.id))
     return edge
 
 
@@ -379,6 +399,8 @@ def expand(db: Session, entity: FinEntity, provider: WikidataProvider | None = N
             if suffix is not None:
                 link_symbol(db, entity, st["ticker"].replace(".", "-") + suffix)
             add_alias(db, entity, st["ticker"], "ticker")
+        if st["property"] == "P414" and st["source_qid"] == entity.wikidata_qid and entity.kind in ("other", "organization"):
+            entity.kind = "company"  # it has a stock-exchange listing
         if st["property"] == "P17" and st["source_qid"] == entity.wikidata_qid and not entity.country:
             entity.country = o["name"][:80]
     entity.relations_fetched_at = utcnow()

@@ -125,3 +125,52 @@ so most edges will honestly show as "unreferenced".
 
 **Needs you:** a contact for `NEXIS_WIKIDATA_USER_AGENT` / `NEXIS_SEC_USER_AGENT` in production (a URL or email
 address in the User-Agent string; both services ask for one).
+
+## Phase 3 — World Graph
+
+**What changed**
+* `/world-graph`: members search a company and pick it from explicit choices (several companies are called "Emaar").
+  The page then shows a deterministic radial graph of the relationships Wikidata reports, each with its evidence.
+  * Line style shows evidence status (solid = referenced, dashed = unreferenced, dotted = ended), and every badge
+    says it in words.
+  * Graph controls: zoom, pan and reset, a legend, and filters by evidence status and relationship type (kept in the
+    URL). "Direct links" or "two steps". Any neighbour can be expanded progressively.
+  * Nodes are keyboard-operable buttons. A List view shows the same data as a table, or as sentences on phones
+    (phones default to the list).
+  * The inspector shows each entity and each link with its sources (excerpt, publisher, retrieval date, link).
+  * "Connections between…" shows shared direct connections and the shortest chain. It uses referenced links only
+    unless you tick "include unreferenced".
+  * Saved investigations (private) show a "data changed since you saved" notice.
+  * The graph is capped at 40 nodes; when it cuts nodes it says how many, and keeps better-sourced links first.
+* API (all members only, 401 for visitors, rate-limited per member):
+  * `/api/world-graph/resolve`, `/entities` (confirm), `/entities/{id}/graph`, `/edges/{id}`, `/shared`, `/path`.
+  * `/api/saved-research` CRUD: owner-only, and another member's item returns 404. The same store will hold
+    Time Machine scenarios and Devil's Advocate theses.
+* Visitors see what the World Graph is and a "Create a free account" button that opens the join sheet. A "World
+  Graph" link was added to the Research navigation.
+* Bugs found and fixed while testing:
+  * **Shared-alias poisoning.** One member's search text was stored as a global alias, so it could make a name
+    resolve to the wrong company for everyone. Only source names (label, listing ticker, Nexis symbol) are aliases now.
+  * **A race condition.** Two members opening the same company at once got "a database error". Inserts now use
+    savepoints and adopt the other request's row.
+  * **Expanding was blocked.** "Show its connections" was hidden whenever anyone had ever loaded that company.
+  * **Shared/path found nothing.** Results for a company whose relationships weren't loaded yet came back empty;
+    both sides now load first.
+  * **Filter checkboxes flicked back** for a moment in WebKit.
+  * **Unreadable phone list.** The list view needed sideways scrolling on phones.
+  * **Pre-existing, outside the World Graph:** the header avatar letter was 11.8px on phones (only visible when
+    signed in), and there were two lint errors in the instrument search box.
+* Tests run against recorded Wikidata answers. `NEXIS_WIKIDATA_FIXTURES_DIR` is set only in the Playwright config,
+  never in production. Recorded: Emaar Properties, Emaar Development, Investment Corporation of Dubai, Emirates NBD.
+
+**Results**
+* Backend: 345/345, ruff clean on touched files.
+* Playwright, full run: 323 passed. The only 3 failures were World Graph tests in Firefox and WebKit; they were bugs
+  2 and 4 in the list above, now fixed, and the World Graph spec then passed 18/18 across all three browsers.
+* Responsive and axe checks for the visitor page are in the shared suites. The member graph view at 375 and 1440
+  (light and dark) is checked inside the World Graph spec.
+* Unit tests 6/6; build and typecheck pass; lint on touched files 0 errors.
+* Screenshots at 375 and 1440 reviewed (label collisions and clipping fixed after review).
+
+**Not deployed.** Vercel's Preview environment uses the same Postgres database as Production, so any deploy of this
+branch would run migrations 0017 and 0018 on the live database. That needs your go-ahead.

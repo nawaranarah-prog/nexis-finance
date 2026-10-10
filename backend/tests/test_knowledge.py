@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.connectivity.providers import wikidata
 from app.connectivity.providers.wikidata import WikidataProvider, check_qid, parse_relations, parse_search, relations_query
@@ -50,9 +50,15 @@ class FailingWikidata(WikidataProvider):
 
 @pytest.fixture
 def db(client):  # type: ignore[no-untyped-def]
+    """A session on an empty graph (other test modules share the database)."""
     from app.db import session as db_session
+    from app.models import EvidenceRecord, FinEntityAlias, MarketCache, ResearchItem
 
     with db_session.SessionLocal() as s:
+        for model in (RelationshipEvidence, FinRelationship, EvidenceRecord, FinEntityAlias, ResearchItem, FinEntity):
+            s.execute(delete(model))
+        s.execute(delete(MarketCache).where(MarketCache.key.like("kg:%")))
+        s.commit()
         yield s
 
 
@@ -128,17 +134,26 @@ def test_provider_makes_no_request_when_external_data_is_off(monkeypatch) -> Non
 # ---------------------------------------------------------------------------------------------- resolution
 
 
-def test_a_name_is_never_auto_picked_and_a_confirmed_choice_is_remembered(db) -> None:  # type: ignore[no-untyped-def]
+def test_a_name_is_never_auto_picked_and_only_source_names_resolve_directly(db) -> None:  # type: ignore[no-untyped-def]
     wd = RecordedWikidata()
     first = knowledge.resolve(db, "Emaar", wd)
     assert first["status"] == "ambiguous" and first["entity"] is None
     assert [c["qid"] for c in first["choices"]][:3] == [EMAAR, "Q130611824", "Q55610796"]
 
-    e = knowledge.confirm(db, EMAAR, "Emaar", wd)
+    e = knowledge.confirm(db, EMAAR, wd)
     assert (e.name, e.description) == ("Emaar Properties", "company")
-    again = knowledge.resolve(db, "  EMAAR ", wd)
-    assert again["status"] == "resolved" and again["entity"]["wikidata_qid"] == EMAAR
+    assert knowledge.resolve(db, "emaar properties pjsc", wd)["entity"]["id"] == e.id  # the source's own label
+    assert knowledge.resolve(db, "Emaar", wd)["status"] == "ambiguous"  # still several Emaars: still asked
     assert knowledge.resolve(db, EMAAR.lower(), wd)["status"] == "resolved"
+    knowledge.expand(db, e, wd)
+    assert knowledge.resolve(db, "  EMAAR ", wd)["entity"]["id"] == e.id  # the listing ticker the source reports
+
+
+def test_what_a_member_typed_never_becomes_a_shared_alias(db) -> None:  # type: ignore[no-untyped-def]
+    wd = RecordedWikidata()
+    knowledge.confirm(db, EMAAR, wd)
+    # the API no longer takes the member's search text at all; nothing can map "Emirates NBD" to Emaar for others
+    assert knowledge.resolve(db, "Emirates NBD", wd)["status"] != "resolved"
 
 
 def test_two_local_entities_with_the_same_name_are_offered_as_choices(db) -> None:  # type: ignore[no-untyped-def]
@@ -174,7 +189,7 @@ def _edges(db, entity: FinEntity) -> dict[tuple[str, str, str], FinRelationship]
 
 def test_expanding_stores_every_edge_with_evidence_and_an_honest_status(db) -> None:  # type: ignore[no-untyped-def]
     wd = RecordedWikidata()
-    emaar = knowledge.confirm(db, EMAAR, "Emaar", wd)
+    emaar = knowledge.confirm(db, EMAAR, wd)
     out = knowledge.expand(db, emaar, wd)
     assert out["fetched"] is True and out["statements"] == 17
 
@@ -205,7 +220,7 @@ def test_expanding_stores_every_edge_with_evidence_and_an_honest_status(db) -> N
 
 def test_expanding_again_uses_the_cache_and_creates_no_duplicates(db) -> None:  # type: ignore[no-untyped-def]
     wd = RecordedWikidata()
-    emaar = knowledge.confirm(db, EMAAR, "Emaar", wd)
+    emaar = knowledge.confirm(db, EMAAR, wd)
     knowledge.expand(db, emaar, wd)
     before = len(_edges(db, emaar))
     calls = len(wd.calls)
@@ -237,3 +252,40 @@ def test_entity_without_wikidata_id_says_why_nothing_was_fetched(db) -> None:  #
     out = knowledge.expand(db, e, FailingWikidata())
     assert out["fetched"] is False and "no Wikidata id" in out["reason"]
     db.rollback()
+
+
+def _first_lookup_misses(db, monkeypatch, table: str) -> None:  # type: ignore[no-untyped-def]
+    """The next lookup in ``table`` sees nothing, as if another request inserted the row just after we looked."""
+    real = db.scalar
+    state = {"missed": False}
+
+    def scalar(stmt, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if not state["missed"] and f"FROM {table}" in str(stmt):
+            state["missed"] = True
+            return None
+        return real(stmt, *args, **kwargs)
+
+    monkeypatch.setattr(db, "scalar", scalar)
+
+
+def test_two_requests_storing_the_same_rows_at_once_both_succeed(db, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from app.db import session as db_session
+
+    with db_session.SessionLocal() as winner:  # the request that got there first
+        a = knowledge.upsert_entity(winner, "Q900000020", "Race Co", None, "company")
+        b = knowledge.upsert_entity(winner, "Q900000021", "Race Parent", None, "company")
+        ev = knowledge.upsert_evidence(winner, source_kind="wikidata", title="t", external_id="Q900000020-stmt")
+        edge = knowledge.upsert_edge(winner, a, b, "subsidiary_of", "uncertain", [ev])
+        winner.commit()
+        ids = (a.id, b.id, ev.id, edge.id)
+
+    _first_lookup_misses(db, monkeypatch, "fin_entities")
+    a2 = knowledge.upsert_entity(db, "Q900000020", "Race Co", None, "company")
+    _first_lookup_misses(db, monkeypatch, "evidence_records")
+    ev2 = knowledge.upsert_evidence(db, source_kind="wikidata", title="t", external_id="Q900000020-stmt")
+    b2 = db.get(FinEntity, ids[1])
+    _first_lookup_misses(db, monkeypatch, "fin_relationships")
+    edge2 = knowledge.upsert_edge(db, a2, b2, "subsidiary_of", "verified", [ev2])
+    db.commit()  # the session is still usable after each conflict
+    assert (a2.id, ev2.id, edge2.id) == (ids[0], ids[2], ids[3])
+    assert edge2.status == "verified"  # the loser's better evidence is merged into the winner's edge
