@@ -143,8 +143,8 @@ export default function Instrument() {
           <Card title="Annual statements">
             <QueryView q={st} label="Loading statements">
               {(s) => s.rows.length ? (
-                <div className="table-wrap"><table className="dt">
-                  <thead><tr><th></th>{s.years.map((y: string) => <th key={y} className="r">{y}</th>)}</tr></thead>
+                <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table"><table className="dt">
+                  <thead><tr><th><span className="sr-only">Item</span></th>{s.years.map((y: string) => <th key={y} className="r">{y}</th>)}</tr></thead>
                   <tbody>{s.rows.map((r: AnyObj) => <tr key={r.key}><td>{r.label}</td>{s.years.map((y: string) => <td key={y} className="r num">{r.key === "annualDilutedEPS" ? r.values[y]?.toFixed(2) ?? "—" : fmtBig(r.values[y])}</td>)}</tr>)}</tbody>
                 </table></div>
               ) : <div className="small text2">No annual statements reported.</div>}

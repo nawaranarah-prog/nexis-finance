@@ -76,7 +76,7 @@ function VarPanel({ pid }: { pid: number }) {
             ))}
           </div>
           <Card title="Estimates by methodology" flush>
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
               <table className="dt">
                 <thead><tr><th>Confidence</th><th>Method</th><th className="r">VaR</th><th className="r">VaR ($)</th><th className="r">CVaR</th><th className="r">CVaR ($)</th><th className="r">Tail obs.</th></tr></thead>
                 <tbody>

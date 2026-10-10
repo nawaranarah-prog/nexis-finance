@@ -93,7 +93,7 @@ export default function DataTable<T>({
           {exportName && <button className="btn sm" onClick={exportCsv}>CSV</button>}
         </div>
       )}
-      <div className="table-wrap" style={maxHeight ? { maxHeight } : undefined}>
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table" style={maxHeight ? { maxHeight } : undefined}>
         <table className="dt">
           <thead>
             <tr>

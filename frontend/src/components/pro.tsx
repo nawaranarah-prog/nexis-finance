@@ -6,6 +6,7 @@ import { useMe } from "./market";
 import { toast } from "./toast";
 import { api, ApiError, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
+import { requireAccount, type AccountReason } from "./account";
 
 /* Plans in the browser are presentation only. Tiers, prices, limits and capabilities come from GET /api/billing/plans,
    which is built from backend/app/core/plans.py; what a member may do is decided by the server. No number is typed here. */
@@ -23,7 +24,8 @@ export const priceText = (p: AnyObj | undefined) => (p ? `${money(p.amount, p.cu
 export const tierOf = (plans: AnyObj | undefined, id: string) => (plans?.tiers as AnyObj[] | undefined)?.find((t) => t.id === id);
 
 /** Turn a plan-related API error into the right explanation. Returns true when handled. */
-export function handlePlanError(e: unknown): boolean {
+export function handlePlanError(e: unknown, reason: AccountReason = "general"): boolean {
+  if (e instanceof ApiError && e.status === 401) { requireAccount(reason); return true; }
   if (e instanceof ApiError && PLAN_ERRORS.includes(e.code)) {
     window.dispatchEvent(new CustomEvent(EVENT, { detail: { code: e.code, message: e.message, ...((e.details as AnyObj) ?? {}) } }));
     return true;
@@ -32,9 +34,9 @@ export function handlePlanError(e: unknown): boolean {
 }
 
 /** For raw fetch calls (the streaming Advisor). */
-export function handlePlanErrorBody(status: number, body: AnyObj | null): boolean {
+export function handlePlanErrorBody(status: number, body: AnyObj | null, reason: AccountReason = "general"): boolean {
   const err = body?.error;
-  return !!err && handlePlanError(new ApiError(status, err.code, err.message, err.details));
+  return !!err && handlePlanError(new ApiError(status, err.code, err.message, err.details), reason);
 }
 
 export async function startCheckout(plan: PlanKey): Promise<void> {
@@ -42,7 +44,6 @@ export async function startCheckout(plan: PlanKey): Promise<void> {
     const r = await api.post<{ url: string }>("/billing/checkout", { plan });
     window.location.assign(r.url);  // Stripe Checkout collects the payment; nothing is granted until Stripe confirms it
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) { window.location.assign(`/login?mode=signup&next=${encodeURIComponent("/pricing")}`); return; }
     if (!handlePlanError(e)) toast("error", "Couldn't start checkout", errorMessage(e));
   }
 }

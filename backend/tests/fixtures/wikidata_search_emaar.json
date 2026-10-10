@@ -1,0 +1,174 @@
+{
+ "searchinfo": {
+  "search": "Emaar"
+ },
+ "search": [
+  {
+   "id": "Q1153463",
+   "title": "Q1153463",
+   "pageid": 1099837,
+   "concepturi": "http://www.wikidata.org/entity/Q1153463",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q1153463",
+   "display": {
+    "label": {
+     "value": "Emaar Properties",
+     "language": "en"
+    },
+    "description": {
+     "value": "company",
+     "language": "en"
+    }
+   },
+   "label": "Emaar Properties",
+   "description": "company",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "Emaar Properties"
+   }
+  },
+  {
+   "id": "Q130611824",
+   "title": "Q130611824",
+   "pageid": 124550145,
+   "concepturi": "http://www.wikidata.org/entity/Q130611824",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q130611824",
+   "display": {
+    "label": {
+     "value": "Emaar Misr for Development",
+     "language": "en"
+    }
+   },
+   "label": "Emaar Misr for Development",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "Emaar Misr for Development"
+   }
+  },
+  {
+   "id": "Q55610796",
+   "title": "Q55610796",
+   "pageid": 55597997,
+   "concepturi": "http://www.wikidata.org/entity/Q55610796",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q55610796",
+   "display": {
+    "label": {
+     "value": "Emaar Development",
+     "language": "en"
+    },
+    "description": {
+     "value": "UAE-based property development arm of Emaar Properties",
+     "language": "en"
+    }
+   },
+   "label": "Emaar Development",
+   "description": "UAE-based property development arm of Emaar Properties",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "Emaar Development"
+   }
+  },
+  {
+   "id": "Q12182356",
+   "title": "Q12182356",
+   "pageid": 13396921,
+   "concepturi": "http://www.wikidata.org/entity/Q12182356",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q12182356",
+   "display": {
+    "label": {
+     "value": "Emaar The Economic City",
+     "language": "en"
+    }
+   },
+   "label": "Emaar The Economic City",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "Emaar The Economic City"
+   }
+  },
+  {
+   "id": "Q3185860",
+   "title": "Q3185860",
+   "pageid": 3042879,
+   "concepturi": "http://www.wikidata.org/entity/Q3185860",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q3185860",
+   "display": {
+    "label": {
+     "value": "EMAAR-MGF Ladies Masters",
+     "language": "en"
+    },
+    "description": {
+     "value": "golf tournament",
+     "language": "en"
+    }
+   },
+   "label": "EMAAR-MGF Ladies Masters",
+   "description": "golf tournament",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "EMAAR-MGF Ladies Masters"
+   }
+  },
+  {
+   "id": "Q17052427",
+   "title": "Q17052427",
+   "pageid": 18658910,
+   "concepturi": "http://www.wikidata.org/entity/Q17052427",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q17052427",
+   "display": {
+    "label": {
+     "value": "Emaar MGF",
+     "language": "en"
+    },
+    "description": {
+     "value": "Real estate developer",
+     "language": "en"
+    }
+   },
+   "label": "Emaar MGF",
+   "description": "Real estate developer",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "Emaar MGF"
+   }
+  },
+  {
+   "id": "Q116974427",
+   "title": "Q116974427",
+   "pageid": 111768077,
+   "concepturi": "http://www.wikidata.org/entity/Q116974427",
+   "repository": "wikidata",
+   "url": "//www.wikidata.org/wiki/Q116974427",
+   "display": {
+    "label": {
+     "value": "Emaar Square",
+     "language": "en"
+    },
+    "description": {
+     "value": "mixed-use building complex in Üsküdar, Istanbul, Turkey",
+     "language": "en"
+    }
+   },
+   "label": "Emaar Square",
+   "description": "mixed-use building complex in Üsküdar, Istanbul, Turkey",
+   "match": {
+    "type": "label",
+    "language": "en",
+    "text": "Emaar Square"
+   }
+  }
+ ],
+ "search-continue": 7,
+ "success": 1
+}

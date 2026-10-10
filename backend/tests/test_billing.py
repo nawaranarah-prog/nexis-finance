@@ -150,7 +150,7 @@ def _go_pro(client, world, user: dict[str, Any], price: str = PRO) -> str:  # ty
 
 def test_final_plan_values():
     assert plans.TIERS == ("free", "plus", "pro")
-    assert plans.ANONYMOUS == {"advisor_daily": 3, "help_ai_daily": 10}
+    assert plans.ANONYMOUS == {"advisor_daily": 0, "help_ai_daily": 0}  # visitors: no AI
     assert plans.LIMITS == {"free": {"investments": 1, "watchlist": 50, "advisor": 20},
                             "plus": {"investments": 10, "watchlist": 50, "advisor": 200},
                             "pro": {"investments": 20, "watchlist": 50, "advisor": 600}}  # fmt: skip
@@ -634,15 +634,15 @@ def test_parallel_requests_cannot_exceed_the_limit(client, db, stripe_on):
     _out(client)
 
 
-def test_visitors_get_3_a_day_then_a_free_account(client, monkeypatch):
-    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None: {"answer": "ok"})
+def test_visitors_cannot_use_the_advisor_at_all(client, monkeypatch):
+    called = []
+    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None: called.append(1) or {"answer": "ok"})
     _out(client)
-    hdr = {"x-forwarded-for": f"198.51.100.{random.randint(1, 250)}"}
-    assert [_ask(client, hdr).status_code for _ in range(3)] == [200, 200, 200]
-    r = _ask(client, hdr)
-    err = r.json()["error"]
-    assert r.status_code == 401 and err["code"] == "sign_in_required" and err["message"] == "You've reached today's free AI Advisor limit."
-    assert err["details"]["next"] == "Create a free Nexis account to continue with 20 AI Advisor messages per month."
+    for path in ("/api/advisor/chat", "/api/advisor/chat/stream"):
+        r = client.post(path, json={"messages": [{"role": "user", "content": "Is Emaar cheap?"}]})
+        assert r.status_code == 401 and r.json()["error"]["code"] == "authentication_required"
+    assert not called
+    assert client.get("/api/advisor/status").json()["signed_in"] is False
 
 
 def test_pulse_participation_is_free_and_unmetered_on_every_plan(client, db, stripe_on, monkeypatch):

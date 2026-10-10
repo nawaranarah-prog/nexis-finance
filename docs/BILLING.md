@@ -66,11 +66,33 @@ Endpoints: `GET /api/billing/plans`, `GET /api/billing/status`, `POST /api/billi
 
 ## LIVE environment (only when the founder says so)
 
-1. Activate the Stripe account (business details, bank account) so charges are enabled; AED must be supported for
-   the account's country.
-2. Run `stripe_setup` with the live key and `--live --webhook https://nexis-finance-api.vercel.app/api/billing/webhook`;
-   set the live `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and both `*_AED_PRICE_ID` values in Vercel; redeploy.
-3. Wallets: enable Apple Pay / Google Pay in the live Dashboard, confirm they appear in a live checkout, then set
-   `NEXIS_BILLING_WALLETS="Apple Pay,Google Pay"` so the pricing page lists them. Until then only cards are listed.
-4. Terms of Use: add subscription, renewal, cancellation and refund terms before taking real payments.
-5. One real purchase with the founder's own card, verified end to end, then refunded.
+Check any time, read-only (works with a test or live key; changes nothing, prints no secrets):
+```
+STRIPE_SECRET_KEY=<key> python -m app.cli.stripe_setup --check
+```
+
+1. **Activate the Stripe account** (Dashboard → Activate payments): business details, identity verification and a
+   bank account for payouts, until `--check` shows details submitted, charges enabled and payouts enabled. The
+   account is in the UAE with AED as its default currency, which matches the AED prices.
+2. **Create the live objects**, in a terminal on your own machine (the live key never goes into chat or the repo):
+   ```
+   STRIPE_SECRET_KEY=sk_live_... python -m app.cli.stripe_setup --live --webhook https://nexis-finance-api.vercel.app/api/billing/webhook
+   ```
+   It creates the `nexis_plus` / `nexis_pro` products, the AED 29 and AED 69 monthly prices, the webhook endpoint
+   with the six events (`checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`,
+   `invoice.payment_failed`) and the Customer Portal (update card, invoices, cancel at period end, plan switching off).
+   It prints the two price ids and the webhook signing secret once. If the live account already has a default portal
+   configuration, set the same options in Dashboard → Settings → Billing → Customer portal.
+3. **Vercel → nexis-finance-api → Settings → Environment Variables → Production only** (never Preview/Development):
+   replace `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PLUS_MONTHLY_AED_PRICE_ID`, `STRIPE_PRO_MONTHLY_AED_PRICE_ID`
+   with the live values; delete `STRIPE_PRO_MONTHLY_PRICE_ID` and `STRIPE_PRO_YEARLY_PRICE_ID` (test-mode ids) and
+   `NEXIS_BILLING_TEST_EMAILS` (ignored with a live key anyway). Then redeploy — Vercel applies changed variables only
+   to new deployments. With a live key, checkout opens to everyone; prices of the wrong mode are refused.
+4. Billing → Subscriptions and emails: Smart Retries on; after the final retry cancel the subscription (or mark it
+   unpaid); failed-payment emails on.
+5. Wallets: enable Apple Pay / Google Pay in the live Dashboard, confirm they appear in a live checkout, then set
+   `NEXIS_BILLING_WALLETS="Apple Pay,Google Pay"`. Until then only cards are listed. Tabby is a separate provider
+   (not Stripe Checkout here) and needs its own merchant approval.
+6. Terms of Use: add subscription, renewal, cancellation and refund terms before taking real payments.
+7. Run `--check` with the live key until it reports 0 problems, then one real AED 29 purchase with the founder's own
+   card (explicitly authorised), verified end to end, then cancelled and refunded in the Dashboard.

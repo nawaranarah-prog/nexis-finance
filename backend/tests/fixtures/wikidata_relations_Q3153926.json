@@ -1,0 +1,161 @@
+{
+ "head": {
+  "vars": [
+   "dir",
+   "prop",
+   "other",
+   "otherLabel",
+   "otherDescription",
+   "st",
+   "start",
+   "end",
+   "ticker",
+   "refUrl",
+   "statedInLabel"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-659a183d-48b5-d756-52ac-4e74fe750b40"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1153463"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Emaar Properties"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "company"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q3045998-A42ABD27-E377-4668-AACA-5A7563236722"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q3045998"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "ENOC"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "government-owned energy corporation based in Dubai, United Arab Emirates"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q3153926-CE861423-9773-44EE-A39E-68BFDBB2BC0D"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q878"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P17"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "United Arab Emirates"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "country in Western Asia"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q7731899-6E1EC52C-59BB-471A-87D0-93D6FE84F237"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q7731899"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "The Emirates Group"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Dubai-based international aviation holding company"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q369338-3fb1beb4-4bc1-af52-6633-c1a7a66a8110"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q369338"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Dubai World Trade Centre"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "architectural structure"
+    }
+   }
+  ]
+ }
+}

@@ -416,6 +416,6 @@ def assistant_suggestions() -> list[str]:
     return assistant.SUGGESTIONS
 
 
-@router.post("/assistant/ask", dependencies=[Depends(auth.compute_limit)])
+@router.post("/assistant/ask", dependencies=[Depends(auth.require_user), Depends(auth.compute_limit)])
 def assistant_ask(req: AskRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     return assistant.ask(db, req.question)

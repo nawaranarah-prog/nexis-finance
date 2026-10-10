@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Plot from "../components/Plot";
@@ -53,18 +53,17 @@ function NewExperiment({ onDone }: { onDone: (id: number) => void }) {
   const assets = useAssets(datasetId);
   const catalog = useQuery({ queryKey: ["ml-catalog"], queryFn: () => api.get<AnyObj>("/ml/catalog"), staleTime: Infinity });
   const job = useJobRunner([["experiments"]]);
-  const [symbols, setSymbols] = useState<string[]>([]);
-  const [features, setFeatures] = useState<string[]>([]);
+  // null = "use the default" (computed from the loaded data below), so no effect has to copy data into state
+  const [symbolsSel, setSymbols] = useState<string[] | null>(null);
+  const [featuresSel, setFeatures] = useState<string[] | null>(null);
+  const symbols = symbolsSel ?? (assets.data ?? []).filter((a) => !a.is_benchmark).slice(0, 5).map((a) => a.symbol);
+  const features = featuresSel ?? Object.keys(catalog.data?.volatility_features ?? {});
   const [models, setModels] = useState<string[]>(["naive_hist_vol", "ewma_vol", "ridge", "random_forest", "gradient_boosting"]);
-  const [f, setF] = useState({ horizon: 10, train_end: "", validation_end: "", seed: 42, min_improvement: 0.02, name: "" });
-  useEffect(() => { if (catalog.data && !features.length) setFeatures(Object.keys(catalog.data.volatility_features)); }, [catalog.data, features.length]);
-  useEffect(() => {
-    if (dataset?.start_date && dataset.end_date && !f.train_end) {
-      const s = new Date(dataset.start_date).getTime(), e = new Date(dataset.end_date).getTime();
-      setF((x) => ({ ...x, train_end: new Date(s + (e - s) * 0.6).toISOString().slice(0, 10), validation_end: new Date(s + (e - s) * 0.8).toISOString().slice(0, 10) }));
-    }
-  }, [dataset, f.train_end]);
-  useEffect(() => { if (assets.data && !symbols.length) setSymbols(assets.data.filter((a) => !a.is_benchmark).slice(0, 5).map((a) => a.symbol)); }, [assets.data, symbols.length]);
+  const [fSel, setF] = useState({ horizon: 10, train_end: "", validation_end: "", seed: 42, min_improvement: 0.02, name: "" });
+  // default split: 60% train, 20% validation, from the dataset's dates (until the user types their own)
+  const span = dataset?.start_date && dataset.end_date ? [new Date(dataset.start_date).getTime(), new Date(dataset.end_date).getTime()] : null;
+  const day = (frac: number) => (span ? new Date(span[0] + (span[1] - span[0]) * frac).toISOString().slice(0, 10) : "");
+  const f = fSel.train_end ? fSel : { ...fSel, train_end: day(0.6), validation_end: fSel.validation_end || day(0.8) };
   const submit = async () => {
     const j = await job.run("/ml/experiments/volatility", { dataset_id: datasetId, symbols, features, models, horizon: f.horizon, train_end: f.train_end, validation_end: f.validation_end || null, seed: f.seed, min_improvement: f.min_improvement, name: f.name || undefined });
     if (j?.status === "succeeded" && j.result?.experiment_id) onDone(j.result.experiment_id);
@@ -144,7 +143,7 @@ function VolResult({ id }: { id: number }) {
               Best fitted model ({sel.best_fitted_model}) changes validation RMSE by {spct(-(sel.rmse_improvement_vs_baseline ?? 0))} relative to the best baseline ({sel.best_baseline}); rule: {sel.rule} ({pct(sel.min_improvement, 0)}).
             </div>
             <Card title="Evaluation metrics" sub="chronological splits; test period never used for fitting or selection" flush>
-              <div className="table-wrap">
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
                 <table className="dt">
                   <thead>
                     <tr><th>Model</th>{["validation", "test"].flatMap((s) => [<th key={`${s}r`} className="r">{s} RMSE <InfoTip metric="rmse" /></th>, <th key={`${s}m`} className="r">{s} MAE</th>, <th key={`${s}2`} className="r">{s} R²</th>, <th key={`${s}q`} className="r">{s} QLIKE</th>])}<th className="r">train RMSE</th></tr>

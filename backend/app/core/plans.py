@@ -18,7 +18,7 @@ TIERS: tuple[str, ...] = ("free", "plus", "pro")  # lowest to highest
 PAID_TIERS: tuple[str, ...] = ("plus", "pro")
 
 # What a visitor without an account may do (per IP address, rolling 24 hours).
-ANONYMOUS: dict[str, int] = {"advisor_daily": 3, "help_ai_daily": 10}
+ANONYMOUS: dict[str, int] = {"advisor_daily": 0, "help_ai_daily": 0}  # visitors: no AI; a free account unlocks it
 
 LIMITS: dict[str, dict[str, int]] = {
     "free": {"investments": 1, "watchlist": 50, "advisor": 20},

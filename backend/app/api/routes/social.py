@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.errors import AuthenticationRequired, NexisError, ValidationFailed
 from app.db.session import get_db
 from app.models import User
-from app.services import auth, newsfeed, oauth, phone, social
+from app.services import account, auth, newsfeed, oauth, phone, social
 
 router = APIRouter(tags=["social"])
 MAX_UPLOAD = 8 * 1024 * 1024
@@ -115,9 +115,49 @@ class PhoneVerify(_Base):
     display_name: str | None = Field(default=None, max_length=60)
 
 
+class ForgotIn(_Base):
+    email: str = Field(min_length=3, max_length=254)
+
+
+class ResetIn(_Base):
+    token: str = Field(min_length=20, max_length=400)
+    password: str = Field(min_length=8, max_length=200)
+
+
+class TokenIn(_Base):
+    token: str = Field(min_length=20, max_length=400)
+
+
+@router.post("/auth/password/forgot")
+def forgot_password(req: ForgotIn, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Email a reset link. The answer is the same whether or not the address has an account."""
+    account.forgot_password(db, request, req.email)
+    return {"sent": True, "message": "If an account uses that address, we've emailed a link to reset the password."}
+
+
+@router.post("/auth/password/reset", status_code=204)
+def reset_password(req: ResetIn, request: Request, db: Session = Depends(get_db)) -> Response:
+    account.reset_password(db, request, req.token, req.password)
+    return Response(status_code=204)
+
+
+@router.post("/auth/email/verify/send")
+def send_verification(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    account.send_verification(db, user)
+    return {"sent": True}
+
+
+@router.post("/auth/email/verify")
+def verify_email(req: TokenIn, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    account.verify_email(db, request, req.token)
+    return {"verified": True}
+
+
 @router.get("/auth/providers")
-def providers() -> dict[str, bool]:
-    return {"email": True, "phone": True, "phone_otp": phone.otp_enabled(), **oauth.configured()}
+def providers() -> dict[str, bool]:  # what sign-in and account-email options are set up
+    from app.services import email
+
+    return {"email": True, "phone": True, "phone_otp": phone.otp_enabled(), "email_delivery": email.available(), **oauth.configured()}
 
 
 @router.post("/auth/phone/start")

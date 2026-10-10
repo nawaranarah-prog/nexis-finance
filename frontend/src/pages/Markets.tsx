@@ -44,7 +44,7 @@ export default function Markets() {
     <>
       <PageHead title="UAE & Global Markets" desc="Every share on Abu Dhabi (ADX) and Dubai (DFM), UAE government bonds and sukuk, plus global stocks, indices, commodities, currencies and crypto — live quotes, fundamentals, analyst ratings and news." />
       <div className="mk-hero">
-        <SymbolSearch autoFocus onPick={(s) => nav(`/markets/${encodeURIComponent(s.symbol)}`)} placeholder="Search any UAE or global stock, bond, sukuk, index or currency…" />
+        <SymbolSearch onPick={(s) => nav(`/markets/${encodeURIComponent(s.symbol)}`)} placeholder="Search any UAE or global stock, bond, sukuk, index or currency…" />
         <div className="row small" style={{ gap: 6, marginTop: 10, flexWrap: "wrap" }}>
           <span className="muted">Popular</span>
           {["FAB.AD", "EMAAR.AE", "ALDAR.AD", "EMIRATESNBD.AE", "ADNOCGAS.AD", "EAND.AD", "DEWA.AE", "IHC.AD", "UAE0734USD.BOND"].map((s) => (
@@ -68,7 +68,7 @@ export default function Markets() {
       <QueryView q={q} label="Loading quotes">
         {(d) => (
           <Card title={d.label} sub={list === "uae" ? `${rows.length} shown · ${d.note}` : d.note} flush>
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
               <table className="dt mk-table">
                 <thead><tr><th>Symbol</th><th>Name</th>{list === "uae" && <th className="hide-sm">Sector</th>}<th className="r">Price</th><th className="r">Change</th>
                   {list === "uae_bonds" ? <><th className="r hide-sm">Yield</th><th className="r hide-sm">Coupon</th><th className="r hide-sm">Maturity</th></>

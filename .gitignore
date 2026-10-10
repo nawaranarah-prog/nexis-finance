@@ -47,3 +47,8 @@ Thumbs.db
 .vercel
 
 .env*
+
+# Test runs (results and screenshots are regenerated; reviewed locally, not committed)
+frontend/test-results/
+frontend/playwright-report/
+tests/screenshots/

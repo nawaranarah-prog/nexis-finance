@@ -13,7 +13,7 @@ import pytest
 
 from app.markets import feeds
 from app.services import advisor, llm, oauth, social
-from tests.helpers import TERMS
+from tests.helpers import TERMS, member
 
 RSS = b"""<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>
 <item><title>Emaar posts record sales &amp; profit</title><link>https://example.com/business/emaar-record</link>
@@ -168,6 +168,7 @@ def test_oauth_unconfigured_redirects_with_message(client):
 
 
 def test_advisor_stream_endpoint_emits_status_delta_done(client, monkeypatch):
+    member(client)  # the AI needs an account
     def unavailable(*a, **k):  # type: ignore[no-untyped-def]
         raise llm.LLMUnavailable("locked")
 
@@ -332,6 +333,7 @@ def test_passwordless_accounts_can_set_a_password(client, monkeypatch):
 
 
 def test_advisor_language_reaches_the_model(client, monkeypatch):
+    member(client)  # the AI needs an account
     seen = {}
 
     def fake_stream(messages, tools=None, **kw):  # type: ignore[no-untyped-def]

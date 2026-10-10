@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { requireAccount, takePending } from "./account";
 import { Markdown } from "./markdown";
+import { useMe } from "./market";
 import { api, ApiError, buildUrl } from "../services/api";
 import { contextFor, isKnownRoute, searchArticles, suggestionsFor, type HelpArticle, type HelpLink } from "../help/search";
 
@@ -14,6 +16,9 @@ type View = { kind: "home" } | { kind: "article"; id: string; from: "home" | "ch
 type Failure = { message: string; question: string; retry: boolean; code?: string };
 
 const MAX = 800;
+const OPEN_EVENT = "nexis:help-open";
+/** Opens the Help panel from anywhere (e.g. a page header button). */
+export const openHelp = () => window.dispatchEvent(new Event(OPEN_EVENT));
 const TIMEOUT_MS = 30_000;
 const MOBILE = "(max-width: 640px)";
 
@@ -59,6 +64,7 @@ export default function HelpAgent() {
   const nav = useNavigate();
   const mobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const signedIn = !!useMe().data?.user;
   const [view, setView] = useState<View>({ kind: "home" });
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
@@ -78,7 +84,9 @@ export default function HelpAgent() {
   const context = contextFor(loc.pathname, loc.hash);
   const suggestions = useMemo(() => suggestionsFor(context, list), [context, list]);
   const results = useMemo(() => (query.trim() ? searchArticles(list, query, context) : []), [list, query, context]);
-  const raised = loc.pathname.startsWith("/advisor") || loc.pathname.startsWith("/assistant");  // keep clear of the chat composer
+  // AI chat pages have their own composer in the bottom-right corner: no floating launcher there at any size; the
+  // page header's Help button opens the panel instead (openHelp()).
+  const chatPage = loc.pathname.startsWith("/advisor") || loc.pathname.startsWith("/assistant");
 
   const close = useCallback(() => {
     abort.current?.abort();
@@ -131,9 +139,24 @@ export default function HelpAgent() {
 
   useEffect(() => () => abort.current?.abort(), []);
 
+  // a question typed before signing up comes back in the box (not sent)
+  const [restored, setRestored] = useState(false);
+  if (signedIn && !restored) {
+    setRestored(true);
+    const kept = takePending("help");
+    if (kept) { setDraft(kept); setOpen(true); }
+  }
+
+  useEffect(() => {
+    const h = () => setOpen(true);
+    window.addEventListener(OPEN_EVENT, h);
+    return () => window.removeEventListener(OPEN_EVENT, h);
+  }, []);
+
   const send = async (raw: string, isRetry = false) => {
     const question = raw.trim();
     if (!question || pending || question.length > MAX) return;
+    if (!signedIn) { requireAccount("ai", { key: "help", value: question }); return; }  // articles stay open; AI answers need an account
     const history = isRetry && msgs.at(-1)?.role === "user" ? msgs.slice(0, -1) : msgs;  // the retried question is sent once
     if (!isRetry) setMsgs((m) => [...m, { id: nextId.current++, role: "user", text: question }]);
     setFailure(null);
@@ -181,8 +204,9 @@ export default function HelpAgent() {
   };
 
   if (!open) {
+    if (chatPage) return null;
     return (
-      <button ref={launcher} type="button" className={`help-launcher ${raised ? "raised" : ""}`} aria-label="Help and support" title="Help and support"
+      <button ref={launcher} type="button" className="help-launcher" aria-label="Help and support" title="Help and support"
         aria-haspopup="dialog" aria-expanded={false} onClick={() => setOpen(true)}>
         <Icon d={HELP_ICON} size={22} />
       </button>
@@ -202,7 +226,7 @@ export default function HelpAgent() {
   );
 
   return (
-    <div ref={panel} className={`help-panel ${raised ? "raised" : ""}`} role="dialog" aria-modal={mobile} aria-labelledby={titleId}>
+    <div ref={panel} className={`help-panel ${chatPage ? "raised" : ""}`} role="dialog" aria-modal={mobile} aria-labelledby={titleId}>
       <header className="help-head">
         {view.kind !== "home" && (
           <button type="button" className="help-icon-btn" aria-label="Back" onClick={() => setView(view.kind === "article" && view.from === "chat" ? { kind: "chat" } : { kind: "home" })}>

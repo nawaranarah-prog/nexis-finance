@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../services/api";
 import { useT } from "../i18n";
 import { rememberTermsChoice } from "../components/pulse";
+import { safeNext } from "../components/account";
 
 function GoogleIcon() {
   return (
@@ -22,7 +23,7 @@ export default function Login() {
   const qc = useQueryClient();
   const { t } = useT();
   const rawNext = sp.get("next");
-  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/pulse";
+  const next = safeNext(rawNext);
   const providers = useQuery({ queryKey: ["auth-providers"], queryFn: () => api.get<Record<string, boolean>>("/auth/providers"), staleTime: 600_000 });
   const [mode, setMode] = useState<"signin" | "signup">(sp.get("mode") === "signup" ? "signup" : "signin");
   const [method, setMethod] = useState<"email" | "phone">("email");
@@ -118,20 +119,20 @@ export default function Login() {
           <form onSubmit={submit} className="stack" style={{ gap: 10 }}>
             {method === "email" ? (
               <label className="fld"><span>{mode === "signin" ? t("Email or username") : t("Email")}</span>
-                <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoFocus /></label>
+                <input className="input" type={mode === "signup" ? "email" : "text"} autoComplete={mode === "signin" ? "username" : "email"} required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
             ) : (
               <label className="fld"><span>{t("Mobile number")}</span>
                 <div className="phone-field" dir="ltr">
                   <span className="phone-cc" aria-hidden>🇦🇪 +971</span>
                   <input className="input" type="tel" inputMode="tel" autoComplete="tel" required placeholder="50 123 4567" value={f.phone} disabled={otp && codeSent}
-                    onChange={(e) => setF({ ...f, phone: e.target.value })} autoFocus />
+                    onChange={(e) => setF({ ...f, phone: e.target.value })} />
                 </div>
                 <span className="xs muted">UAE numbers can be typed as 050 123 4567. For other countries start with + and the country code.</span>
               </label>
             )}
             {otp ? (codeSent && (
               <label className="fld"><span>Code from the SMS</span>
-                <input className="input" inputMode="numeric" autoComplete="one-time-code" required maxLength={10} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} autoFocus /></label>
+                <input className="input" inputMode="numeric" autoComplete="one-time-code" required maxLength={10} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} /></label>
             )) : (
               <label className="fld"><span>{t("Password")}</span>
                 <input className="input" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} required minLength={mode === "signup" ? 8 : 1} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></label>
@@ -143,6 +144,8 @@ export default function Login() {
                 <span>I agree to the Nexis Finance <Link to="/terms" target="_blank">Terms of Use</Link> and acknowledge the <Link to="/privacy" target="_blank">Privacy Policy</Link>.</span>
               </label>
             )}
+            {mode === "signin" && method === "email" && <div className="small"><Link className="touch-link" to="/forgot-password">{t("Forgot password?")}</Link></div>}
+            {sp.get("reset") === "1" && mode === "signin" && <div className="banner neutral small" role="status">Password changed. Sign in with your new password.</div>}
             {err && <div className="banner error small">{err}</div>}
             <button className="btn primary block login-submit" disabled={busy}>
               {busy ? "…" : t(otp ? (codeSent ? "Verify and continue" : "Send me a code") : mode === "signin" ? "Sign in" : "Create account")}
@@ -155,7 +158,7 @@ export default function Login() {
                 : <>{t("Already have an account?")} <button className="link-btn" onClick={() => { setMode("signin"); setErr(null); }}>{t("Sign in")}</button></>}
             </div>
           )}
-          <div className="xs muted" style={{ marginTop: 18, textAlign: "center" }}><Link to="/">{t("Continue without an account →")}</Link></div>
+          <div className="xs muted" style={{ marginTop: 18, textAlign: "center" }}><Link className="touch-link" to="/">{t("Continue without an account →")}</Link></div>
         </div>
       </main>
     </div>

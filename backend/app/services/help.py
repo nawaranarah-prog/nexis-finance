@@ -6,8 +6,8 @@
   (plan, subscription status, investment counts — never holdings, never other accounts). It cannot act: it never
   changes billing, investments or anything else, and it says so if asked.
 
-Cost controls: answers are short, per-account and per-IP daily limits apply (``plans.HELP_AI_DAILY``,
-``plans.ANONYMOUS["help_ai_daily"]``), and nothing is called until a member actually sends a question. Questions
+Cost controls: members only, answers are short, a per-account daily limit applies (``plans.HELP_AI_DAILY``), and
+nothing is called until a member actually sends a question. Questions
 are not stored or logged.
 """
 
@@ -134,14 +134,11 @@ Rules:
 
 
 def _limit(db: Session, user: User | None, request: Request) -> None:
+    if user is None:  # the route requires an account; this is a second line of defence
+        raise HelpLimitReached("Sign in to ask the AI. You can still search the help articles.", details={"signed_in": False})
     try:
-        ratelimit.hit(db, f"help-burst:{user.id if user else ratelimit.client_ip(request)}", 8, timedelta(minutes=1))
-        if user is not None:
-            ratelimit.hit(db, f"help-ai:{user.id}", plans.HELP_AI_DAILY, timedelta(hours=24))
-        else:
-            ratelimit.hit(
-                db, f"help-ai-anon:{ratelimit.client_ip(request)}", plans.ANONYMOUS["help_ai_daily"], timedelta(hours=24)
-            )
+        ratelimit.hit(db, f"help-burst:{user.id}", 8, timedelta(minutes=1))
+        ratelimit.hit(db, f"help-ai:{user.id}", plans.HELP_AI_DAILY, timedelta(hours=24))
     except ratelimit.RateLimited as exc:
         raise HelpLimitReached(
             "You've reached the limit for AI help answers for now. You can still search the help articles.",

@@ -47,12 +47,16 @@ const AuditLog = lazy(() => import("./pages/AuditLog"));
 const Developer = lazy(() => import("./pages/Developer"));
 const Assistant = lazy(() => import("./pages/Assistant"));
 const Login = lazy(() => import("./pages/Login"));
+const ForgotPassword = lazy(() => import("./pages/AccountEmail").then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import("./pages/AccountEmail").then((m) => ({ default: m.ResetPassword })));
+const VerifyEmail = lazy(() => import("./pages/AccountEmail").then((m) => ({ default: m.VerifyEmail })));
 const Home = lazy(() => import("./pages/Home"));
 const InstaTopic = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.TopicPage })));
 const Markets = lazy(() => import("./pages/Markets"));
 const Instrument = lazy(() => import("./pages/Instrument"));
 const Advisor = lazy(() => import("./pages/Advisor"));
 const Compare = lazy(() => import("./pages/Compare"));
+const WorldGraph = lazy(() => import("./pages/WorldGraph"));
 const Valuation = lazy(() => import("./pages/Valuation"));
 const Finstagram = lazy(() => import("./pages/Finstagram"));
 const InstaPost = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.PostPage })));
@@ -174,6 +178,9 @@ export default function App() {
           <Route path="/pro" element={<Pro />} />
           <Route path="/pricing" element={<Navigate to="/pro" replace />} />
           <Route path="/pro/welcome" element={<ProWelcome />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/terms" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />
           <Route path="/disclaimer" element={<Legal />} />
@@ -181,6 +188,8 @@ export default function App() {
           <Route path="/ai-disclosure" element={<Legal />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/compare" element={<Compare />} />
+          <Route path="/world-graph" element={<WorldGraph />} />
+          <Route path="/world-graph/:id" element={<WorldGraph />} />
           <Route path="/valuation" element={<Valuation />} />
           <Route path="/valuation/:symbol" element={<Valuation />} />
           <Route path="/finstagram" element={<Finstagram />} />

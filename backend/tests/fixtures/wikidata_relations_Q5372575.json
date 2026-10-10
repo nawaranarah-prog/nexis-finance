@@ -1,0 +1,138 @@
+{
+ "head": {
+  "vars": [
+   "dir",
+   "prop",
+   "other",
+   "otherLabel",
+   "otherDescription",
+   "st",
+   "start",
+   "end",
+   "ticker",
+   "refUrl",
+   "statedInLabel"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q5372575-207661ba-4ef2-817e-2896-2ced150b5984"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q806718"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P452"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "economics of banking"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "field in economics"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q5372575-4c628539-46ea-40cc-ebb2-62d36e815025"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q837171"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P452"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "financial services"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "economic service provided by the finance industry"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q5372575-EC1E0B0E-F3AA-41C9-8731-BA52DD045C60"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q57774188"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P452"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "financial sector"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "all companies working in financial services"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q5372575-F391EECF-D577-4813-BDC5-6A79B7F89B95"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q878"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P17"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "United Arab Emirates"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "country in Western Asia"
+    },
+    "statedInLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "GRID Release 2017-05-22"
+    }
+   }
+  ]
+ }
+}

@@ -13,6 +13,7 @@ import "./styles-home.css";
 import "./styles-pulse.css";
 import "./styles-intel.css";
 import "./styles-np.css";
+import "./styles-graph.css";
 
 const client = new QueryClient({
   defaultOptions: {

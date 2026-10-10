@@ -8,7 +8,6 @@ Public functions (everything else in Nexis calls these, never checks a plan itse
 * ``get_user_entitlements(db, user)`` — plan, limits, capabilities and current usage, for the API and Settings.
 * ``consume_usage(db, user, feature)`` — count one monthly use or refuse; ``refund`` gives it back if the work failed.
 * ``check_capacity(db, user, feature, adding)`` — capacity limits (investments, watchlist): refuses going over.
-* ``anonymous_advisor(db, request)`` — the daily allowance for visitors without an account.
 
 Limits, prices and capabilities come from ``app/core/plans.py``. Paid access follows the provider's status:
 
@@ -34,7 +33,6 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -263,22 +261,3 @@ def check_capacity(db: Session, user: User, feature: str, adding: int = 1) -> No
     n, cap = used(db, user, feature), limit(feature, plan)
     if n + adding > cap:
         raise limit_error(feature, plan, n, cap)
-
-
-# ------------------------------------------------------------------ visitors
-
-
-def anonymous_advisor(db: Session, request: Request) -> None:
-    """Visitors get a few Advisor messages a day (per IP, server-side) before being asked to create a free account."""
-    from app.services import ratelimit
-
-    n = plans.ANONYMOUS["advisor_daily"]
-    try:
-        ratelimit.hit(db, f"anon-advisor:{ratelimit.client_ip(request)}", n, timedelta(hours=24))
-    except ratelimit.RateLimited as exc:
-        free = limit("advisor", "free")
-        raise SignInRequired(
-            "You've reached today's free AI Advisor limit.",
-            details={"feature": "advisor", "free_limit": free,
-                     "next": f"Create a free Nexis account to continue with {free} AI Advisor messages per month."},
-        ) from exc  # fmt: skip

@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     external_data_enabled: bool = True
     # SEC fair-access policy requires a descriptive User-Agent with contact details.
     sec_user_agent: str = "NexisFinance research contact@example.com"
+    # Wikidata asks for a descriptive User-Agent with a way to reach the operator (set a real contact in production).
+    wikidata_user_agent: str = "NexisFinance/1.0 (https://nexis-finance-five.vercel.app) httpx"
+    # Tests only: answer Wikidata calls from recorded responses in this directory instead of the network.
+    wikidata_fixtures_dir: str | None = None
 
     # Fernet key (urlsafe base64, 32 bytes) used to encrypt connection credentials at rest.
     # Development falls back to a generated key in backend/.nexis_secret (git-ignored).
@@ -104,6 +108,14 @@ class Settings(BaseSettings):
     pulse_tick_minutes: int = 40
     # Email delivery for digests (not connected; digests are prepared and kept until a provider is added).
     email_provider: str | None = None
+    # Account emails (verification, password reset) through any SMTP server. Unset → those emails are unavailable and
+    # the site says so. 465 uses implicit TLS; other ports use STARTTLS when smtp_starttls is true.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_starttls: bool = True
 
     # Abuse protection for public endpoints (per client IP, per hour).
     advisor_requests_per_hour: int = 20
@@ -122,8 +134,12 @@ class Settings(BaseSettings):
     pulse_editorial_per_tick: int = 3
     # ---- Nexis Pro billing (Stripe Checkout + Billing). Unset keys mean billing is off: Pro can't be bought and
     # the site says so instead of showing prices. The secret key never reaches the browser.
-    stripe_secret_key: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY"))
-    stripe_webhook_secret: str | None = Field(default=None, validation_alias=AliasChoices("NEXIS_STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET"))
+    stripe_secret_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_SECRET_KEY", "STRIPE_SECRET_KEY")
+    )
+    stripe_webhook_secret: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET")
+    )
     # The two plans on sale (monthly, AED). New names on purpose: the earlier USD price ids can't be picked up by mistake.
     stripe_plus_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PLUS_MONTHLY_AED_PRICE_ID", "STRIPE_PLUS_MONTHLY_AED_PRICE_ID")

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SymbolSearch, useMe } from "./market";
@@ -8,6 +8,7 @@ import { api, ApiError, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
 import { handlePlanError } from "./pro";
 import { RedditEmbed } from "./RedditEmbed";
+import { requireAccount } from "./account";
 
 // ------------------------------------------------------------------ time
 
@@ -48,10 +49,9 @@ export function rememberTermsChoice(versions: { terms_version: string; privacy_v
 /** Runs a write; sends signed-out visitors to sign in and asks for the Terms when the server says they're needed. */
 export function useParticipate() {
   const me = useMe().data?.user;
-  const nav = useNavigate();
   return async function participate<T>(fn: () => Promise<T>): Promise<T | undefined> {
     if (!me) {
-      nav(`/login?mode=signup&next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      requireAccount("pulse");
       return undefined;
     }
     if (me.legal && !me.legal.accepted) {
@@ -62,8 +62,7 @@ export function useParticipate() {
       return await fn();
     } catch (e) {
       if (e instanceof ApiError && e.code === "terms_required") { requireTerms(); return undefined; }
-      if (handlePlanError(e)) return undefined;  // a plan limit: explained in the upgrade dialog
-      if (e instanceof ApiError && e.status === 401) { nav(`/login?next=${encodeURIComponent(window.location.pathname)}`); return undefined; }
+      if (handlePlanError(e, "pulse")) return undefined;  // a plan limit or a lost session: explained in a dialog
       throw e;
     }
   };
@@ -222,7 +221,8 @@ export function Reactions({ type, id, counts, mine, own, onChange }: {
 }) {
   const participate = useParticipate();
   const [state, setState] = useState({ counts, mine });
-  useEffect(() => setState({ counts, mine }), [counts, mine]);
+  const [from, setFrom] = useState({ counts, mine });
+  if (from.counts !== counts || from.mine !== mine) { setFrom({ counts, mine }); setState({ counts, mine }); }  // new data from the server wins
   const press = async (kind: string) => {
     try {
       const r = await participate(() => api.post<AnyObj>("/pulse/reactions", { target_type: type, target_id: String(id), kind }));
@@ -294,6 +294,8 @@ export function Composer({ symbol, topic, onClose }: { symbol?: string; topic?: 
   const qc = useQueryClient();
   const meta = useQuery({ queryKey: ["pulse-meta"], queryFn: () => api.get<AnyObj>("/pulse/meta"), staleTime: 3600_000 });
   const [title, setTitle] = useState("");
+  const titleRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { titleRef.current?.focus(); }, []);  // the composer opens on request, so the title takes focus
   const [body, setBody] = useState("");
   const [asset, setAsset] = useState<AnyObj | null>(symbol ? { symbol } : null);
   const [stance, setStance] = useState<string>("question");
@@ -323,7 +325,7 @@ export function Composer({ symbol, topic, onClose }: { symbol?: string; topic?: 
         <span className="np-by">Posting as Anonymous</span>
       </div>
       <input className="input np-title-in" placeholder="Ask a question or make a claim — e.g. Is NVIDIA's valuation still justified?" value={title} maxLength={160}
-        onChange={(e) => setTitle(e.target.value)} required minLength={10} autoFocus aria-label="Title" />
+        onChange={(e) => setTitle(e.target.value)} required minLength={10} ref={titleRef} aria-label="Title" />
       <textarea className="input" rows={5} maxLength={6000} placeholder="Your reasoning (optional). What do you see that others might be missing?" value={body}
         onChange={(e) => setBody(e.target.value)} aria-label="Details" />
       <div className="np-compose-grid">

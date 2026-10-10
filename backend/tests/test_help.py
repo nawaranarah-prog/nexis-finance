@@ -9,7 +9,7 @@ import pytest
 
 from app.core import plans
 from app.services import help, llm
-from tests.helpers import TERMS
+from tests.helpers import TERMS, member
 
 
 def _signup(client) -> dict[str, Any]:  # type: ignore[no-untyped-def]
@@ -60,6 +60,7 @@ def test_search_ranks_relevant_articles():
 
 
 def test_answers_are_grounded_and_use_only_the_askers_own_account(client, ai):
+    member(client)  # the AI needs an account
     u = _signup(client)
     r = client.post("/api/help/ask", json={"question": "How do I cancel my subscription?", "context": "billing"}, headers=_hdr())
     assert r.status_code == 200
@@ -74,11 +75,13 @@ def test_answers_are_grounded_and_use_only_the_askers_own_account(client, ai):
     assert u["email"] not in system  # identity isn't sent to the model, only plan facts
     client.post("/api/auth/logout")
     client.cookies.clear()
-    client.post("/api/help/ask", json={"question": "How do I cancel?"}, headers=_hdr())
-    assert "not signed in" in ai[-1][0]["content"] and "Plan:" not in ai[-1][0]["content"]
+    n = len(ai)
+    assert client.post("/api/help/ask", json={"question": "How do I cancel?"}, headers=_hdr()).status_code == 401
+    assert len(ai) == n  # visitors never reach the model
 
 
 def test_validation_and_unknown_context(client, ai):
+    member(client)  # the AI needs an account
     assert client.post("/api/help/ask", json={"question": ""}, headers=_hdr()).status_code == 422
     assert client.post("/api/help/ask", json={"question": "x" * (help.MAX_QUESTION + 1)}, headers=_hdr()).status_code == 422
     assert (
@@ -98,6 +101,7 @@ def test_validation_and_unknown_context(client, ai):
 
 
 def test_without_ai_configured_the_help_center_still_works(client, monkeypatch):
+    member(client)  # the AI needs an account
     monkeypatch.setattr(llm, "status", lambda: {"configured": False})
     r = client.post("/api/help/ask", json={"question": "How do I cancel?"}, headers=_hdr())
     assert r.status_code == 503 and r.json()["error"]["code"] == "help_ai_unavailable"
@@ -105,6 +109,7 @@ def test_without_ai_configured_the_help_center_still_works(client, monkeypatch):
 
 
 def test_provider_failure_is_reported_not_invented(client, monkeypatch):
+    member(client)  # the AI needs an account
     monkeypatch.setattr(llm, "status", lambda: {"configured": True})
 
     def down(*a, **k):  # type: ignore[no-untyped-def]
@@ -115,18 +120,16 @@ def test_provider_failure_is_reported_not_invented(client, monkeypatch):
     assert r.status_code == 503 and "couldn't answer" in r.json()["error"]["message"]
 
 
-def test_daily_limits_for_visitors(client, ai):
+def test_visitors_cannot_use_ai_answers_but_can_read_articles(client, ai):
     client.post("/api/auth/logout")
     client.cookies.clear()
-    h = _hdr()
-    codes = []
-    for i in range(plans.ANONYMOUS["help_ai_daily"] + 1):
-        if i and i % 7 == 0:  # stay under the per-minute burst guard; this test is about the daily cap
-            from app.db import session as db_session
-            from app.models import RateEvent
+    r = client.post("/api/help/ask", json={"question": "How does Pulse work?"}, headers=_hdr())
+    assert r.status_code == 401 and not ai
+    assert client.get("/api/help/articles").status_code == 200
 
-            with db_session.SessionLocal() as s:
-                s.query(RateEvent).filter(RateEvent.bucket.like("help-burst:%")).delete(synchronize_session=False)
-                s.commit()
-        codes.append(client.post("/api/help/ask", json={"question": f"How does Pulse work {i}?"}, headers=h).status_code)
-    assert codes[:-1] == [200] * plans.ANONYMOUS["help_ai_daily"] and codes[-1] == 429
+
+def test_member_daily_limit(client, ai, monkeypatch):
+    monkeypatch.setattr(plans, "HELP_AI_DAILY", 3)
+    member(client)
+    codes = [client.post("/api/help/ask", json={"question": f"How does Pulse work {i}?"}, headers=_hdr()).status_code for i in range(4)]
+    assert codes == [200, 200, 200, 429]

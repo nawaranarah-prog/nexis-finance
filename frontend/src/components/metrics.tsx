@@ -43,7 +43,7 @@ export function MetricStrip({ summary, keys, notes }: { summary: AnyObj | null |
 export function MetricCompare({ columns, keys }: { columns: { name: string; values: AnyObj | null | undefined }[]; keys: string[] }) {
   const g = useGlossary();
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
       <table className="dt">
         <thead>
           <tr><th>Metric</th>{columns.map((c) => <th key={c.name} className="r">{c.name}</th>)}</tr>

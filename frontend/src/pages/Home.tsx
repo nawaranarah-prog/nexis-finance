@@ -159,7 +159,7 @@ function Wire() {
     const text = (p.link ? body.slice(1) : body).join(" ").replace(/[#$][\w.=^-]+/g, "").replace(/\s+/g, " ").trim();
     return text.length > 220 ? `${text.slice(0, 217)}…` : text;
   };
-  const Meta = ({ p }: { p: AnyObj }) => {
+  const meta = (p: AnyObj) => {
     const news = p.author.kind === "page";
     return (
       <span className="wire-meta">
@@ -184,7 +184,7 @@ function Wire() {
             </Link>
           )}
           <div className="wire-lead-text">
-            <Meta p={lead} />
+            {meta(lead)}
             <Link to={`/finstagram/p/${lead.id}`} className="wire-lead-h" dir="auto">{headline(lead)}</Link>
             {summary(lead) && <p className="wire-sum" dir="auto">{summary(lead)}</p>}
             <Link className="wire-ask" to={`/advisor?post=${lead.id}`}>
@@ -200,7 +200,7 @@ function Wire() {
               <time className="wire-time num" dateTime={p.created_at}>{dubai(p.created_at, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</time>
               <span className="wire-body">
                 <span className="wire-h" dir="auto">{headline(p)}</span>
-                <Meta p={p} />
+                {meta(p)}
               </span>
             </Link>
           </li>
@@ -245,7 +245,7 @@ function Watchlist() {
         <div className="hm-empty-state">
           <p>{t("Keep the stocks, bonds and indices you research in one place, with live prices and a month of history.")}</p>
           <Link className="btn primary sm" to="/login?mode=signup&next=/">{t("Create a free account")}</Link>
-          <span className="xs muted"> {t("or")} <Link to="/login?next=/">{t("sign in")}</Link></span>
+          <span className="xs muted"> {t("or")} <Link className="touch-link" to="/login?next=/">{t("sign in")}</Link></span>
         </div>
       )}
       {signedIn && following.isSuccess && !symbols.length && (
@@ -317,7 +317,7 @@ function Movers() {
   const items: AnyObj[] = (uae.data?.items ?? []).filter((x: AnyObj) => Number.isFinite(x.change_pct));
   const up = [...items].sort((a, b) => b.change_pct - a.change_pct).slice(0, 5);
   const down = [...items].sort((a, b) => a.change_pct - b.change_pct).slice(0, 5);
-  const Table = ({ title, rows }: { title: string; rows: AnyObj[] }) => (
+  const table = (title: string, rows: AnyObj[]) => (
     <div className="mv-col">
       <div className="mv-title">{title}</div>
       {rows.map((x) => (
@@ -335,7 +335,7 @@ function Movers() {
     <section className="hm-movers">
       <SectionHead title={t("UAE movers")} sub={uae.data ? `${items.length} ${t("ADX and DFM shares")} · ${t("delayed")}` : undefined} to="/markets?list=uae" cta={t("All UAE shares")} />
       {uae.isError ? <div className="hm-error">{errorMessage(uae.error)}</div> : (
-        <div className="mv-cols"><Table title={t("Top gainers")} rows={up} /><Table title={t("Biggest decliners")} rows={down} /></div>
+        <div className="mv-cols">{table(t("Top gainers"), up)}{table(t("Biggest decliners"), down)}</div>
       )}
     </section>
   );
@@ -347,8 +347,9 @@ export default function Home() {
   const { t, lang } = useT();
   const search = useRef<ResearchSearchHandle>(null);
   const status = useQuery({ queryKey: ["advisor-status"], queryFn: () => api.get<AnyObj>("/advisor/status"), staleTime: 300_000 });
+  const [now] = useState(() => new Date());
   const open = uaeSession();
-  const today = new Intl.DateTimeFormat(lang === "ar" ? "ar-AE" : "en-GB", { timeZone: "Asia/Dubai", weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  const today = new Intl.DateTimeFormat(lang === "ar" ? "ar-AE" : "en-GB", { timeZone: "Asia/Dubai", weekday: "long", day: "numeric", month: "long" }).format(now);
 
   // "/" jumps to the research box from anywhere on the page.
   useEffect(() => {

@@ -1,0 +1,150 @@
+/* World Graph. Kind colours and evidence styles are tokens so they follow light/dark themes. Evidence status is
+   never shown by colour alone: lines are solid / dashed / dotted / dash-dot, and badges carry the word. */
+
+:root {
+  --wg-company: #1d66bd;
+  --wg-organization: #7a4fb5;
+  --wg-exchange: #00796b;
+  --wg-industry: #a05a00;
+  --wg-country: #5b6b2e;
+  --wg-other: #77756d;
+  --wg-verified: #1d66bd;
+  --wg-uncertain: #8a6a1f;
+  --wg-historical: #77756d;
+  --wg-inferred: #7a4fb5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --wg-company: #5d9be6;
+    --wg-organization: #b08ae0;
+    --wg-exchange: #3fb8a8;
+    --wg-industry: #e0a050;
+    --wg-country: #a8bc6a;
+    --wg-other: #a3a197;
+    --wg-verified: #5d9be6;
+    --wg-uncertain: #e0b552;
+    --wg-historical: #a3a197;
+    --wg-inferred: #b08ae0;
+  }
+}
+:root[data-theme="dark"] {
+  --wg-company: #5d9be6;
+  --wg-organization: #b08ae0;
+  --wg-exchange: #3fb8a8;
+  --wg-industry: #e0a050;
+  --wg-country: #a8bc6a;
+  --wg-other: #a3a197;
+  --wg-verified: #5d9be6;
+  --wg-uncertain: #e0b552;
+  --wg-historical: #a3a197;
+  --wg-inferred: #b08ae0;
+}
+
+.wg { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.wg h2, .wg-h2 { font-size: max(16px, var(--fs-floor)); margin: 0 0 8px; }
+.wg h3 { font-size: max(15px, var(--fs-floor)); margin: 0 0 6px; overflow-wrap: anywhere; }
+.wg h4 { font-size: max(13px, var(--fs-floor)); margin: 14px 0 6px; color: var(--text-2); }
+.wg-intro, .wg-start, .wg-saved, .wg-between, .wg-inspector { padding: 16px; }
+.wg-intro ul { margin: 8px 0 12px; padding-inline-start: 20px; line-height: 1.6; }
+
+.wg-search { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wg-search-row { display: flex; gap: 8px; min-width: 0; }
+.wg-search-row .input { flex: 1; min-width: 0; height: 38px; }
+.wg-choices { display: flex; flex-direction: column; gap: 6px; }
+.wg-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: start; padding: 8px 12px; min-height: 44px;
+  font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); cursor: pointer; }
+.wg-choice:hover:not(:disabled), .wg-choice:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
+.linkish { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-align: start; text-decoration: underline; text-underline-offset: 2px; }
+.wg-saved-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.wg-center-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.wg-center-head h2 { font-size: max(20px, var(--fs-floor)); margin: 0; }
+.wg-save .input { height: 32px; min-width: 0; width: min(280px, 100%); }
+
+.wg-toolbar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: flex-start; }
+.wg-tool { display: flex; flex-direction: column; gap: 4px; }
+.wg-tool-label, .wg-filter legend { font-size: max(11px, var(--fs-floor)); font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.wg-filters { min-width: 0; }
+.wg-filters > summary { cursor: pointer; font-weight: 600; font-size: max(13px, var(--fs-floor)); min-height: 44px; min-width: 88px; display: flex; align-items: center; }
+.wg-filters-body { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+@media (min-width: 641px) { .wg-filters > summary { display: none; } }
+.wg-filter { display: flex; flex-wrap: wrap; gap: 4px 12px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.wg-filter legend { padding: 0; margin-bottom: 4px; }
+.wg-check { display: inline-flex; align-items: center; gap: 6px; font-size: max(13px, var(--fs-floor)); cursor: pointer; }
+.wg-swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--wg-verified); }
+.wg-check.st-uncertain .wg-swatch { border-top: 2px dashed var(--wg-uncertain); }
+.wg-check.st-historical .wg-swatch { border-top: 2px dotted var(--wg-historical); }
+.wg-check.st-inferred .wg-swatch { border-top: 2px dashed var(--wg-inferred); }
+
+.wg-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+.wg-canvas { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wg-inspector { position: sticky; top: 72px; max-height: calc(100vh - 90px); overflow: auto; }
+@media (max-width: 1000px) {
+  .wg-main { grid-template-columns: minmax(0, 1fr); }
+  .wg-inspector { position: static; max-height: none; }
+}
+
+.wg-svg-wrap { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.wg-svg { display: block; width: 100%; height: clamp(360px, 62vh, 680px); touch-action: none; cursor: grab; user-select: none; }
+.wg-svg:active { cursor: grabbing; }
+.wg-zoom { position: absolute; top: 8px; inset-inline-end: 8px; display: flex; gap: 4px; z-index: 1; }
+.wg-hint { margin: 0; padding: 4px 10px 8px; }
+
+.wg-edge { stroke: var(--wg-verified); fill: none; }
+.wg-edge.st-uncertain { stroke: var(--wg-uncertain); }
+.wg-edge.st-historical { stroke: var(--wg-historical); }
+.wg-edge.st-inferred { stroke: var(--wg-inferred); }
+.wg-edge.on { stroke: var(--text); }
+.wg-edge-hit { stroke: transparent; cursor: pointer; }
+.wg-arrowhead { fill: var(--muted); }
+
+.wg-node { cursor: pointer; outline: none; --k: var(--wg-other); }
+.wg-node.k-company { --k: var(--wg-company); }
+.wg-node.k-organization { --k: var(--wg-organization); }
+.wg-node.k-exchange { --k: var(--wg-exchange); }
+.wg-node.k-industry { --k: var(--wg-industry); }
+.wg-node.k-country { --k: var(--wg-country); }
+.wg-node circle { fill: var(--k); stroke: var(--surface); }
+.wg-node.centre circle { stroke: var(--text); }
+.wg-node.on circle { stroke: var(--text); }
+.wg-node .wg-focus { fill: transparent; stroke: none; }
+.wg-node:focus-visible .wg-focus { stroke: var(--accent); stroke-width: 2; fill: var(--accent-soft); }
+.wg-node .wg-more { fill: none; stroke: var(--k); }
+.wg-label { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; font-family: var(--font); }
+.wg-node.centre .wg-label { font-weight: 700; }
+
+.wg-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: max(12px, var(--fs-floor)); }
+.wg-legend-group { display: inline-flex; flex-wrap: wrap; gap: 6px 12px; }
+.wg-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.wg-legend-item .wg-dot { fill: var(--wg-other); }
+.wg-legend-item.k-company .wg-dot { fill: var(--wg-company); }
+.wg-legend-item.k-organization .wg-dot { fill: var(--wg-organization); }
+.wg-legend-item.k-exchange .wg-dot { fill: var(--wg-exchange); }
+.wg-legend-item.k-industry .wg-dot { fill: var(--wg-industry); }
+.wg-legend-item.k-country .wg-dot { fill: var(--wg-country); }
+
+.wg-badge.st-verified { color: var(--accent-ink); background: var(--accent-soft); border-color: transparent; }
+.wg-badge.st-uncertain { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.wg-badge.st-historical { color: var(--text-2); }
+.wg-badge.st-inferred { color: var(--text-2); border-style: dashed; }
+
+.wg-table td { white-space: normal; }
+.wg-evidence, .wg-rels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.wg-evidence li { padding: 8px 10px; background: var(--surface-2); border-radius: var(--radius); overflow-wrap: anywhere; }
+.wg-evidence p { margin: 4px 0; }
+.wg-rels li { overflow-wrap: anywhere; }
+
+.wg-between-pick { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 12px; align-items: end; }
+.wg-between-pick .fld { margin-top: 0; }
+.wg-between-out { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+.wg-path { margin: 0; padding-inline-start: 20px; line-height: 1.7; }
+@media (max-width: 640px) {
+  .wg-between-pick { grid-template-columns: minmax(0, 1fr); }
+  .wg-svg { height: 420px; }
+}
+.wg-foot { margin: 0; }
+
+.wg-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wg-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; padding: 10px 12px; min-height: 44px; text-align: start;
+  font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; overflow-wrap: anywhere; }
+.wg-card:hover, .wg-card:focus-visible { border-color: var(--accent); }

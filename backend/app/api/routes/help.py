@@ -36,7 +36,7 @@ def articles(response: Response) -> dict[str, Any]:
 
 @router.post("/help/ask")
 def ask(
-    req: AskIn, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+    req: AskIn, request: Request, viewer: User = Depends(auth.require_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """Answers about using Nexis. Signed-in members get answers about their own plan; nothing is stored."""
+    """AI answers about using Nexis — members only (the help articles stay public). Nothing is stored."""
     return help.ask(db, viewer, request, req.question, req.context, [t.model_dump() for t in req.history])

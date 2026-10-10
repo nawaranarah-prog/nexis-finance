@@ -1,5 +1,5 @@
 import { askConfirm } from "../components/dialog";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Plot from "../components/Plot";
@@ -183,7 +183,8 @@ function Analytics({ p, rf, window_, onEdit, onDeleted, others }: { p: Portfolio
   const qc = useQueryClient();
   const [range, setRange] = useState({ start: "", end: "" });
   const [cmpId, setCmpId] = useState<number | null>(null);
-  useEffect(() => setCmpId(null), [p.id]);
+  const [forId, setForId] = useState(p.id);
+  if (forId !== p.id) { setForId(p.id); setCmpId(null); }
   const q = useQuery({
     queryKey: ["portfolio-analytics", p.id, p.updated_at, range, rf, window_],
     queryFn: () => api.get<AnyObj>(`/portfolios/${p.id}/analytics`, { start: range.start, end: range.end, risk_free_rate: rf, rolling_window: window_ }),
@@ -301,7 +302,7 @@ function Analytics({ p, rf, window_, onEdit, onDeleted, others }: { p: Portfolio
       <Card title="Compare with another portfolio" actions={<div style={{ width: 240 }}><PortfolioSelect portfolios={others.filter((o) => o.id !== p.id)} value={cmpId} onChange={setCmpId} allowEmpty="Select portfolio…" /></div>}>
         {cmp.data ? (
           <div className="grid g2">
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
               <table className="dt">
                 <thead><tr><th>Metric</th><th className="r">{cmp.data.a.name}</th><th className="r">{cmp.data.b.name}</th></tr></thead>
                 <tbody>{cmp.data.metrics.map((m: AnyObj) => <tr key={m.metric}><td>{m.metric.replace(/_/g, " ")}</td><td className="r">{fmt(m.metric, m.a)}</td><td className="r">{fmt(m.metric, m.b)}</td></tr>)}</tbody>

@@ -1,0 +1,77 @@
+{
+ "head": {
+  "vars": [
+   "dir",
+   "prop",
+   "other",
+   "otherLabel",
+   "otherDescription",
+   "st",
+   "start",
+   "end",
+   "ticker",
+   "refUrl",
+   "statedInLabel"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-574d6c8d-48d0-5b63-4776-fa7b611395d0"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1153463"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P355"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Emaar Properties"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "company"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q55610796-a147f928-4748-4892-3b08-a7427c126af0"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1153463"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P749"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Emaar Properties"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "company"
+    }
+   }
+  ]
+ }
+}

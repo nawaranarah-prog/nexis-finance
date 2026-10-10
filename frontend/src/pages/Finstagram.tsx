@@ -8,6 +8,7 @@ import { ErrorState, Loading } from "../components/ui";
 import { toast } from "../components/toast";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
+import { requireAccount } from "../components/account";
 
 // ------------------------------------------------------------------ helpers
 
@@ -79,10 +80,9 @@ function LinkedBadges({ user }: { user: AnyObj }) {
 
 function useGate(): { me: AnyObj | null; gate: Gate } {
   const me = useMe();
-  const nav = useNavigate();
   const gate: Gate = (why, fn) => {
     if (me.data?.user) fn();
-    else { toast("info", why, "Sign in or create a free account — it takes a few seconds."); nav(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`); }
+    else { void why; requireAccount("finstagram"); }
   };
   return { me: me.data?.user ?? null, gate };
 }
@@ -188,7 +188,8 @@ function PostMedia({ post, onDoubleTap, pop }: { post: AnyObj; onDoubleTap: () =
   if (!link) return null;
   if (vid) return <VideoEmbed id={vid} title={link.title} />;
   if (link.image && !broken) return (
-    <a className="post-media linked" href={link.url} target="_blank" rel="noreferrer noopener" onDoubleClick={(e) => { e.preventDefault(); onDoubleTap(); }}>
+    <a className="post-media linked" href={link.url} target="_blank" rel="noreferrer noopener"
+      aria-label={`Read on ${link.source || host(link.url)}: ${link.title ?? ""}`} onDoubleClick={(e) => { e.preventDefault(); onDoubleTap(); }}>
       <img src={link.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
       {pop && <span className="heart-pop" aria-hidden>♥</span>}
     </a>
@@ -286,7 +287,8 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
   const [more, setMore] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const { t } = useT();
-  useEffect(() => { setLiked(post.liked_by_me); setLikes(post.like_count); setSaved(post.saved_by_me); setFollowing(post.author.followed_by_me); }, [post]);
+  const [forPost, setForPost] = useState(post);
+  if (forPost !== post) { setForPost(post); setLiked(post.liked_by_me); setLikes(post.like_count); setSaved(post.saved_by_me); setFollowing(post.author.followed_by_me); }
 
   const like = () => gate("Sign in to like posts", async () => {
     setLiked(!liked); setLikes(likes + (liked ? -1 : 1));
@@ -348,7 +350,7 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
           <div className="post-more">
             <button className="icon-btn" aria-label="More options" onClick={() => setMore(!more)}><Icon name="more" /></button>
             {more && (
-              <div className="share-menu popover-in" role="menu" style={{ right: 0, left: "auto", transformOrigin: "top right" }} onMouseLeave={() => setMore(false)}>
+              <div className="share-menu popover-in" role="menu" tabIndex={-1} style={{ right: 0, left: "auto", transformOrigin: "top right" }} onMouseLeave={() => setMore(false)}>
                 <button role="menuitem" onClick={() => { setMore(false); save(); }}>{saved ? t("Remove from saved") : t("Save")}</button>
                 <Link role="menuitem" to={`/advisor?post=${post.id}`}>✦ {t("Ask the AI advisor about this")}</Link>
                 <button role="menuitem" onClick={() => feedback("more")}>{t("Suggest more like this")}</button>
@@ -674,8 +676,8 @@ function EditProfile({ me, onClose }: { me: AnyObj; onClose: () => void }) {
     } catch (e) { toast("error", "Could not delete the account", errorMessage(e)); }
   };
   return (
-    <div className="modal-scrim" onMouseDown={onClose}>
-      <div className="modal popover-in" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="modal-scrim" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal popover-in" role="dialog" aria-modal="true" aria-label="Edit profile">
         <div className="modal-head"><b>Edit profile</b><button className="icon-btn" aria-label="Close" onClick={onClose}>✕</button></div>
         <div className="row" style={{ gap: 12, marginBottom: 10 }}>
           <Avatar user={me} size={56} />

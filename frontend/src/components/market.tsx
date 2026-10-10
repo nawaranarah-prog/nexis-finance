@@ -51,11 +51,13 @@ export function SymbolSearch({ onPick, placeholder = "Search any stock, ETF, ind
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (autoFocus) input.current?.focus(); }, [autoFocus]);  // only where the search is the page's purpose
   const items = res.data ?? [];
   const pick = (s: AnyObj) => { onPick(s); setQ(""); setOpen(false); };
   return (
     <div className={`sym-search ${compact ? "compact" : ""}`} ref={box}>
-      <input className="input" value={q} placeholder={placeholder} autoFocus={autoFocus} aria-label="Search instruments"
+      <input ref={input} className="input" value={q} placeholder={placeholder} aria-label="Search instruments"
         onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
@@ -64,7 +66,7 @@ export function SymbolSearch({ onPick, placeholder = "Search any stock, ETF, ind
           else if (e.key === "Enter") {
             e.preventDefault();
             if (items[active]) pick(items[active]);
-            else if (/^[A-Za-z0-9^=.\-]{1,20}$/.test(q.trim())) pick({ symbol: q.trim().toUpperCase(), name: q.trim().toUpperCase() });
+            else if (/^[A-Za-z0-9^=.-]{1,20}$/.test(q.trim())) pick({ symbol: q.trim().toUpperCase(), name: q.trim().toUpperCase() });
           } else if (e.key === "Escape") setOpen(false);
         }} />
       {open && debounced && (
@@ -97,5 +99,5 @@ export function Avatar({ user, size = 36 }: { user: AnyObj | null | undefined; s
   const hue = [...(user?.username ?? "x")].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
   return user?.avatar_url
     ? <img className="avatar" src={user.avatar_url} alt="" width={size} height={size} style={{ width: size, height: size }} />
-    : <span className="avatar" aria-hidden style={{ width: size, height: size, fontSize: size * 0.42, background: `hsl(${hue} 55% 46%)` }}>{name.slice(0, 1).toUpperCase()}</span>;
+    : <span className="avatar" aria-hidden style={{ width: size, height: size, fontSize: `max(${(size * 0.42).toFixed(1)}px, var(--fs-floor))`, background: `hsl(${hue} 55% 46%)` }}>{name.slice(0, 1).toUpperCase()}</span>;
 }

@@ -1,0 +1,509 @@
+{
+ "head": {
+  "vars": [
+   "dir",
+   "prop",
+   "other",
+   "otherLabel",
+   "otherDescription",
+   "st",
+   "start",
+   "end",
+   "ticker",
+   "refUrl",
+   "statedInLabel"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1133309-8A0A3853-313B-40C9-9924-94C5C808BA49"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1133309"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Dubai Mall"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "shopping mall in Dubai, United Arab Emirates"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-50385455-4c7f-ea10-6a71-4ae82a120d56"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1973019"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P414"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Dubai Financial Market"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Stock exchange located in Dubai, United Arab Emirates"
+    },
+    "start": {
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+     "type": "literal",
+     "value": "2000-01-01T00:00:00Z"
+    },
+    "ticker": {
+     "type": "literal",
+     "value": "EMAAR"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-57441b99-457f-d078-2afc-b1db26acdd9e"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q849363"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "The Vanguard Group"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "American investment management company"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-574d6c8d-48d0-5b63-4776-fa7b611395d0"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q55610796"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P355"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Emaar Development"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "UAE-based property development arm of Emaar Properties"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-659a183d-48b5-d756-52ac-4e74fe750b40"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q3153926"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Investment Corporation of Dubai"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "sovereign wealth fund from the United Arab Emirates"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-a01c573d-4864-0316-50cb-8b0d6e0e2513"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q17052427"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P355"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Emaar MGF"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Real estate developer"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-C874D954-ABFE-4AA7-9A87-D0C152673579"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q695829"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P452"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "real estate development"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "multifaceted business activity related to buildings and land"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q1153463-d22eccf8-4e3b-95ea-0778-b6c023819282"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q878"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P17"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "out"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "United Arab Emirates"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "country in Western Asia"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q116974427-53049f9d-4411-07a3-bf2d-de7f63b55f2f"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q116974427"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Emaar Square"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "mixed-use building complex in Üsküdar, Istanbul, Turkey"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q12495-7f593139-45d1-180f-2dea-4efe2d966b47"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q12495"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Burj Khalifa"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "skyscraper in Dubai, United Arab Emirates"
+    },
+    "refUrl": {
+     "type": "uri",
+     "value": "http://skyscrapercenter.com/building/burj-khalifa/3"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q135004753-31c5efc7-4d1c-6fec-dd9b-1d8746151c90"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q135004753"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "At.mosphere"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "restaurant in the Burj Khalifa, Dubai"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q5303420-1D39E710-7BBA-40EF-9C66-C15A51D0AEF7"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q5303420"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Downtown Dubai Tramway"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "former tram system in Downtown Dubai"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q55610796-a147f928-4748-4892-3b08-a7427c126af0"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q55610796"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P749"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Emaar Development"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "UAE-based property development arm of Emaar Properties"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q677823-038DE569-D2C0-406F-A86F-FE3635C39EB3"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q677823"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Address Downtown"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "tower block"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q7712376-3EAFBCF4-1FB6-4600-86C7-E8085ADEFC12"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q7712376"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Address Boulevard"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "hotel in Dubai"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q942632-E610B9CF-CD80-4E39-B035-B02AEF1F3F7E"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q942632"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "type": "literal",
+     "value": "Q942632"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "architectural structure"
+    }
+   },
+   {
+    "st": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/statement/Q4059427-FC0AAF30-25A2-4162-BCFD-5A351117B6C3"
+    },
+    "other": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q4059427"
+    },
+    "prop": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/P127"
+    },
+    "dir": {
+     "type": "literal",
+     "value": "in"
+    },
+    "otherLabel": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "Dubai Aquarium and Underwater Zoo"
+    },
+    "otherDescription": {
+     "xml:lang": "en",
+     "type": "literal",
+     "value": "aquarium in Dubai, United Arab Emirates"
+    }
+   }
+  ]
+ }
+}
