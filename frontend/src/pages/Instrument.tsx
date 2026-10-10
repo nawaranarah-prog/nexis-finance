@@ -66,7 +66,6 @@ export default function Instrument() {
             <Link className="btn primary" to={`/advisor?q=${encodeURIComponent(`What's happening with ${i.name} (${sym})? Should I consider buying?`)}`}>Ask the advisor</Link>
             <Link className="btn" to={`/compare?s=${encodeURIComponent(sym)}`}>Compare</Link>
             {i.type === "equity" && <Link className="btn" to={`/valuation/${encodeURIComponent(sym)}`}>Valuation</Link>}
-            <Link className="btn" to={`/finstagram?compose=${encodeURIComponent(`$${sym} `)}`}>Post</Link>
           </div>
         </div>
       </div>
@@ -202,7 +201,7 @@ export default function Instrument() {
                     <span className="xs muted"> · ♥ {it.like_count} · 💬 {it.comment_count}</span>
                   </Link>
                 ))}</div>
-              ) : <div className="small text2">No posts about ${sym} yet. <Link to={`/finstagram?compose=${encodeURIComponent(`$${sym} `)}`}>Be the first.</Link></div>}
+              ) : <div className="small text2">No news posts about ${sym} yet.</div>}
             </QueryView>
           </Card>
         </div>

@@ -415,6 +415,10 @@ export function PostCard({ post, gate, me, openComments = false }: { post: AnyOb
 
 // ------------------------------------------------------------------ composer
 
+/** Finstagram is news-only: news pages post (admins too, for corrections); members like, comment and follow. The
+    server enforces the same rule. */
+const canPost = (me: AnyObj | null | undefined) => !!me && (me.kind === "page" || me.role === "admin");
+
 function Composer({ me, initial, onPosted }: { me: AnyObj; initial?: string; onPosted: () => void }) {
   const { t: tr } = useT();
   const [text, setText] = useState(initial ?? "");
@@ -569,8 +573,9 @@ export default function Finstagram() {
             <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? "on" : ""} onClick={() => setSp(m === "latest" ? {} : { mode: m })}>{tr(label)}</button>
           ))}
         </div>
-        {me ? <Composer me={me} initial={compose} onPosted={() => qc.invalidateQueries({ queryKey: ["social"] })} />
-          : <button className="composer ghost" onClick={() => nav("/login?mode=signup&next=/finstagram")}><span className="text2">{tr("Join Finstagram to post ideas and charts, save posts, follow stocks and news pages, and tune your feed.")}</span></button>}
+        {canPost(me) ? <Composer me={me!} initial={compose} onPosted={() => qc.invalidateQueries({ queryKey: ["social"] })} />
+          : me ? <p className="np-note insta-note">Finstagram is a news feed: news pages post here. You can like, comment on and save posts, and follow pages, stocks and hashtags.</p>
+          : <button className="composer ghost" onClick={() => requireAccount("finstagram")}><span className="text2">{tr("Join to like, comment, save posts, follow news pages, stocks and hashtags, and tune your feed.")}</span></button>}
         <FeedList params={{ mode }} gate={gate} me={me} />
       </div>
       <Rail />
@@ -623,7 +628,7 @@ export function TopicPage({ kind }: { kind: "symbol" | "tag" }) {
             </>
           )}
         </div>
-        {me && <Composer me={me} initial={kind === "symbol" ? `$${value} ` : `#${value} `} onPosted={() => qc.invalidateQueries({ queryKey: ["social"] })} />}
+        {canPost(me) && <Composer me={me!} initial={kind === "symbol" ? `$${value} ` : `#${value} `} onPosted={() => qc.invalidateQueries({ queryKey: ["social"] })} />}
         <FeedList params={kind === "symbol" ? { symbol: value } : { tag: value }} gate={gate} me={me} />
       </div>
       <Rail />

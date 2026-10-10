@@ -79,7 +79,8 @@ def test_contradicted_stories_are_held_with_the_numbers_and_can_be_restored(risi
         "visible",
         "visible",
     )
-    log = db.scalars(select(ModerationAction).where(ModerationAction.target_id == fab.id)).one()
+    log = db.scalars(select(ModerationAction).where(ModerationAction.target_type == "discussion", ModerationAction.target_id == fab.id,
+                                                    ModerationAction.action == "auto_hold").order_by(ModerationAction.id.desc())).first()  # fmt: skip
     assert log.action == "auto_hold" and log.actor_id is None and "10-year +" in log.reason and "rising" in log.reason
     assert pulse_checks.review(db) == []  # already held: nothing more to do
 

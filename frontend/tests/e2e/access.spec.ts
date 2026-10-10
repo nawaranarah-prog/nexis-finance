@@ -75,3 +75,12 @@ test("password reset says plainly when email isn't set up", async ({ page }) => 
   await expect(page).toHaveURL(/\/forgot-password/);
   await expect(page.getByRole("status")).toContainText("isn't available yet");
 });
+
+test("Finstagram is a news feed: a member can react but not post", async ({ page }) => {
+  const { signUp } = await import("../support/account");
+  await signUp(page, "fin");
+  await page.goto("/finstagram");
+  await expect(page.getByText("Finstagram is a news feed: news pages post here.")).toBeVisible();
+  await expect(page.locator(".composer textarea")).toHaveCount(0);
+  expect((await page.request.post("/api/social/posts", { multipart: { body: "my own post" } })).status()).toBe(403);
+});

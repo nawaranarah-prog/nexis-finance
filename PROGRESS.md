@@ -322,3 +322,21 @@ Production was checked after the merge (both Vercel projects were Ready):
 * `tests/devices/devices.spec.ts` checks every main page's layout on the device's own viewport, plus three touch
   flows: navigation drawer → Time Machine; a scenario run; World Graph → evidence.
 * Result: 72/72.
+
+## Overhaul Step 4 — Finstagram is a news feed
+
+* **The server enforces it.** Only news pages (`kind = page`) post, plus admins for corrections. A member gets 403
+  with a plain explanation.
+* **Feeds are news-only.** "For you", following, trending, and symbol and hashtag pages show only posts by news pages
+  and admins (the same rule as posting).
+* **Members' earlier posts are kept, not deleted.** They stay on the member's profile and at their own address.
+  Members can still like, comment, save and follow.
+* **UI.** Members see "Finstagram is a news feed…" instead of a composer. Visitors get the join sheet. The instrument
+  page's "Post" button and "Be the first" link are gone.
+* **Tests.** The three older backend tests that posted as members now post with the admin role. A news-page account
+  couldn't be used for them because those accounts can't sign in. A new test covers news-only feeds, kept member
+  posts and the 403. A new e2e test checks the member view.
+* **Results.**
+  * Backend: 383/383.
+  * e2e (core, access, research): 57/57 in Chromium, Firefox and WebKit, plus the new check in Chromium and WebKit.
+  * Responsive and axe on Finstagram, post, instrument and Pulse pages: 65/65.
