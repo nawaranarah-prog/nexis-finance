@@ -22,6 +22,7 @@ from app.connectivity.providers.economic import FredProvider, USTreasuryProvider
 from app.connectivity.providers.sec import SecEdgarProvider, location_to_country, sic_classification
 from app.connectivity.security import decrypt_json, encrypt_json, hash_api_key, mask, new_api_key, redact
 from app.core.errors import ConfigurationError, ProviderError
+from tests.helpers import member
 
 SAMPLES = Path(__file__).resolve().parents[2] / "data" / "samples"
 
@@ -569,6 +570,7 @@ def test_summary_and_intelligence_overview(client, imported):
 
 
 def test_research_assistant_is_grounded(client, imported):
+    member(client)  # the AI needs an account
     r = client.post("/api/assistant/ask", json={"question": "What contributed most to my portfolio's volatility?"}).json()
     assert r["grounded"] and r["intent"] == "volatility" and r["evidence"]
     d = client.get("/api/intelligence/risk-drilldown").json()
@@ -601,6 +603,7 @@ def test_managed_postgres_urls_are_normalised(monkeypatch):
 
 
 def test_assistant_falls_back_to_research_portfolio_without_holdings(client, monkeypatch):
+    member(client)  # the AI needs an account
     from app.services import assistant
 
     ds = next(d for d in client.get("/api/datasets").json() if d["code"] == "TEST-SYN")

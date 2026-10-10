@@ -116,11 +116,11 @@ def compare(req: CompareRequest, db: Session = Depends(get_db)) -> dict[str, Any
 
 @router.post("/markets/compare/report", status_code=201)
 def compare_report(
-    req: CompareRequest, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+    req: CompareRequest, request: Request, viewer: User = Depends(auth.require_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    ratelimit.hit(db, f"report:{ratelimit.client_ip(request)}", 20)
+    ratelimit.hit(db, f"report:{viewer.id}", 20)
     return market_reports.generate_comparison(
-        db, req.symbols, req.period, req.start, req.end, req.interval, req.bucket, req.title
+        db, req.symbols, req.period, req.start, req.end, req.interval, req.bucket, req.title, owner_id=viewer.id
     )
 
 
@@ -136,34 +136,30 @@ def valuation_custom(symbol: str, req: ValuationRequest, db: Session = Depends(g
 
 @router.post("/valuation/{symbol}/report", status_code=201)
 def valuation_report(
-    symbol: str, req: ValuationRequest, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+    symbol: str, req: ValuationRequest, request: Request, viewer: User = Depends(auth.require_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    ratelimit.hit(db, f"report:{ratelimit.client_ip(request)}", 20)
-    return market_reports.generate_valuation(db, symbol, req.overrides, req.peers, req.title)
+    ratelimit.hit(db, f"report:{viewer.id}", 20)
+    return market_reports.generate_valuation(db, symbol, req.overrides, req.peers, req.title, owner_id=viewer.id)
 
 
 @router.get("/advisor/status")
 def advisor_status(viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> dict[str, Any]:
-    from app.core import plans
 
     ent = entitlements.get_user_entitlements(db, viewer) if viewer else None
     return {**advisor.status(db), "limit_per_hour": get_settings().advisor_requests_per_hour, "disclaimer": advisor.DISCLAIMER,
             "usage": ent["usage"]["advisor"] if ent else None, "plan": ent["plan"] if ent else None,
-            "anonymous_per_day": plans.ANONYMOUS["advisor_daily"]}  # fmt: skip
+            "signed_in": viewer is not None}  # fmt: skip
 
 
-def _advisor_gate(db: Session, request: Request, viewer: User | None) -> int | None:
-    """Burst protection per IP, then the plan allowance: returns the usage reservation (None for visitors)."""
+def _advisor_gate(db: Session, request: Request, viewer: User) -> int:
+    """Burst protection per IP, then the plan allowance: returns the usage reservation. Visitors never get here."""
     ratelimit.hit(db, f"advisor:{ratelimit.client_ip(request)}", get_settings().advisor_requests_per_hour)
-    if viewer is None:
-        entitlements.anonymous_advisor(db, request)
-        return None
     return entitlements.consume_usage(db, viewer, "advisor")
 
 
 @router.post("/advisor/chat")
 def advisor_chat(
-    req: AdvisorRequest, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+    req: AdvisorRequest, request: Request, viewer: User = Depends(auth.require_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
     rid = _advisor_gate(db, request, viewer)
     try:
@@ -176,7 +172,7 @@ def advisor_chat(
 
 @router.post("/advisor/chat/stream")
 def advisor_chat_stream(
-    req: AdvisorRequest, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+    req: AdvisorRequest, request: Request, viewer: User = Depends(auth.require_user), db: Session = Depends(get_db)
 ) -> StreamingResponse:
     """Server-sent events: ``status`` while data is fetched, ``delta`` chunks of the answer, then ``done`` with sources.
 

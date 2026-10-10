@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     pulse_tick_minutes: int = 40
     # Email delivery for digests (not connected; digests are prepared and kept until a provider is added).
     email_provider: str | None = None
+    # Account emails (verification, password reset) through any SMTP server. Unset → those emails are unavailable and
+    # the site says so. 465 uses implicit TLS; other ports use STARTTLS when smtp_starttls is true.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_starttls: bool = True
 
     # Abuse protection for public endpoints (per client IP, per hour).
     advisor_requests_per_hour: int = 20

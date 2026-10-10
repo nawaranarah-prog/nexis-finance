@@ -509,3 +509,11 @@
   /* inline tags: vertical padding enlarges the tap area to 44px without changing the line height of the text */
   .hashtag, .cashtag { padding-block: 14px; }
 }
+
+/* ---------------------------------------------------------------- accounts: join sheet, reset/verify pages */
+.account-gate { width: min(440px, 100%); }
+.account-gate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.account-gate-actions .btn { flex: 1 1 auto; justify-content: center; }
+.account-page { max-width: 520px; }
+.account-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.ai-visitor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }

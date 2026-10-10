@@ -182,9 +182,9 @@ def asset_intelligence(
 
 @router.post("/intelligence/{symbol}/brief")
 def brief(
-    symbol: str, request: Request, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)
+    symbol: str, request: Request, viewer: User = Depends(auth.require_user), db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    ratelimit.hit(db, f"intel-brief:{ratelimit.client_ip(request)}", 30)
+    ratelimit.hit(db, f"intel-brief:{viewer.id}", 30)
     return portfolio.brief(db, viewer, symbol)
 
 

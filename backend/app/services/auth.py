@@ -70,6 +70,7 @@ def serialize_user(db: Session, u: User, viewer: User | None = None, full: bool 
             "language": u.language if viewer is not None and viewer.id == u.id else None,
             "has_password": bool(u.password_hash) if viewer is not None and viewer.id == u.id else None,
             "email": u.email if viewer is not None and viewer.id == u.id else None,
+            "email_verified": (u.email_verified_at is not None) if viewer is not None and viewer.id == u.id else None,
             "phone": u.phone if viewer is not None and viewer.id == u.id else None,
             "auth_provider": u.auth_provider if viewer is not None and viewer.id == u.id else None,
             "role": u.role if viewer is not None and viewer.id == u.id else None,
@@ -192,6 +193,9 @@ def register(
 def login(db: Session, request: Request, response: Response, identifier: str, password: str) -> User:
     """Sign in with an email address, a mobile number or a username."""
     ratelimit.hit(db, f"login:{ratelimit.client_ip(request)}", 20)
+    from app.services import account
+
+    account.guard_login_attempts(db, identifier)
     ident = identifier.strip().lower()
     if "@" not in ident and phone.looks_like_phone(ident):
         u = db.scalars(select(User).where(User.phone == phone.normalize(ident))).first()
@@ -205,6 +209,7 @@ def login(db: Session, request: Request, response: Response, identifier: str, pa
             f"this account uses {u.auth_provider.title()} sign-in — use the {u.auth_provider.title()} button"
         )
     if u is None or u.is_disabled or u.kind != "person" or not u.password_hash or not verify_password(password, u.password_hash):
+        account.record_failed_login(db, identifier)
         raise AuthenticationRequired("wrong email, phone or password")
     _start_session(db, u, response)
     return u
@@ -242,6 +247,7 @@ def sign_in_external(
             password_hash=None,
             email=mail,
             auth_provider=provider,
+            email_verified_at=utcnow() if provider == "google" and mail else None,  # Google verified the address
             provider_sub=key,
         )
         db.add(u)
@@ -467,6 +473,8 @@ def update_account(
                 raise ConflictError("another account already uses that email")
         if mail is None and not (u.phone or u.provider_sub):
             raise ValidationFailed("keep an email or a phone number so you can still sign in")
+        if u.email != mail:
+            u.email_verified_at = None  # a new address must be confirmed again
         u.email = mail
     if phone_number is not None:
         mobile = phone.normalize(phone_number) if phone_number.strip() else None

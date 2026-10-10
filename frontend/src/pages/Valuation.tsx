@@ -55,7 +55,7 @@ export default function Valuation() {
       const r = await api.post<AnyObj>(`/valuation/${encodeURIComponent(sym!)}/report`, body);
       toast("success", "Valuation report ready", r.file_name);
       download(buildUrl(`/reports/${r.report_id}/download`));
-    } catch (e) { if (!handlePlanError(e)) toast("error", "Report failed", errorMessage(e)); } finally { setBusy(false); }
+    } catch (e) { if (!handlePlanError(e, "report")) toast("error", "Report failed", errorMessage(e)); } finally { setBusy(false); }
   };
 
   const v = q.data;

@@ -17,7 +17,7 @@ from app.markets.news import clean_company_name
 from app.markets.yahoo import YahooClient
 from app.services import advisor, llm, valuation
 from app.services import compare as cmp
-from tests.helpers import TERMS
+from tests.helpers import TERMS, member
 
 
 def _client(handler) -> httpx.Client:  # type: ignore[no-untyped-def]
@@ -172,6 +172,7 @@ def test_request_parsing():
 
 
 def test_advisor_runs_tools_then_answers(client, monkeypatch):
+    member(client)  # the AI needs an account
     calls = []
 
     def fake_chat(messages, tools=None, **kw):  # type: ignore[no-untyped-def]
@@ -205,6 +206,7 @@ def test_advisor_runs_tools_then_answers(client, monkeypatch):
 
 
 def test_advisor_falls_back_to_data_briefing(monkeypatch, client):
+    member(client)  # the AI needs an account
     def unavailable(*a, **k):  # type: ignore[no-untyped-def]
         raise llm.LLMUnavailable("no model here")
 

@@ -68,9 +68,11 @@ function AccountSettings() {
   const [pw, setPw] = useState({ current: "", next: "" });
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState("");
-  useEffect(() => {
-    if (u) setForm({ display_name: u.display_name ?? "", username: u.username ?? "", email: u.email ?? "", phone: u.phone ?? "" });
-  }, [u?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [formFor, setFormFor] = useState<number | null>(null);
+  if (u && formFor !== u.id) {  // fill the form when the account loads (or changes)
+    setFormFor(u.id);
+    setForm({ display_name: u.display_name ?? "", username: u.username ?? "", email: u.email ?? "", phone: u.phone ?? "" });
+  }
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
@@ -133,6 +135,7 @@ function AccountSettings() {
           </Field>
           <Field label={t("Email")}>
             <input className="input" type="email" value={form.email} maxLength={254} autoComplete="email" dir="ltr" onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            {u.email && <EmailStatus verified={!!u.email_verified} />}
           </Field>
           <Field label={t("Phone number")} hint="UAE numbers can be typed as 05X XXX XXXX.">
             <input className="input" type="tel" value={form.phone} maxLength={30} autoComplete="tel" dir="ltr" onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -245,5 +248,23 @@ export default function Settings() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** Whether the account's email is confirmed, with a way to (re)send the link. Says plainly when email isn't set up. */
+function EmailStatus({ verified }: { verified: boolean }) {
+  const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
+  const [msg, setMsg] = useState<string | null>(null);
+  if (verified) return <span className="xs pos">✓ Confirmed</span>;
+  const send = async () => {
+    setState("busy"); setMsg(null);
+    try { await api.post("/auth/email/verify/send"); setState("sent"); }
+    catch (e) { setState("idle"); setMsg(errorMessage(e)); }
+  };
+  return (
+    <span className="xs muted" role="status">
+      Not confirmed yet. {state === "sent" ? "Check your inbox for the link." : <button type="button" className="link-btn" disabled={state === "busy"} onClick={send}>Send confirmation link</button>}
+      {msg && <span className="neg"> {msg}</span>}
+    </span>
   );
 }

@@ -25,6 +25,11 @@ def client_ip(request: Request) -> str:
     return request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
 
 
+def count(db: Session, bucket: str, window: timedelta = timedelta(hours=1)) -> int:
+    """Events in ``bucket`` within the window, without recording one."""
+    return db.scalar(select(func.count(RateEvent.id)).where(RateEvent.bucket == bucket, RateEvent.created_at >= utcnow() - window)) or 0
+
+
 def hit(db: Session, bucket: str, limit: int, window: timedelta = timedelta(hours=1)) -> None:
     """Record one event in ``bucket``; raise :class:`RateLimited` if the window already holds ``limit``."""
     now = utcnow()

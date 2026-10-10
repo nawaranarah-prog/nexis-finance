@@ -12,6 +12,7 @@ import { useT } from "../i18n";
 import { LegalGate } from "../components/pulse";
 import { UpgradeDialog } from "../components/pro";
 import { DialogHost } from "../components/dialog";
+import { AccountGate } from "../components/account";
 
 const HelpAgent = lazy(() => import("../components/HelpAgent"));
 
@@ -305,11 +306,17 @@ function SystemBell() {
             <button className="btn sm ghost" onClick={markAll} disabled={!unread}>Mark all read</button>
           </div>
           {(q.data?.items ?? []).map((n) => (
-            <div key={n.id} className={`notif ${n.is_read ? "" : "unread"}`} style={{ cursor: n.link ? "pointer" : "default" }}
-              onClick={() => { if (n.link) { setOpen(false); nav(n.link); } }}>
-              <div className="row-between"><b className={cls[n.level]}>{icon[n.level]} {n.title}</b><span className="xs muted">{dt(n.created_at)}</span></div>
-              <div className="text2 small">{n.message}</div>
-            </div>
+            n.link ? (
+              <button key={n.id} type="button" className={`notif notif-btn ${n.is_read ? "" : "unread"}`} onClick={() => { setOpen(false); nav(n.link as string); }}>
+                <div className="row-between"><b className={cls[n.level]}>{icon[n.level]} {n.title}</b><span className="xs muted">{dt(n.created_at)}</span></div>
+                <div className="text2 small">{n.message}</div>
+              </button>
+            ) : (
+              <div key={n.id} className={`notif ${n.is_read ? "" : "unread"}`}>
+                <div className="row-between"><b className={cls[n.level]}>{icon[n.level]} {n.title}</b><span className="xs muted">{dt(n.created_at)}</span></div>
+                <div className="text2 small">{n.message}</div>
+              </div>
+            )
           ))}
           {q.data && q.data.items.length === 0 && <div className="state">No notifications.</div>}
         </div>
@@ -324,9 +331,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
   const location = useLocation();
-  useEffect(() => {
-    setDrawer(false);
-  }, [location.pathname]);
+  const [drawerPath, setDrawerPath] = useState(location.pathname);
+  if (drawerPath !== location.pathname) { setDrawerPath(location.pathname); setDrawer(false); }  // navigating closes the drawer
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); }
@@ -447,6 +453,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <TabBar />
       <LegalGate />
       <UpgradeDialog />
+      <AccountGate />
       <Suspense fallback={null}><HelpAgent /></Suspense>
       <DialogHost />
       <Toaster />

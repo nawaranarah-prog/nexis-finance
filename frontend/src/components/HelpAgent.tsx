@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { requireAccount, takePending } from "./account";
 import { Markdown } from "./markdown";
+import { useMe } from "./market";
 import { api, ApiError, buildUrl } from "../services/api";
 import { contextFor, isKnownRoute, searchArticles, suggestionsFor, type HelpArticle, type HelpLink } from "../help/search";
 
@@ -62,6 +64,7 @@ export default function HelpAgent() {
   const nav = useNavigate();
   const mobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const signedIn = !!useMe().data?.user;
   const [view, setView] = useState<View>({ kind: "home" });
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
@@ -136,6 +139,14 @@ export default function HelpAgent() {
 
   useEffect(() => () => abort.current?.abort(), []);
 
+  // a question typed before signing up comes back in the box (not sent)
+  const [restored, setRestored] = useState(false);
+  if (signedIn && !restored) {
+    setRestored(true);
+    const kept = takePending("help");
+    if (kept) { setDraft(kept); setOpen(true); }
+  }
+
   useEffect(() => {
     const h = () => setOpen(true);
     window.addEventListener(OPEN_EVENT, h);
@@ -145,6 +156,7 @@ export default function HelpAgent() {
   const send = async (raw: string, isRetry = false) => {
     const question = raw.trim();
     if (!question || pending || question.length > MAX) return;
+    if (!signedIn) { requireAccount("ai", { key: "help", value: question }); return; }  // articles stay open; AI answers need an account
     const history = isRetry && msgs.at(-1)?.role === "user" ? msgs.slice(0, -1) : msgs;  // the retried question is sent once
     if (!isRetry) setMsgs((m) => [...m, { id: nextId.current++, role: "user", text: question }]);
     setFailure(null);

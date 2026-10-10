@@ -1,4 +1,6 @@
-import { handlePlanErrorBody, UsageNote } from "../components/pro";
+import { requireAccount, takePending } from "../components/account";
+import { useMe } from "../components/market";
+import { handlePlanErrorBody, UsageNote, usePlans } from "../components/pro";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -66,8 +68,18 @@ export default function Advisor() {
   const [params, setParams] = useSearchParams();
   const status = useQuery({ queryKey: ["advisor-status"], queryFn: () => api.get<AnyObj>("/advisor/status"), staleTime: 300_000 });
   const [turns, setTurns] = useState<Turn[]>(load);
+  const me = useMe();
+  const signedIn = !!me.data?.user;
+  const freeQuestions = usePlans().data?.limits?.free?.advisor as number | undefined;
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  // a question typed before signing up is offered again (never sent automatically)
+  const [restored, setRestored] = useState(false);
+  if (signedIn && !restored) {
+    setRestored(true);
+    const kept = takePending("advisor");
+    if (kept) setQ(kept);
+  }
   const { t, lang } = useT();
   const tr = t;
   const [postId, setPostId] = useState<number | null>(() => Number(params.get("post")) || null);
@@ -106,6 +118,7 @@ export default function Advisor() {
   const send = async (text: string) => {
     const content = text.trim();
     if (content.length < 2 || busy) return;
+    if (!signedIn) { requireAccount("ai", { key: "advisor", value: content }); return; }  // the API refuses visitors too
     const mine: Turn = post
       ? { role: "user", content: `${postContext(post)}\n\n${content}`, shown: content, about: { id: post.id, title: postTitle(post) } }
       : { role: "user", content };
@@ -119,7 +132,7 @@ export default function Advisor() {
       const res = await fetch(buildUrl("/advisor/chat/stream"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages, language: lang }) });
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => null);
-        if (handlePlanErrorBody(res.status, err)) {  // a plan limit: explained in the upgrade dialog, not as an error
+        if (handlePlanErrorBody(res.status, err, "ai")) {  // a plan limit: explained in the upgrade dialog, not as an error
           setTurns((ts) => ts.slice(0, -1));
           return;
         }
@@ -162,6 +175,13 @@ export default function Advisor() {
           <button type="button" className="btn ghost" onClick={() => window.dispatchEvent(new Event("nexis:help-open"))}>{t("Help")}</button>
           {turns.length > 0 && <button className="btn" onClick={() => { setTurns([]); pending.current = ""; }}>{t("New chat")}</button>}
         </>} />
+      {me.data && !signedIn && (
+        <div className="banner neutral small ai-visitor" role="note">
+          <span>The AI advisor is for members. A free account takes a few seconds{freeQuestions ? ` and includes ${freeQuestions} questions a month` : ""}.</span>
+          <Link className="btn sm primary" to="/login?mode=signup&next=/advisor">Create a free account</Link>
+          <Link className="btn sm" to="/login?next=/advisor">Sign in</Link>
+        </div>
+      )}
       {s && !s.available && (
         <div className="banner neutral small" style={{ marginBottom: 12 }}>
           <span aria-hidden>ⓘ</span>

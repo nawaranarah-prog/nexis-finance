@@ -8,6 +8,7 @@ import { ErrorState, Loading } from "../components/ui";
 import { toast } from "../components/toast";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
+import { requireAccount } from "../components/account";
 
 // ------------------------------------------------------------------ helpers
 
@@ -79,10 +80,9 @@ function LinkedBadges({ user }: { user: AnyObj }) {
 
 function useGate(): { me: AnyObj | null; gate: Gate } {
   const me = useMe();
-  const nav = useNavigate();
   const gate: Gate = (why, fn) => {
     if (me.data?.user) fn();
-    else { toast("info", why, "Sign in or create a free account — it takes a few seconds."); nav(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`); }
+    else { void why; requireAccount("finstagram"); }
   };
   return { me: me.data?.user ?? null, gate };
 }

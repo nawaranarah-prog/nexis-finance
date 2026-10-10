@@ -57,3 +57,34 @@ overlapping "Try" links on Home (a global min-width had let flex items shrink be
 headline lists. Pulse intro still says it collects from Reddit — stale since PR #15; fixed with the Pulse work.
 
 **Open:** none for Step 1.
+
+## Phase 1 — accounts and access (= overhaul Step 2)
+
+**What changed**
+* Server: visitors get 401 from every AI endpoint (advisor chat/stream, help answers, AI brief, research assistant),
+  report generation (compare/valuation PDFs), and all Pulse/Finstagram participation (already enforced; now tested).
+  Visitor AI allowance is 0 (`plans.ANONYMOUS`). Public reading (markets, Pulse, Finstagram, help articles, pricing)
+  stays open.
+* Reports are private: `reports.owner_id` (migration **0017**); listing shows shared workspace reports + your own;
+  anyone else's report returns 404 (was: anyone could list and download every report by id).
+* Account emails: `services/email.py` (SMTP via `NEXIS_SMTP_*`; says "not available yet" when unset),
+  `services/account.py` — signed, expiring tokens: password reset (single use, signs out every device) and email
+  verification (`users.email_verified_at`, migration 0017; Google sign-ins count as verified; changing the address
+  clears it). "Forgot password" answers the same whether or not the address has an account.
+* Login lockout: 10 wrong passwords for one account in 15 minutes → wait (even with the right password). Existing
+  per-IP limits on login (20/h) and sign-up (5/h) kept.
+* UI: one "join Nexis" sheet (`components/account.tsx`) for every restricted action — Create account / Sign in /
+  Continue reading — that returns to the same page; anything typed (AI or help question) is kept and offered again,
+  never sent automatically. Replaces the old redirects in Pulse and Finstagram. Advisor shows visitors a members-only
+  note; Help keeps article search for everyone. New pages: /forgot-password, /reset-password, /verify-email; Settings
+  shows email confirmation status with a resend link. Login's return address hardened against `/\host` tricks.
+* Lint fixes in touched files (effects copying props into state, autofocus, clickable divs → buttons).
+
+**Results** (offline stack): backend 313/313 (29 new access tests), ruff clean; Playwright 295/295 — functional 51/51
+in Chromium/Firefox/WebKit (7 new access flows), responsive 171/171 (incl. new pages), axe 72/72 light+dark, links
+clean; unit 6/6; build/typecheck ✓; lint on touched files 0 errors. Migration 0017 tested up/down/up on SQLite.
+Screenshots reviewed: join sheet at 320 and 1440, Advisor visitor view, forgot-password page.
+
+**Open / needs you:** an SMTP sender (`NEXIS_SMTP_HOST`, `NEXIS_SMTP_PORT`, `NEXIS_SMTP_USERNAME`,
+`NEXIS_SMTP_PASSWORD`, `NEXIS_SMTP_FROM`) for verification and reset emails. Email verification is shown but not
+required to use features (requiring it before a sender exists would lock everyone out).

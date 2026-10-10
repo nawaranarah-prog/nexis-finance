@@ -64,6 +64,7 @@ for (const [w, h] of VIEWPORTS.filter(([w]) => w <= 480)) {
     await page.setViewportSize({ width: w, height: h });
     await mockApi(page);
     await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.locator("button.login-submit").scrollIntoViewIfNeeded();  // a sign-in form may be taller than a small phone
     await expect(page.locator("button.login-submit")).toBeInViewport();
     await page.goto("/advisor", { waitUntil: "domcontentloaded" });
     const input = page.locator(".chat-input textarea");

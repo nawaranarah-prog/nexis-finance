@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Index, Integer, LargeBinary, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -52,3 +52,5 @@ class Report(Base, TimestampMixin):
     sections: Mapped[list | None] = mapped_column(JSON)
     # The PDF bytes (the file under reports_dir is a local cache and may not exist on serverless hosts).
     content: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    # The member who made it (private to them); NULL = a report of the shared research workspace (public).
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)

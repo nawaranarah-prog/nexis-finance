@@ -47,6 +47,9 @@ const AuditLog = lazy(() => import("./pages/AuditLog"));
 const Developer = lazy(() => import("./pages/Developer"));
 const Assistant = lazy(() => import("./pages/Assistant"));
 const Login = lazy(() => import("./pages/Login"));
+const ForgotPassword = lazy(() => import("./pages/AccountEmail").then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import("./pages/AccountEmail").then((m) => ({ default: m.ResetPassword })));
+const VerifyEmail = lazy(() => import("./pages/AccountEmail").then((m) => ({ default: m.VerifyEmail })));
 const Home = lazy(() => import("./pages/Home"));
 const InstaTopic = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.TopicPage })));
 const Markets = lazy(() => import("./pages/Markets"));
@@ -174,6 +177,9 @@ export default function App() {
           <Route path="/pro" element={<Pro />} />
           <Route path="/pricing" element={<Navigate to="/pro" replace />} />
           <Route path="/pro/welcome" element={<ProWelcome />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/terms" element={<Legal />} />
           <Route path="/privacy" element={<Legal />} />
           <Route path="/disclaimer" element={<Legal />} />

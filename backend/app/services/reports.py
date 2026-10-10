@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import APP_VERSION, get_settings
@@ -500,8 +500,13 @@ def _rng(r: Any) -> str:
     return f"{r[0]} → {r[1]}" if r else "none"
 
 
-def list_reports(db: Session) -> list[dict[str, Any]]:
-    return [serialize(r) for r in db.scalars(select(Report).order_by(Report.created_at.desc()))]
+def _visible(viewer_id: int | None):  # type: ignore[no-untyped-def]
+    """Workspace reports (no owner) are public; a member's own reports are visible only to them."""
+    return Report.owner_id.is_(None) if viewer_id is None else or_(Report.owner_id.is_(None), Report.owner_id == viewer_id)
+
+
+def list_reports(db: Session, viewer_id: int | None = None) -> list[dict[str, Any]]:
+    return [serialize(r) for r in db.scalars(select(Report).where(_visible(viewer_id)).order_by(Report.created_at.desc()))]
 
 
 def serialize(r: Report) -> dict[str, Any]:
@@ -518,9 +523,9 @@ def serialize(r: Report) -> dict[str, Any]:
     }
 
 
-def report_bytes(db: Session, report_id: int) -> tuple[bytes, Report]:
+def report_bytes(db: Session, report_id: int, viewer_id: int | None = None) -> tuple[bytes, Report]:
     r = db.get(Report, report_id)
-    if r is None:
+    if r is None or (r.owner_id is not None and r.owner_id != viewer_id):  # someone else's report looks like a missing one
         raise NotFoundError(f"report {report_id} not found")
     if r.content is not None:
         return r.content, r

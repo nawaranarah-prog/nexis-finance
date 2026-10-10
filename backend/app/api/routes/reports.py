@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConfigurationError
 from app.db.session import get_db
+from app.models import User
 from app.schemas.requests import ReportRequest
 from app.services import auth, jobs
 from app.services import backtests as bt_svc
@@ -40,13 +41,13 @@ def create_report(req: ReportRequest, db: Session = Depends(get_db)) -> dict[str
 
 
 @router.get("/reports")
-def list_reports(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    return rep_svc.list_reports(db)
+def list_reports(viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    return rep_svc.list_reports(db, viewer.id if viewer else None)
 
 
 @router.get("/reports/{report_id}/download")
-def download_report(report_id: int, db: Session = Depends(get_db)) -> Response:
-    content, r = rep_svc.report_bytes(db, report_id)
+def download_report(report_id: int, viewer: User | None = Depends(auth.optional_user), db: Session = Depends(get_db)) -> Response:
+    content, r = rep_svc.report_bytes(db, report_id, viewer.id if viewer else None)
     return Response(
         content, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{r.file_name}"'}
     )

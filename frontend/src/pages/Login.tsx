@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../services/api";
 import { useT } from "../i18n";
 import { rememberTermsChoice } from "../components/pulse";
+import { safeNext } from "../components/account";
 
 function GoogleIcon() {
   return (
@@ -22,7 +23,7 @@ export default function Login() {
   const qc = useQueryClient();
   const { t } = useT();
   const rawNext = sp.get("next");
-  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/pulse";
+  const next = safeNext(rawNext);
   const providers = useQuery({ queryKey: ["auth-providers"], queryFn: () => api.get<Record<string, boolean>>("/auth/providers"), staleTime: 600_000 });
   const [mode, setMode] = useState<"signin" | "signup">(sp.get("mode") === "signup" ? "signup" : "signin");
   const [method, setMethod] = useState<"email" | "phone">("email");
@@ -143,6 +144,8 @@ export default function Login() {
                 <span>I agree to the Nexis Finance <Link to="/terms" target="_blank">Terms of Use</Link> and acknowledge the <Link to="/privacy" target="_blank">Privacy Policy</Link>.</span>
               </label>
             )}
+            {mode === "signin" && method === "email" && <div className="small"><Link className="touch-link" to="/forgot-password">{t("Forgot password?")}</Link></div>}
+            {sp.get("reset") === "1" && mode === "signin" && <div className="banner neutral small" role="status">Password changed. Sign in with your new password.</div>}
             {err && <div className="banner error small">{err}</div>}
             <button className="btn primary block login-submit" disabled={busy}>
               {busy ? "…" : t(otp ? (codeSent ? "Verify and continue" : "Send me a code") : mode === "signin" ? "Sign in" : "Create account")}

@@ -19,6 +19,8 @@ export const PAGES: TestPage[] = [
   { name: "finstagram", path: "/finstagram", ready: "main" },
   { name: "post", path: POST, ready: "main" },
   { name: "login", path: "/login", ready: "form" },
+  { name: "forgot-password", path: "/forgot-password", ready: "main h1" },
+  { name: "verify-email", path: "/verify-email", ready: "main h1" },
   { name: "about", path: "/about", ready: "main h1" },
   { name: "disclaimer", path: "/disclaimer", ready: "main h1" },
   { name: "terms", path: "/terms", ready: "main h1" },

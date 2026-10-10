@@ -96,7 +96,8 @@ def _narrative(kind: str, facts: dict[str, Any]) -> tuple[dict[str, str] | None,
 
 
 def _store(
-    db: Session, title: str, kind: str, story: list[Any], footer: str, config: dict[str, Any], sections: list[str]
+    db: Session, title: str, kind: str, story: list[Any], footer: str, config: dict[str, Any], sections: list[str],
+    owner_id: int | None = None,
 ) -> Report:
     now = datetime.now(UTC)
     slug = re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-")[:60]
@@ -113,6 +114,7 @@ def _store(
         config=config,
         sections=sections,
         content=content,
+        owner_id=owner_id,
     )
     db.add(rep)
     notify(
@@ -246,6 +248,7 @@ def generate_comparison(
     interval: str | None,
     bucket: str | None,
     title: str | None,
+    owner_id: int | None = None,
 ) -> dict[str, Any]:
     r = cmp.compare(db, symbols, period, start, end, interval, bucket)
     syms, m, sn = r["symbols"], r["metrics"], r["snapshots"]
@@ -403,6 +406,7 @@ def generate_comparison(
             "ai_narrative": bool(ai),
         },
         ["summary", "performance", "periodic", "correlation", "fundamentals", "scorecard", "news", "recommendation"],
+        owner_id=owner_id,
     )
     return {"report_id": rep.id, "file_name": rep.file_name, "ai_narrative": bool(ai), "ai_reason": reason}
 
@@ -435,7 +439,8 @@ def rule_based_valuation_view(v: dict[str, Any]) -> dict[str, str]:
 
 
 def generate_valuation(
-    db: Session, symbol: str, overrides: dict[str, Any] | None, peers: list[str] | None, title: str | None
+    db: Session, symbol: str, overrides: dict[str, Any] | None, peers: list[str] | None, title: str | None,
+    owner_id: int | None = None,
 ) -> dict[str, Any]:
     v = valuation.run(db, symbol, overrides, peers)
     ccy, a = v["currency"], v["assumptions"]
@@ -595,5 +600,6 @@ def generate_valuation(
         "Model valuation — not investment advice.",
         {"symbol": v["symbol"], "overrides": overrides or {}, "peers": peers, "ai_narrative": bool(ai)},
         ["summary", "football_field", "dcf", "sensitivity", "comparables", "history", "news", "recommendation"],
+        owner_id=owner_id,
     )
     return {"report_id": rep.id, "file_name": rep.file_name, "ai_narrative": bool(ai), "ai_reason": reason}

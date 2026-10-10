@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { signUp } from "../support/account";
 import { mockApi } from "../support/mockApi";
 import { POST, PULSE_STORY } from "../support/pages";
 
@@ -63,6 +64,7 @@ test("compare shows the selected stocks side by side", async ({ page }) => {
 
 test("AI assistant answers (mocked) with the disclaimer", async ({ page }) => {
   const errors = watchErrors(page);
+  await signUp(page, "ai");  // the AI is for members
   await page.goto("/advisor");
   await page.locator(".chat-input textarea").fill("Should I buy Emaar?");
   await page.locator(".chat-input button").click();
@@ -107,13 +109,8 @@ test("sign up, sign out and sign in again", async ({ page }) => {
   await page.waitForURL((u) => u.pathname === "/my-nexis");
 });
 
-test("visitors hit the AI usage cap after 3 questions (real cap, local backend)", async ({ page }) => {
-  await page.unroute("**/api/**");  // let the stream reach the backend so it counts; no AI provider is configured there
-  const ip = `198.19.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;  // its own bucket per run and browser
-  const ask = () => page.request.post("/api/advisor/chat/stream", { data: { messages: [{ role: "user", content: "What is a sukuk?" }] },
-    headers: { "x-forwarded-for": ip } });
-  const codes = [];
-  for (let i = 0; i < 4; i++) codes.push((await ask()).status());
-  expect(codes.slice(0, 3).every((c) => c !== 401)).toBe(true);
-  expect(codes[3]).toBe(401);
+test("visitors can't reach the AI through the API either (local backend)", async ({ page }) => {
+  await page.unroute("**/api/**");
+  const r = await page.request.post("/api/advisor/chat/stream", { data: { messages: [{ role: "user", content: "What is a sukuk?" }] } });
+  expect(r.status()).toBe(401);
 });

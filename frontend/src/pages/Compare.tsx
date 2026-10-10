@@ -75,7 +75,7 @@ export default function Compare() {
       const r = await api.post<AnyObj>("/markets/compare/report", body);
       toast("success", "Report ready", `${r.file_name}${r.ai_narrative ? " · AI narrative" : " · rule-based recommendation"}`);
       download(buildUrl(`/reports/${r.report_id}/download`));
-    } catch (e) { if (!handlePlanError(e)) toast("error", "Report failed", errorMessage(e)); } finally { setBusyReport(false); }
+    } catch (e) { if (!handlePlanError(e, "report")) toast("error", "Report failed", errorMessage(e)); } finally { setBusyReport(false); }
   };
 
   const r = q.data;
