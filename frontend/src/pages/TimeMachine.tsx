@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { requireAccount } from "../components/account";
 import { SymbolSearch, useMe } from "../components/market";
 import { ErrorState, Loading, PageHead, Seg } from "../components/ui";
+import { ReportButton, ResearchLinks } from "../components/research";
 import { api, errorMessage } from "../services/api";
 
 /* Time Machine: "what happens to my holdings if…". Deterministic arithmetic only — the moves you choose, measured
@@ -279,7 +280,7 @@ function Results({ r }: { r: RunResult }) {
             <tbody>
               {o.lines.map((l) => (
                 <tr key={l.symbol}>
-                  <td><b>{l.symbol}</b>{l.name !== l.symbol && <div className="muted xs">{l.name}</div>}</td>
+                  <td><b>{l.symbol}</b>{l.name !== l.symbol && <div className="muted xs">{l.name}</div>}<div className="tm-links"><ResearchLinks symbol={l.symbol} except="scenario" text /></div></td>
                   <td className="r">{num(l.value, 0)}</td>
                   <td>{METHOD[l.method]}</td>
                   <td className="r">{pct(l.pct)}</td>
@@ -374,6 +375,7 @@ function Saved({ id }: { id: number }) {
           </div>
         )}
       </section>
+      {current?.output && <div className="row"><ReportButton runId={current.id} /></div>}
       {run.isLoading && shown != null ? <Loading /> : current?.output ? <Results r={current as RunResult} /> : null}
     </>
   );

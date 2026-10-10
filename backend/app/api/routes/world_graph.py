@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import NotFoundError
 from app.db.session import get_db
 from app.models import FinRelationship, User
-from app.services import knowledge, ratelimit, saved_research, world_graph
+from app.services import knowledge, ratelimit, research_reports, saved_research, world_graph
 from app.services.auth import require_user
 
 router = APIRouter(tags=["world-graph"])
@@ -137,3 +137,13 @@ def patch_saved(item_id: int, body: ItemPatch, user: User = Depends(require_user
 def delete_saved(item_id: int, user: User = Depends(require_user), db: Session = Depends(get_db)) -> Response:
     saved_research.delete(db, user, item_id)
     return Response(status_code=204)
+
+
+@router.post("/saved-research/runs/{run_id}/report", status_code=201)
+def run_report(run_id: int, user: User = Depends(require_user), db: Session = Depends(get_db)) -> dict:
+    """A PDF of one stored run (owner only). The report is private to the member, like every member report."""
+    ratelimit.hit(db, f"research-report:{user.id}", 20)
+    run = saved_research.get_run(db, user, run_id)
+    item = saved_research.get_item(db, user, run.item_id)
+    rep = research_reports.generate(db, item, run, user.id)
+    return {"id": rep.id, "title": rep.title, "file_name": rep.file_name, "download_url": f"/api/reports/{rep.id}/download"}

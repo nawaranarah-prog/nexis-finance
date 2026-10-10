@@ -229,3 +229,68 @@ Production was checked after the merge (both Vercel projects were Ready):
 * Unit tests 6/6; build and typecheck pass; lint on touched files 0 errors.
 * Screenshots at 375 and 1440 reviewed. Fixed after review: full-width selects, a stretched history-window control,
   and the remove button wrapping on phones.
+
+## Phase 5 — Devil's Advocate
+
+**What changed**
+* `/devils-advocate` (members only). A member saves a thesis (company, text of 30–3,000 characters, optional
+  horizon); "Challenge this thesis" runs one analysis:
+  1. **Evidence** (code) is stored as bounded evidence records labelled E1…En:
+     * market data: price and range, multiples, profitability and growth, dividend, analyst consensus — each a
+       separate item, dated;
+     * recent headlines (headline text only; articles aren't read) and Nexis source events;
+     * the company's World Graph links.
+  2. **One AI call** splits the thesis into claims (first run only; they are then fixed, so their status can be
+     tracked) and argues against it. Every argument must cite `{evidence, quote}`.
+  3. **The validator** (code):
+     * drops a citation whose quote isn't verbatim in that item (case, whitespace and quote style are ignored;
+       minimum 8 characters);
+     * drops counter-arguments and risks left without a valid citation;
+     * computes each claim's status from the surviving citations (supported, contradicted, mixed or untested);
+     * flags figures that appear in neither the evidence nor the thesis (years aren't counted).
+  4. If the AI is unavailable, the answer can't be parsed, or there's too little evidence, the run is stored as
+     **failed** and nothing is shown as a result.
+* The page shows sections A–H:
+  * A: claims
+  * B and C: evidence for and against, as quotes linked to their sources
+  * D: the strongest case against
+  * E: assumption check, with the change since the last challenge
+  * F: risks
+  * G: what would change the view
+  * H: gaps, the validator's counts, the AI model, and the full evidence list
+* Runs are immutable and kept, failed ones included. Rewriting the thesis resets its claims. Each thesis has a status
+  (active, under review, archived). 10 challenges per member per day.
+* API: `/api/devils-advocate/theses` (create), `/theses/{id}` (get, patch), `/theses/{id}/analyse`, `/runs/{id}`.
+  Visitors get 401; another member gets 404.
+* No AI key is configured locally or in Vercel env vars. Production reaches the AI through the Vercel AI Gateway
+  using the deployment's OIDC token, so the real end-to-end check happens on production after the merge.
+
+## Phase 6 — integration
+
+* `/my-research` hub: the three tools, plus everything the member saved, grouped by tool. It is first in the Research
+  navigation.
+* The company travels between tools:
+  * World Graph → Stress-test / Challenge a thesis;
+  * each Time Machine result line → Connections / Challenge;
+  * Devil's Advocate → Connections / Stress-test;
+  * every instrument page has a "Research tools" card.
+* **PDF reports of saved runs** (Time Machine scenarios and completed challenges). Each report prints the stored run
+  exactly, without recomputing or calling the AI again. Reports are private, through the existing owner-only download.
+  The standard PDF fonts cover Windows-1252 only, so other characters (e.g. Arabic) print as "?" (a known limitation).
+* Accessibility fixes found by the new specs:
+  * text-style buttons use the higher-contrast link colour (dark mode was below 4.5:1);
+  * evidence links are underlined;
+  * the Edit link is a 44px target;
+  * the assumption table stacks into cards on phones.
+
+**Results (Phases 5 + 6)**
+* Backend: 378/378. New tests cover Devil's Advocate (12: verbatim-quote validation, dropped arguments, computed
+  statuses, figure flags, fixed claims, AI-down / unparseable / no-evidence failures, privacy, daily limit) and
+  reports (2).
+* Playwright, full run on the Phase 5 code: 376 passed.
+* After Phase 6: the tool and integration specs passed 77/78 in Chromium, Firefox and WebKit. The one failure was the
+  existing "AI assistant answers" test in Chromium, which didn't reproduce in 12 repeats across three browsers
+  (intermittent under heavy parallel load; noted, not hidden). Responsive and axe checks for the new and changed
+  pages pass 65/65.
+* Unit tests 6/6; build and typecheck pass; lint on touched files 0 errors.
+* Screenshots reviewed at 375 and 1440.

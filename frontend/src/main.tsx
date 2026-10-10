@@ -15,6 +15,7 @@ import "./styles-intel.css";
 import "./styles-np.css";
 import "./styles-graph.css";
 import "./styles-tm.css";
+import "./styles-da.css";
 
 const client = new QueryClient({
   defaultOptions: {

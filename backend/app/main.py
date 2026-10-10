@@ -18,6 +18,7 @@ from app.api.routes import (
     billing,
     connectivity,
     data,
+    devils_advocate,
     help,
     legal,
     markets,
@@ -186,5 +187,6 @@ for r in (
     help.router,
     world_graph.router,
     time_machine.router,
+    devils_advocate.router,
 ):
     app.include_router(r, prefix="/api")

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { requireAccount } from "../components/account";
 import { useMe } from "../components/market";
 import { ErrorState, Loading, PageHead, Seg } from "../components/ui";
+import { ResearchLinks } from "../components/research";
 import { api, errorMessage } from "../services/api";
 
 /* World Graph: who owns, controls, lists or classifies a company, as reported by sources — every line has evidence
@@ -241,6 +242,7 @@ function EntityView({ id }: { id: number }) {
         </div>
         <div className="row">
           {data.center.symbol && <Link className="btn" to={`/markets/${encodeURIComponent(data.center.symbol)}`}>Market page</Link>}
+          {data.center.symbol && <ResearchLinks symbol={data.center.symbol} except="graph" size="" />}
           <SaveInvestigation graph={data} savedId={savedId} state={{ depth, status, types, expanded, signature: data.signature }} onSaved={(sid) => set("saved", String(sid))} />
         </div>
       </div>

@@ -42,3 +42,4 @@
   .tm-sym { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
   .tm-row .tm-num { width: 110px; flex: 0 0 auto; }
 }
+.tm-links { display: flex; flex-wrap: wrap; gap: 0 10px; margin-top: 2px; }

@@ -58,6 +58,8 @@ const Advisor = lazy(() => import("./pages/Advisor"));
 const Compare = lazy(() => import("./pages/Compare"));
 const WorldGraph = lazy(() => import("./pages/WorldGraph"));
 const TimeMachine = lazy(() => import("./pages/TimeMachine"));
+const DevilsAdvocate = lazy(() => import("./pages/DevilsAdvocate"));
+const MyResearch = lazy(() => import("./pages/MyResearch"));
 const Valuation = lazy(() => import("./pages/Valuation"));
 const Finstagram = lazy(() => import("./pages/Finstagram"));
 const InstaPost = lazy(() => import("./pages/Finstagram").then((m) => ({ default: m.PostPage })));
@@ -193,6 +195,9 @@ export default function App() {
           <Route path="/world-graph/:id" element={<WorldGraph />} />
           <Route path="/time-machine" element={<TimeMachine />} />
           <Route path="/time-machine/:id" element={<TimeMachine />} />
+          <Route path="/devils-advocate" element={<DevilsAdvocate />} />
+          <Route path="/devils-advocate/:id" element={<DevilsAdvocate />} />
+          <Route path="/my-research" element={<MyResearch />} />
           <Route path="/valuation" element={<Valuation />} />
           <Route path="/valuation/:symbol" element={<Valuation />} />
           <Route path="/finstagram" element={<Finstagram />} />
