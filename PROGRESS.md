@@ -294,3 +294,31 @@ Production was checked after the merge (both Vercel projects were Ready):
   pages pass 65/65.
 * Unit tests 6/6; build and typecheck pass; lint on touched files 0 errors.
 * Screenshots reviewed at 375 and 1440.
+
+## Overhaul Step 7 — Pulse: contradiction checks; the wrong FAB and "easing" stories
+
+* **The problem, from Nexis's own data:** the US 10-year yield rose from 4.05% to 5.24% over the past year, and the
+  13-week bill from 3.53% to 4.06% since December. Two Nexis editorial stories nevertheless presented falling rates
+  as the current situation:
+  * "Falling rates are a headwind for FAB's net interest margin" (cites no sources);
+  * "Interest rates: how much easing is the market expecting?"
+* **New `services/pulse_checks.py`, run on every Pulse engine tick:**
+  * It reads the direction of US rates from Nexis market data: both the 10-year and the 13-week bill moving ±20bp or
+    more over 26 weeks, cached for 6 hours. If the data is missing, nothing is cached and nothing is held.
+  * It holds for review (**not deleted**) any visible editorial story that presents the opposite direction as current.
+  * Each hold writes a moderation-log entry with the numbers. One "approve" from a moderator restores a story.
+  * Members' posts are never checked.
+* **Run over the 20+ live editorial stories (offline copy):** it flags exactly those two. Stories that discuss both
+  directions conditionally (Emirates NBD margins, NASDAQ) and the other FAB story are left alone.
+* **Takes effect on production on the first Pulse visit after deploy** (the engine tick runs then).
+* **Outdated copy fixed:** Pulse no longer says it collects from Reddit (collection has been off since #15). Reddit
+  posts appear only when a member shares one, through Reddit's embed. A pre-existing lint error in the Pulse search
+  box was also fixed.
+
+## Overhaul Step 8 — device profiles
+
+* New Playwright projects `iphone` (iPhone 14, Safari engine), `pixel` (Pixel 7, Chrome) and `ipad` (iPad 7th gen,
+  Safari engine). Each uses touch, a mobile user agent and device pixel ratio.
+* `tests/devices/devices.spec.ts` checks every main page's layout on the device's own viewport, plus three touch
+  flows: navigation drawer → Time Machine; a scenario run; World Graph → evidence.
+* Result: 72/72.

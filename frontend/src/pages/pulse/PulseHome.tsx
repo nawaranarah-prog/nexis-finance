@@ -38,7 +38,8 @@ function useEngineNudge() {
 function SearchBox({ initial = "" }: { initial?: string }) {
   const nav = useNavigate();
   const [q, setQ] = useState(initial);
-  useEffect(() => setQ(initial), [initial]);
+  const [from, setFrom] = useState(initial);
+  if (from !== initial) { setFrom(initial); setQ(initial); }  // a new search in the URL replaces what's typed
   return (
     <form className="np-search" role="search" onSubmit={(e) => { e.preventDefault(); if (q.trim()) nav(`/pulse/search?q=${encodeURIComponent(q.trim())}`); }}>
       <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
@@ -82,7 +83,7 @@ function Rail({ overview }: { overview: AnyObj | undefined }) {
       </section>
       <section className="np-howto">
         <SectionHead title="How Pulse works" />
-        <p><b>Around the web</b> threads are public discussions from Reddit, Hacker News and StockTwits. Usernames are removed; every quote links to the original.</p>
+        <p><b>Around the web</b> threads are public discussions from Hacker News and StockTwits. Usernames are removed; every quote links to the original. Reddit posts appear only when a member shares one, through Reddit's own embed.</p>
         <p><b>Community</b> posts come from real Nexis members and are always shown as Anonymous. Nexis never posts as a member.</p>
         <p><b>Nexis editorial</b> discussions give context — what happened, the bull and bear cases, open questions — with sources and a dated history.</p>
         {s && <p className="np-honest">This week: {s.comments_7d.toLocaleString()} {s.comments_7d === 1 ? "reply" : "replies"} from {s.participants_7d.toLocaleString()} {s.participants_7d === 1 ? "member" : "members"}. Counts are real activity only.</p>}
@@ -149,7 +150,7 @@ export default function PulseHome({ view = "feed" }: { view?: "feed" | "topic" |
       <header className="np-head">
         <div className="np-eyebrow"><Link to="/pulse">Nexis Pulse</Link>{view === "topic" && <span>Topic</span>}{view === "search" && <span>Search</span>}</div>
         <h1>{view === "topic" ? topicLabel : view === "search" ? (q ? `“${q}”` : "Search Pulse") : "What the market is debating"}</h1>
-        {view === "feed" && <p className="np-lede">The arguments investors are having right now — collected from Reddit, Hacker News and StockTwits without anyone's account, anonymous discussion between Nexis members, and Nexis editorial context.</p>}
+        {view === "feed" && <p className="np-lede">The arguments investors are having right now — public threads from Hacker News and StockTwits, anonymous discussion between Nexis members, and Nexis editorial context checked against our own market data.</p>}
         <div className="np-head-actions">
           <SearchBox initial={q} />
           <button type="button" className="btn primary" onClick={() => setComposing(true)}>Start a discussion</button>
