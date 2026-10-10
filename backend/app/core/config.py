@@ -147,6 +147,13 @@ class Settings(BaseSettings):
     stripe_pro_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_MONTHLY_AED_PRICE_ID", "STRIPE_PRO_MONTHLY_AED_PRICE_ID")
     )
+    # Yearly AED prices: only used once a matching "*_yearly" entry (amount) exists in plans.PRICES — see STRIPE-SETUP.md.
+    stripe_plus_yearly_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PLUS_YEARLY_AED_PRICE_ID", "STRIPE_PLUS_YEARLY_AED_PRICE_ID")
+    )
+    stripe_pro_yearly_aed_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_YEARLY_AED_PRICE_ID", "STRIPE_PRO_YEARLY_AED_PRICE_ID")
+    )
     # Earlier Nexis Pro prices (USD monthly/yearly). No longer sold; subscriptions on them are recognised as Nexis Pro.
     stripe_pro_monthly_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_MONTHLY_PRICE_ID", "STRIPE_PRO_MONTHLY_PRICE_ID")

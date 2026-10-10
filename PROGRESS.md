@@ -340,3 +340,25 @@ Production was checked after the merge (both Vercel projects were Ready):
   * Backend: 383/383.
   * e2e (core, access, research): 57/57 in Chromium, Firefox and WebKit, plus the new check in Chromium and WebKit.
   * Responsive and axe on Finstagram, post, instrument and Pulse pages: 65/65.
+
+## Overhaul Step 5 — Stripe: yearly plans ready, `STRIPE-SETUP.md`
+
+* Billing now handles **any** plan in `plans.PRICES`:
+  * price ids per key (new `STRIPE_PLUS_YEARLY_AED_PRICE_ID` / `STRIPE_PRO_YEARLY_AED_PRICE_ID`, kept separate from
+    the legacy USD yearly id);
+  * validation of checkout and plan changes against `plans.PRICES`;
+  * "AED …/year" labels;
+  * the catalog lists `intervals` and per-tier `prices` by interval;
+  * the setup tool prints every price variable.
+* **No yearly amounts were added.** They are the owner's decision, and the rule is never to invent prices. Until they
+  exist, nothing changes: there is no switch on the pricing page, and `plus_yearly` checkout answers 422.
+* The pricing page shows a Monthly / Yearly switch only when the server lists yearly plans. Amounts always come from
+  the server.
+* The safety check still applies: a yearly Stripe price is sold only if its amount, currency, interval and mode match
+  `plans.PRICES` exactly.
+* `STRIPE-SETUP.md`: status, variable names, the 5 steps to turn yearly on, and going live (owner only).
+  `docs/BILLING.md` was corrected (visitors have no AI; yearly by configuration).
+* Results:
+  * Backend: 385/385. The billing tests (42) cover the off state and, with example yearly plans injected only in the
+    test, checkout with the yearly Stripe price, the "AED …/year" status and refusal of a mismatched yearly amount.
+  * e2e pricing: 4/4 in Chromium and WebKit.
