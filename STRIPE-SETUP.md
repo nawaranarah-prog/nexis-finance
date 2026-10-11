@@ -8,7 +8,7 @@ the owner.
 | | |
 |---|---|
 | Plans | Free AED 0; Nexis Plus AED 29/month or **AED 229/year**; Nexis Pro AED 69/month or **AED 599/year** (`backend/app/core/plans.py`, the owner's final prices). Annual = one upfront payment for 12 months: Plus saves AED 119 (~34%), Pro AED 229 (~28%) vs 12 monthly payments |
-| Mode | **Test mode.** Live mode needs Stripe activation, a live key, and **Vercel Pro**: Vercel's Hobby plan forbids processing payments ($20/user/month, awaiting the owner's OK). Steps: [docs/OWNER-SETUP.md](docs/OWNER-SETUP.md) |
+| Mode | **Test mode.** Live mode needs Stripe activation and a live key. Vercel's Hobby plan forbids processing payments, and the owner decided not to use Vercel Pro (2026-10-11), so live payments stay off for now. Steps: [docs/OWNER-SETUP.md](docs/OWNER-SETUP.md) |
 | Annual plans | **In code; on sale only once the two annual Stripe prices (AED 229, AED 599) exist and verify.** Monthly keeps selling either way. Subscribers on any earlier price keep it (shown as "Your existing price (unchanged)"); nobody is repriced |
 | Safety | Nexis sells a Stripe price only after confirming, in Stripe, that it has exactly the amount, currency and interval in `plans.PRICES`, and that it is in the same mode as the key. Otherwise the pricing page says plans are unavailable. |
 

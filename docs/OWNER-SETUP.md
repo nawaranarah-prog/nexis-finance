@@ -43,9 +43,9 @@ Stripe prices exist. First run `--check` to see the price inventory; full steps 
 
 ## 3. Live payments
 
-**Blocked on two decisions:**
-* **Vercel Pro ($20/user/month).** Vercel's Hobby plan forbids "any method of requesting or processing payment".
-  This is a new recurring cost and needs your OK.
+**Not started.** Payments stay in Stripe test mode. Two things are open:
+* **Hosting terms.** Vercel's Hobby plan forbids "any method of requesting or processing payment". You decided not
+  to use Vercel Pro (2026-10-11), so live payments wait until you choose another way.
 * **Stripe account activation** (business details, bank account): done in the Stripe dashboard.
 
 Then:

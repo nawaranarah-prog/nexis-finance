@@ -10,7 +10,7 @@ import type { AnyObj, Notification } from "../types/api";
 import { dt } from "../utils/format";
 import { useT } from "../i18n";
 import { LegalGate } from "../components/pulse";
-import { UpgradeDialog } from "../components/pro";
+import { UpgradeDialog, useBilling } from "../components/pro";
 import { DialogHost } from "../components/dialog";
 import { AccountGate } from "../components/account";
 
@@ -165,6 +165,7 @@ function Account() {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const plan: string | undefined = useBilling(!!me.data?.user).data?.plan;
   useEffect(() => {
     const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener("mousedown", close);
@@ -191,6 +192,7 @@ function Account() {
           <button role="menuitem" onClick={() => { setOpen(false); nav(`/finstagram/u/${u.username}`); }}>{t("My Finstagram profile")}</button>
           <button role="menuitem" onClick={() => { setOpen(false); nav("/advisor"); }}>{t("AI Advisor")}</button>
           <button role="menuitem" onClick={() => { setOpen(false); nav("/settings#plan"); }}>{t("Plan and usage")}</button>
+          {plan && plan !== "pro" && <button role="menuitem" onClick={() => { setOpen(false); nav(plan === "free" ? "/pricing" : "/settings#plan"); }}><b>{t(plan === "free" ? "Upgrade to Plus or Pro" : "Upgrade to Pro")}</b></button>}
           <button role="menuitem" onClick={() => { setOpen(false); nav("/settings"); }}>{t("Account settings")}</button>
           <button role="menuitem" onClick={logout}>{t("Sign out")}</button>
         </div>

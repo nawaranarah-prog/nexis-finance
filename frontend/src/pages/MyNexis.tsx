@@ -4,7 +4,7 @@ import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-ro
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Change, fmtPrice, SymbolSearch, useMe } from "../components/market";
 import { ago, assetPath, DiscussionRow, stamp } from "../components/pulse";
-import { handlePlanError, KeepPicker, useBilling } from "../components/pro";
+import { handlePlanError, KeepPicker, UpgradeNudge, useBilling } from "../components/pro";
 import { toast } from "../components/toast";
 import { useT } from "../i18n";
 import { api, errorMessage } from "../services/api";
@@ -246,7 +246,7 @@ function Analytics() {
     <section className="mn-analytics" aria-labelledby="an-h">
       <h2 id="an-h" className="pl-mini-h">Portfolio analytics</h2>
       {!caps.portfolio_insights ? (
-        <p className="xs muted">Concentration, currency exposure and gain drivers come with Nexis Plus; volatility, drawdown, beta and correlations with Nexis Pro. <Link to="/pricing">See plans</Link></p>
+        <p className="xs muted">Concentration, currency exposure and gain drivers come with Nexis Plus; volatility, drawdown, beta and correlations with Nexis Pro. <Link className="btn primary sm" to="/pricing">Upgrade to Plus or Pro</Link></p>
       ) : ins.isLoading ? <div className="wire-skel"><span className="skel w70" /></div>
         : ins.isError ? <p className="hm-error" role="alert">{errorMessage(ins.error)}</p>
         : i && !i.available ? <p className="xs muted">{i.reason}</p>
@@ -259,7 +259,7 @@ function Analytics() {
             {i.observations.length > 0 && <ul className="mn-an-obs">{i.observations.map((o: string) => <li key={o}>{o}</li>)}</ul>}
           </div>
         )}
-      {caps.portfolio_insights && !caps.portfolio_risk && <p className="xs muted">Volatility, drawdown, beta and correlations come with Nexis Pro. <Link to="/settings#plan">Change plan</Link></p>}
+      {caps.portfolio_insights && !caps.portfolio_risk && <p className="xs muted">Volatility, drawdown, beta and correlations come with Nexis Pro. <Link className="btn primary sm" to="/settings#plan">Upgrade to Pro</Link></p>}
       {caps.portfolio_risk && (risk.isLoading ? <div className="wire-skel"><span className="skel w70" /></div>
         : risk.isError ? <p className="hm-error" role="alert">{errorMessage(risk.error)}</p>
         : r && !r.available ? <p className="xs muted">{r.reason}</p>
@@ -531,6 +531,7 @@ export default function MyNexis() {
       </nav>
       {current === "today" && <Today />}
       {current === "investments" && <PlanAllowance />}
+      {current === "investments" && <UpgradeNudge feature="investments" />}
       {current === "watchlist" && <WatchCapacity />}
       {current === "investments" && <Investments add={sp.get("add") === "1"} />}
       {current === "watchlist" && <Watchlist />}

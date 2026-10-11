@@ -347,6 +347,10 @@
 .pro-price { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pro-usage { font-size: max(11.5px, var(--fs-floor)); color: var(--muted); }
 .pro-usage.low { color: var(--warn); }
+/* Upgrade prompt where a plan limit applies (Free and Plus members). */
+.pro-nudge { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin: 10px 0; padding: 10px 14px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface); }
+.pro-nudge p { margin: 0; flex: 1 1 260px; font-size: max(13px, var(--fs-floor)); }
+.pro-nudge .btn { flex: 0 0 auto; }
 .chat-usage { padding: 6px 2px 0; text-align: end; }
 .pro-plan h2 { font-size: max(13px, var(--fs-floor)); font-weight: 600; margin-bottom: 8px; }
 .pro-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 10px; font-size: max(13.5px, var(--fs-floor)); }
