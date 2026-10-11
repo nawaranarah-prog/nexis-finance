@@ -33,9 +33,8 @@ from app.core.config import get_settings
 from app.core.errors import ProviderError
 from app.core.logging import get_logger
 from app.db.base import utcnow
-from app.markets import feeds
+from app.markets import feeds, sources
 from app.markets import news as news_mod
-from app.markets.yahoo import YahooClient
 from app.models import Comment, Like, MarketCache, Media, Post, Save, User
 
 log = get_logger(__name__)
@@ -171,7 +170,7 @@ def _fetch(src: tuple) -> list[dict[str, Any]]:
     if kind == "youtube":
         return feeds.youtube(src[1], src[2], limit=5, timeout=9)
     if kind == "yahoo":
-        items = YahooClient(timeout=8).search(src[1], quotes=0, news=8)["news"]
+        items = sources.price_source(timeout=8).search(src[1], quotes=0, news=8)["news"]
         return [{**n, "source": "Yahoo Finance"} for n in items]
     if kind == "google":
         q = src[1]

@@ -18,9 +18,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ProviderError
-from app.markets import tradingview as tv
+from app.markets import sources
 
 SOURCE = "TradingView public screener and charts (delayed, unofficial)"
+tv = sources.uae_exchange()  # ADX shares, UAE bonds and indices (see app/markets/sources.py)
 
 SECTORS: list[tuple[str, tuple[str, ...]]] = [
     ("Banks", ("Major Banks", "Regional Banks")),

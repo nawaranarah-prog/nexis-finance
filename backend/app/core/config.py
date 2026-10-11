@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     sec_user_agent: str = "NexisFinance research contact@example.com"
     # Wikidata asks for a descriptive User-Agent with a way to reach the operator (set a real contact in production).
     wikidata_user_agent: str = "NexisFinance/1.0 (https://nexis-finance-five.vercel.app) httpx"
+    # Which adapter in app/markets/sources.py serves prices and UAE exchange data (today: "yahoo", "tradingview").
+    price_source: str = "yahoo"
+    uae_source: str = "tradingview"
     # Tests only: answer Wikidata calls from recorded responses in this directory instead of the network.
     wikidata_fixtures_dir: str | None = None
 

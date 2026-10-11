@@ -412,3 +412,23 @@ Production was checked after the merge (both Vercel projects were Ready):
 discussions use to instrument pages, news posts and static pages, with a visible text summary. That is small and
 reversible. The alternatives are prerendering (B) or a full SSR rewrite (C). **Not built; it waits for the owner's
 choice.**
+
+## Overhaul Step 3 — data layer: every source behind one interface, `DATA-SOURCES.md` complete
+
+* `backend/app/markets/sources.py` is the provider interface and registry. Prices (`price_source()`), UAE exchange
+  data (`uae_exchange()`) and news reach Yahoo, TradingView and the feeds only through it. Their code is unchanged,
+  as instructed. A licensed feed can replace one by adding an adapter and setting `NEXIS_PRICE_SOURCE` /
+  `NEXIS_UAE_SOURCE`.
+* `GET /api/system/sources` lists every source: official or not, licence, terms risk, code location, and which one is
+  active.
+* `DATA-SOURCES.md` now covers every source, with terms and free limits checked on 2026-10-11:
+  * FRED: 120 requests/min with a free key;
+  * Hacker News (Algolia): 10,000/hour per IP;
+  * World Bank: CC BY 4.0, no quota;
+  * Treasury: public domain;
+  * Wikidata and SEC as before.
+  It also lists what each unofficial source would be replaced by. StockTwits' commercial terms couldn't be confirmed,
+  and the file says so.
+* **No new unofficial endpoints. No paid sources.**
+* Results: backend 398/398 (3 new registry tests). The behaviour is unchanged: the registry returns the same clients,
+  and every existing market and UAE test passes.

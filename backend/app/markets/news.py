@@ -17,7 +17,8 @@ from urllib.parse import quote_plus
 import httpx
 
 from app.core.errors import ProviderError
-from app.markets.yahoo import UA, YahooClient
+from app.markets import sources
+from app.markets.yahoo import UA
 
 _SUFFIX = re.compile(
     r"\b(PJSC|P\.J\.S\.C\.?|plc|Inc\.?|Corp(oration)?\.?|Ltd\.?|Limited|S\.A\.|AG|N\.V\.|Holding(s)?|Company|Co\.)\s*$", re.I
@@ -70,7 +71,7 @@ def instrument_news(symbol: str, name: str | None, limit: int = 15) -> dict[str,
     # Yahoo does not know Abu Dhabi listings or bonds (its search would match unrelated tickers): use name search only.
     if not symbol.endswith((".AD", ".BOND")):
         try:
-            for n in YahooClient().search(symbol, quotes=0, news=10)["news"]:
+            for n in sources.price_source().search(symbol, quotes=0, news=10)["news"]:
                 items.append({**n, "source": "Yahoo Finance"})
             feeds["Yahoo Finance"] = "ok"
         except ProviderError as exc:

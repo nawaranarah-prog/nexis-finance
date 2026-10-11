@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConfigurationError, NexisError, ProviderError
 from app.db.base import utcnow
 from app.markets import news as news_mod
-from app.markets.yahoo import INTERVALS, YahooClient, _raw
+from app.markets import sources
+from app.markets.yahoo import INTERVALS, YahooClient, _raw  # noqa: F401 (YahooClient: the default price source, patched in tests)
 from app.models import MarketCache
 
 SOURCE = "Yahoo Finance public endpoints (unofficial, no SLA); news also from Google News"
@@ -127,7 +128,7 @@ def search(db: Session, q: str) -> list[dict[str, Any]]:
         local = []
     try:
         value, _ = cached(
-            db, f"search:{q.lower()[:80]}", timedelta(hours=12), lambda: YahooClient().search(q, quotes=12)["quotes"]
+            db, f"search:{q.lower()[:80]}", timedelta(hours=12), lambda: sources.price_source().search(q, quotes=12)["quotes"]
         )
     except ProviderError:
         if not local:
@@ -167,7 +168,7 @@ def quotes(db: Session, symbols: list[str]) -> list[dict[str, Any]]:
     if yahoo:
         key = "quotes:" + ",".join(sorted(yahoo))
         try:
-            value, _ = cached(db, key[:300], timedelta(seconds=60), lambda: YahooClient().quotes(yahoo))
+            value, _ = cached(db, key[:300], timedelta(seconds=60), lambda: sources.price_source().quotes(yahoo))
         except ProviderError:
             value = []
         out += value
@@ -371,7 +372,7 @@ def details(db: Session, symbol: str) -> dict[str, Any]:
             lambda: _uae_details(db, sym),
         )
         return {**value, "cache": meta, "source": uae.SOURCE}
-    y = YahooClient()
+    y = sources.price_source()
 
     def fetch() -> dict[str, Any]:
         meta = y.chart(sym, "1d", range_="5d")["meta"]  # also validates that the symbol exists
@@ -417,7 +418,7 @@ def statements(db: Session, symbol: str) -> dict[str, Any]:
     }  # fmt: skip
 
     def fetch() -> dict[str, Any]:
-        ts = YahooClient().timeseries(sym)
+        ts = sources.price_source().timeseries(sym)
         years = sorted({d[:4] for vals in ts.values() for d, _ in vals})
         rows = []
         for k, label in labels.items():
@@ -441,7 +442,7 @@ def peers(db: Session, symbol: str) -> list[str]:
             local = []
         if local:
             return local
-    value, _ = cached(db, f"peers:{sym}", timedelta(days=3), lambda: YahooClient().peers(sym))
+    value, _ = cached(db, f"peers:{sym}", timedelta(days=3), lambda: sources.price_source().peers(sym))
     return value
 
 
@@ -504,7 +505,7 @@ def history(db: Session, symbol: str, interval: str, start: date | None, end: da
 
         def fetch() -> dict[str, Any]:
             try:
-                return YahooClient().chart(sym, interval, start, end)
+                return sources.price_source().chart(sym, interval, start, end)
             except ProviderError:
                 if sym.endswith(".AE"):
                     return uae.history(db, sym, interval, start, end)

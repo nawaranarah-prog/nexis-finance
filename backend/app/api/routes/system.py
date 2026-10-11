@@ -37,6 +37,14 @@ def system_health(db: Session = Depends(get_db)) -> dict[str, Any]:
     return system.health(db)
 
 
+@router.get("/system/sources")
+def data_sources() -> dict[str, Any]:
+    """Every external source Nexis reads, whether it is an official API, its licence and terms risk (DATA-SOURCES.md)."""
+    from app.markets import sources
+
+    return {"sources": sources.describe()}
+
+
 @router.get("/system/config")
 def system_config() -> dict[str, Any]:
     s = get_settings()
