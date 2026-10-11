@@ -209,6 +209,10 @@ def test_checkout_requires_account_valid_plan_and_server_prices(client, stripe_o
     kw = stripe_on["created"][-1]
     assert kw["line_items"] == [{"price": PRO, "quantity": 1}] and kw["client_reference_id"] == str(u["id"]) and kw["mode"] == "subscription"
     assert "payment_method_types" not in kw and "{CHECKOUT_SESSION_ID}" in kw["success_url"] and kw["cancel_url"].endswith("/pro?checkout=canceled")
+    studio = {"ui_mode": "hosted_page", "billing_address_collection": "auto", "phone_number_collection": {"enabled": False},
+              "automatic_tax": {"enabled": False}, "allow_promotion_codes": False, "payment_method_collection": "always",
+              "submit_type": "auto", "integration_identifier": "hosted_web_0001", "origin_context": "web"}  # fmt: skip
+    assert {k: kw.get(k) for k in studio} == studio  # Checkout Studio configuration (STRIPE_INTEGRATION_TODO.md)
     assert client.get("/api/billing/status").json()["plan"] == "free"  # starting (or abandoning) checkout grants nothing
     _out(client)
 

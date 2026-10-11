@@ -194,7 +194,10 @@ def checkout_url(db: Session, user: User, plan: str) -> str:
             subscription_data={"metadata": {"nexis_user_id": str(user.id), "nexis_plan": plan}},
             metadata={"nexis_user_id": str(user.id), "nexis_plan": plan},
             success_url=f"{_site()}/pro/welcome?session_id={{CHECKOUT_SESSION_ID}}", cancel_url=f"{_site()}/pro?checkout=canceled",
-            allow_promotion_codes=False, billing_address_collection="auto",
+            # Checkout Studio configuration (hosted page; stripe-python 16 / API 2026-09-30 names it "hosted_page")
+            ui_mode="hosted_page", billing_address_collection="auto", phone_number_collection={"enabled": False},
+            automatic_tax={"enabled": False}, allow_promotion_codes=False, payment_method_collection="always",
+            submit_type="auto", integration_identifier="hosted_web_0001", origin_context="web",
         )  # fmt: skip
     except stripe.StripeError as exc:
         log.warning("stripe checkout failed: %s", exc.__class__.__name__)
