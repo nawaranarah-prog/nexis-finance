@@ -155,10 +155,12 @@ def test_final_plan_values():
                             "plus": {"investments": 10, "watchlist": 50, "advisor": 200},
                             "pro": {"investments": 20, "watchlist": 50, "advisor": 600}}  # fmt: skip
     assert {k: (v["tier"], v["amount_cents"], v["currency"], v["interval"]) for k, v in plans.PRICES.items()} == {
-        "plus_monthly": ("plus", 2900, "aed", "month"), "pro_monthly": ("pro", 6900, "aed", "month")}  # fmt: skip
+        "plus_monthly": ("plus", 2900, "aed", "month"), "pro_monthly": ("pro", 6900, "aed", "month"),
+        "plus_yearly": ("plus", 29000, "aed", "year"), "pro_yearly": ("pro", 99000, "aed", "year")}  # fmt: skip  # owner's prices, 2026-10-11
     assert [t for t in plans.TIERS if plans.allows(t, "portfolio_insights")] == ["plus", "pro"]
     assert [t for t in plans.TIERS if plans.allows(t, "portfolio_risk")] == ["pro"]
     assert plans.price_label("plus_monthly") == "AED 29/month" and plans.price_label("pro_monthly") == "AED 69/month"
+    assert plans.price_label("plus_yearly") == "AED 290/year" and plans.price_label("pro_yearly") == "AED 990/year"
     assert plans.tier_of("pro_yearly") == "pro" and plans.tier_of("pro_legacy") == "pro"  # earlier USD subscriptions stay Pro
 
 
@@ -726,47 +728,67 @@ def test_shared_workspace_is_read_only_for_the_public(client, db, monkeypatch):
     _out(client)
 
 
-# ------------------------------------------------------------------ yearly plans (switched on by configuration only)
-
-EXAMPLE_YEARLY = {  # illustrative amounts for the test only — the real ones are the owner's decision (STRIPE-SETUP.md)
-    "plus_yearly": {"tier": "plus", "amount_cents": 1111, "currency": "aed", "interval": "year", "lookup_key": "t_plus_y", "nickname": "t"},
-    "pro_yearly": {"tier": "pro", "amount_cents": 2222, "currency": "aed", "interval": "year", "lookup_key": "t_pro_y", "nickname": "t"},
-}  # fmt: skip
+# ------------------------------------------------------------------ yearly plans (AED 290 / AED 990, sold once configured)
 
 
-def test_yearly_plans_are_off_until_configured(client, stripe_on):
-    cat = client.get("/api/billing/plans").json()
-    assert cat["intervals"] == ["month"] and cat["billing_interval"] == "monthly"
-    u = _signup(client, "noyear")
-    assert client.post("/api/billing/checkout", json={"plan": "plus_yearly"}).status_code == 422
-    assert u
-
-
-def test_yearly_plans_sell_the_configured_stripe_price_and_grant_the_tier(client, db, stripe_on, monkeypatch):
-    monkeypatch.setattr(plans, "PRICES", {**plans.PRICES, **EXAMPLE_YEARLY})
+def _yearly_on(monkeypatch, world, plus_amount: int = 29000) -> None:  # type: ignore[no-untyped-def]
     s = get_settings()
     monkeypatch.setattr(s, "stripe_plus_yearly_price_id", "price_plus_y")
     monkeypatch.setattr(s, "stripe_pro_yearly_aed_price_id", "price_pro_y")
-    for pid, key in (("price_plus_y", "plus_yearly"), ("price_pro_y", "pro_yearly")):
-        want = EXAMPLE_YEARLY[key]
-        stripe_on["prices"][pid] = {"id": pid, "active": True, "unit_amount": want["amount_cents"], "currency": "aed",
-                                    "recurring": {"interval": "year", "interval_count": 1}, "livemode": False}  # fmt: skip
+    for pid, amount in (("price_plus_y", plus_amount), ("price_pro_y", 99000)):
+        world["prices"][pid] = {"id": pid, "active": True, "unit_amount": amount, "currency": "aed",
+                                "recurring": {"interval": "year", "interval_count": 1}, "livemode": False}  # fmt: skip
+
+
+def _fresh_price_check(db) -> None:  # type: ignore[no-untyped-def]
+    for row in db.scalars(select(MarketCache).where(MarketCache.key.like("billing:%"))):
+        db.delete(row)
+    db.commit()
+
+
+def test_yearly_plans_are_hidden_until_their_stripe_prices_exist(client, stripe_on):
     cat = client.get("/api/billing/plans").json()
-    assert cat["available"] is True and cat["intervals"] == ["month", "year"]
-    plus = next(t for t in cat["tiers"] if t["id"] == "plus")
-    assert plus["prices"]["year"] == {"key": "plus_yearly", "amount": 11.11, "currency": "AED"}
+    assert cat["available"] is True and cat["intervals"] == ["month"] and cat["billing_interval"] == "monthly"
+    assert all("year" not in t["prices"] for t in cat["tiers"])
+    _signup(client, "noyear")
+    r = client.post("/api/billing/checkout", json={"plan": "plus_yearly"})
+    assert r.status_code == 422 and "isn't available" in r.json()["error"]["message"]
+    _out(client)
+
+
+def test_yearly_checkout_status_and_switching(client, db, stripe_on, monkeypatch):
+    _yearly_on(monkeypatch, stripe_on)
+    _fresh_price_check(db)
+    cat = client.get("/api/billing/plans").json()
+    assert cat["intervals"] == ["month", "year"] and cat["billing_interval"] == "monthly or yearly"
+    tiers = {t["id"]: t for t in cat["tiers"]}
+    assert tiers["plus"]["prices"]["year"] == {"key": "plus_yearly", "amount": 290.0, "currency": "AED"}
+    assert tiers["pro"]["prices"]["year"] == {"key": "pro_yearly", "amount": 990.0, "currency": "AED"}
 
     u = _signup(client, "yearly")
     assert client.post("/api/billing/checkout", json={"plan": "plus_yearly"}).status_code == 200
     assert stripe_on["created"][-1]["line_items"] == [{"price": "price_plus_y", "quantity": 1}]
-    _go_pro(client, stripe_on, u, price="price_pro_y")
+    sid = _go_pro(client, stripe_on, u, price="price_plus_y")
     st = client.get("/api/billing/status").json()
-    assert st["plan"] == "pro" and st["billing"] == "AED 22.22/year"
+    assert (st["plan"], st["billing"], st["interval"], st["price_key"]) == ("plus", "AED 290/year", "year", "plus_yearly")
 
-    # a yearly price whose amount differs from plans.PRICES makes the plans unsellable (nothing is ever sold at a surprise price)
-    stripe_on["prices"]["price_plus_y"]["unit_amount"] = 9999
-    for row in db.scalars(select(MarketCache).where(MarketCache.key.like("billing:%"))):
-        db.delete(row)
-    db.commit()
-    assert client.get("/api/billing/plans").json()["available"] is False
+    assert client.post("/api/billing/change-plan", json={"plan": "plus_yearly"}).status_code == 422  # already on it
+    st = client.post("/api/billing/change-plan", json={"plan": "pro_yearly"}).json()  # tier up, stays yearly
+    kw = stripe_on["modified"][-1][1]
+    assert st["billing"] == "AED 990/year" and kw["items"][0]["price"] == "price_pro_y" and kw["proration_behavior"] == "always_invoice"
+    st = client.post("/api/billing/change-plan", json={"plan": "pro_monthly"}).json()  # yearly -> monthly: credited, not charged
+    assert st["billing"] == "AED 69/month" and stripe_on["modified"][-1][1]["proration_behavior"] == "create_prorations"
+    client.post("/api/billing/change-plan", json={"plan": "pro_yearly"})  # monthly -> yearly: charged now
+    assert stripe_on["modified"][-1][1]["proration_behavior"] == "always_invoice" and sid
+    _out(client)
+
+
+def test_a_wrong_yearly_price_only_disables_yearly(client, db, stripe_on, monkeypatch):
+    _yearly_on(monkeypatch, stripe_on, plus_amount=19900)  # not AED 290: never sold at a surprise price
+    _fresh_price_check(db)
+    cat = client.get("/api/billing/plans").json()
+    assert cat["available"] is True and cat["intervals"] == ["month"]  # monthly keeps selling
+    _signup(client, "wrongyear")
+    assert client.post("/api/billing/checkout", json={"plan": "plus_yearly"}).status_code == 422
+    assert client.post("/api/billing/checkout", json={"plan": "plus_monthly"}).status_code == 200
     _out(client)

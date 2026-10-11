@@ -54,10 +54,28 @@ def legacy_price_ids() -> set[str]:
     return {p for p in (s.stripe_pro_monthly_price_id, s.stripe_pro_yearly_price_id) if p}
 
 
+REQUIRED = ("plus_monthly", "pro_monthly")  # the plans that must exist for anything to be sold
+
+
 def configured() -> bool:
-    """Keys and both price ids are set. Whether the Stripe prices match the plans is checked in ``catalog``."""
+    """Keys and the monthly price ids are set. Yearly plans are optional: they're sold only once configured and verified."""
     s = get_settings()
-    return bool(s.stripe_secret_key and s.stripe_webhook_secret and all(price_ids().values()))
+    ids = price_ids()
+    return bool(s.stripe_secret_key and s.stripe_webhook_secret and all(ids.get(k) for k in REQUIRED))
+
+
+def on_sale(db: Session) -> list[str]:
+    """Plan keys that can be bought right now: configured in Stripe and verified to match ``plans.PRICES``."""
+    from app.services import billing_stripe
+
+    if not configured():
+        return []
+    bad = billing_stripe.price_problems_by_plan(db)
+    return [k for k, pid in price_ids().items() if pid and k not in bad]
+
+
+def interval_of(price_key: str | None) -> str | None:
+    return (plans.PRICES.get(price_key or "") or {}).get("interval")
 
 
 def test_mode() -> bool:
@@ -76,8 +94,8 @@ def _sellable(db: Session, user: User | None = None) -> tuple[bool, str | None]:
         return False, "Paid plans aren't available to buy yet."  # test keys on the public site: testers only
     from app.services import billing_stripe
 
-    problems = billing_stripe.verify_prices(db)
-    if problems:
+    problems = billing_stripe.price_problems_by_plan(db)
+    if any(k in problems for k in REQUIRED):  # a problem with an optional (yearly) plan only takes that plan off sale
         return False, "Paid plans are temporarily unavailable."  # the details are logged, never shown to members
     return True, None
 
@@ -88,10 +106,17 @@ def payment_methods() -> list[str]:
 
 
 def catalog(db: Session, user: User | None = None) -> dict[str, Any]:
-    """Plans, limits and prices from ``plans.py`` — one source for the pricing page, Settings and checkout."""
+    """Plans, limits and prices from ``plans.py`` — one source for the pricing page, Settings and checkout. Only plans
+    that are actually on sale are listed (a yearly plan without a verified Stripe price is left out)."""
     sellable, reason = _sellable(db, user)
-    return {**plans.public(), "available": sellable, "unavailable_reason": reason, "test_mode": sellable and test_mode(),
-            "payment_methods": payment_methods(), "billing_interval": "monthly" if plans.intervals() == ["month"] else "monthly or yearly",
+    pub = plans.public()
+    sale = set(on_sale(db)) if sellable else set(REQUIRED)
+    for t in pub["tiers"]:
+        t["prices"] = {i: p for i, p in (t.get("prices") or {}).items() if p["key"] in sale}
+    pub["prices"] = {k: v for k, v in pub["prices"].items() if k in sale}
+    pub["intervals"] = [i for i in plans.intervals() if all(i in t["prices"] for t in pub["tiers"] if t["id"] in plans.PAID_TIERS)]
+    return {**pub, "available": sellable, "unavailable_reason": reason, "test_mode": sellable and test_mode(),
+            "payment_methods": payment_methods(), "billing_interval": "monthly" if pub["intervals"] == ["month"] else "monthly or yearly",
             "cancellation": CANCELLATION}  # fmt: skip
 
 
@@ -110,6 +135,8 @@ def status(db: Session, user: User) -> dict[str, Any]:
         "pro": tier == "pro",
         "status": sub.status if sub else None,
         "billing": plans.price_label(sub.plan) if paid and sub else None,
+        "price_key": sub.plan if paid and sub else None,
+        "interval": interval_of(sub.plan) if paid and sub else None,
         "billing_plan": sub.plan if paid and sub else None,
         "renews_at": iso(sub.current_period_end) if paid and sub and not sub.cancel_at_period_end else None,
         "access_until": iso(sub.current_period_end) if paid and sub and sub.cancel_at_period_end else None,
@@ -134,6 +161,8 @@ def checkout(db: Session, user: User, plan: str) -> dict[str, str]:
     sellable, reason = _sellable(db, user)
     if not sellable:
         raise BillingUnavailable(reason or "Paid plans aren't available to buy yet.")
+    if plan not in on_sale(db):
+        raise ValidationFailed("That plan isn't available right now.")
     from app.services import billing_stripe
 
     return {"url": billing_stripe.checkout_url(db, user, plan)}
@@ -151,11 +180,13 @@ def change_plan(db: Session, user: User, plan: str, keep: list[str] | None = Non
     if sub.status in ("past_due", "unpaid"):
         raise ValidationFailed("Please update your payment method before changing plans.")
     target = plans.PRICES[plan]["tier"]
-    if target == tier and not sub.cancel_at_period_end:
-        raise ValidationFailed(f"You're already on {plans.NAMES[tier]}.")
+    if plan == sub.plan and not sub.cancel_at_period_end:
+        raise ValidationFailed(f"You're already on {plans.NAMES[tier]} ({plans.price_label(plan)}).")
     sellable, reason = _sellable(db, user)
     if not sellable:
         raise BillingUnavailable(reason or "Plan changes aren't available right now.")
+    if plan not in on_sale(db):
+        raise ValidationFailed("That plan isn't available right now.")
     from app.services import billing_stripe, investments
 
     cap = entitlements.limit("investments", target)
