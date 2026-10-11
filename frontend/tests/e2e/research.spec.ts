@@ -24,7 +24,7 @@ test("an instrument page carries the company into each research tool", async ({ 
   await page.getByLabel(/Why you think/).fill("Emaar will keep rising because Dubai property sales stay strong for years.");
   await page.getByRole("button", { name: "Save thesis" }).click();
   await expect(page).toHaveURL(/\/devils-advocate\/\d+$/);
-  await expect(page.getByRole("link", { name: "Connections" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Connections" })).toBeVisible();  // the sidebar has its own "Connections" (data connections)
 
   await page.goto("/my-research");
   await expect(page.locator("main h1")).toHaveText("My research");
