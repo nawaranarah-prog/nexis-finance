@@ -15,12 +15,18 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
-from sklearn.inspection import partial_dependence, permutation_importance
-from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+# scikit-learn is optional: the hosted API leaves it out to stay within the serverless install size.
+try:
+    from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+    from sklearn.inspection import partial_dependence, permutation_importance
+    from sklearn.linear_model import Ridge
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    SKLEARN = True
+except ImportError:  # pragma: no cover - depends on the deployment
+    SKLEARN = False
 
 from app.core.errors import ConfigurationError, InsufficientDataError
 from app.ml.features import VOL_FEATURES, build_volatility_panel
@@ -74,6 +80,11 @@ def run_volatility_experiment(
     config: dict[str, Any],
     progress: Callable[[float, str], None] | None = None,
 ) -> dict[str, Any]:
+    if not SKLEARN:
+        raise ConfigurationError(
+            "The machine-learning experiments aren't available on this server (scikit-learn isn't installed). "
+            "Run Nexis locally or with Docker to use them."
+        )
     t0 = time.perf_counter()
     symbols: list[str] = config["symbols"]
     horizon = int(config.get("horizon", 10))

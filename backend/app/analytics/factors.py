@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
+from scipy import stats
 
 from app.core.errors import InsufficientDataError
 
@@ -87,6 +87,38 @@ def factor_returns(
     return out, {"formation_months": coverage, "quantile": quantile}
 
 
+def _ols_hac(y: np.ndarray, X: np.ndarray, maxlags: int = 5) -> dict[str, Any]:
+    """OLS with Newey-West (Bartlett kernel) HAC covariance, matching statsmodels' ``cov_type="HAC"`` defaults
+    (no small-sample correction; normal-distribution p-values)."""
+    n = len(y)
+    xtx_inv = np.linalg.pinv(X.T @ X)
+    params = xtx_inv @ X.T @ y
+    resid = y - X @ params
+    u = X * resid[:, None]
+    S = u.T @ u
+    for lag in range(1, maxlags + 1):
+        w = 1 - lag / (maxlags + 1)
+        g = u[lag:].T @ u[:-lag]
+        S += w * (g + g.T)
+    cov = xtx_inv @ S @ xtx_inv
+    bse = np.sqrt(np.diag(cov))
+    tvalues = params / bse
+    pvalues = 2 * stats.norm.sf(np.abs(tvalues))
+    ss_res = float(resid @ resid)
+    centered = y - y.mean()
+    rsquared = 1 - ss_res / float(centered @ centered)
+    k = X.shape[1] - 1
+    return {
+        "params": params,
+        "bse": bse,
+        "tvalues": tvalues,
+        "pvalues": pvalues,
+        "rsquared": rsquared,
+        "rsquared_adj": 1 - (1 - rsquared) * (n - 1) / (n - k - 1),
+        "nobs": n,
+    }
+
+
 def factor_exposure(portfolio_returns: pd.Series, factors: pd.DataFrame, market: pd.Series | None = None) -> dict[str, Any]:
     """OLS of portfolio returns on (market +) factor returns with HAC (Newey-West) standard errors."""
     X = factors.copy()
@@ -97,25 +129,26 @@ def factor_exposure(portfolio_returns: pd.Series, factors: pd.DataFrame, market:
         raise InsufficientDataError(
             "factor regression needs at least 60 overlapping observations", details={"available": len(df)}
         )
-    y = df["y"]
-    Xc = sm.add_constant(df.drop(columns="y"))
-    model = sm.OLS(y, Xc).fit(cov_type="HAC", cov_kwds={"maxlags": 5})
+    Xdf = df.drop(columns="y")
+    names = ["const", *Xdf.columns]
+    X = np.column_stack([np.ones(len(df)), Xdf.to_numpy(dtype=float)])
+    model = _ols_hac(df["y"].to_numpy(dtype=float), X, maxlags=5)
     rows = []
-    for name in Xc.columns:
+    for i, name in enumerate(names):
         rows.append(
             {
                 "factor": "intercept (daily)" if name == "const" else name,
-                "beta": float(model.params[name]),
-                "t_stat": float(model.tvalues[name]),
-                "p_value": float(model.pvalues[name]),
-                "std_error": float(model.bse[name]),
+                "beta": float(model["params"][i]),
+                "t_stat": float(model["tvalues"][i]),
+                "p_value": float(model["pvalues"][i]),
+                "std_error": float(model["bse"][i]),
             }
         )
     return {
         "coefficients": rows,
-        "r_squared": float(model.rsquared),
-        "adj_r_squared": float(model.rsquared_adj),
-        "observations": int(model.nobs),
+        "r_squared": float(model["rsquared"]),
+        "adj_r_squared": float(model["rsquared_adj"]),
+        "observations": int(model["nobs"]),
         "start_date": df.index[0].date().isoformat(),
         "end_date": df.index[-1].date().isoformat(),
         "standard_errors": "Newey-West HAC, 5 lags",
