@@ -1,0 +1,19 @@
+# Legal review tracker (before the full commercial launch)
+
+The owner scheduled the Terms and Privacy review for later (2026-10-11). This list collects everything that needs a
+lawyer's (or the owner's) sign-off before Nexis is launched commercially. Each item says where it lives in the product.
+
+| # | Item | Why it needs review | Where | Status |
+|---|---|---|---|---|
+| 1 | **Terms of Use and Privacy Policy** | Drafted in-house ("for review by qualified counsel"). Updated 2026-10-11: the AI Advisor uses the investor profile; the advisor profile, advice history and research tools are listed under data collected. **The version was not bumped**: bumping makes every member re-accept | `frontend/src/pages/Legal.tsx`, `backend/app/core/legal.py` | Open |
+| 2 | **AI Advisor framing** | Personal investment advice is a licensed activity in the UAE (SCA). The advisor now tailors *educational* guidance to a profile: no buy/sell calls and no judging amounts. Counsel should confirm this framing, the disclaimer line and the "not advice" wording | `backend/app/services/advisor.py` (prompt), `tests/ai-cases.md` | Open |
+| 3 | **Advice log retention** | Every member Q&A is stored (with the profile used) until the account is deleted. Decide the retention period and whether it must be disclosed differently | `advice_log` table; Privacy § "What we collect" | Open |
+| 4 | **Market price data licence** | Prices, fundamentals and UAE data come from Yahoo Finance and TradingView without a licence. Their terms don't allow commercial use. The site displays them; chart posts and other republishing are now blocked | `backend/app/markets/sources.py`, `DATA-SOURCES.md` | **Decision needed** (see options in DATA-SOURCES.md) |
+| 5 | **Publisher RSS headlines** | Khaleej Times, Gulf News, The National, Arabian Business, MarketWatch, CNBC and Cointelegraph: headline, publisher and link only (no excerpt, no image) since 2026-10-11. Commercial permission isn't verified for any of them | `backend/app/markets/policy.py` | Open: ask the publishers, or keep headline + link only |
+| 6 | **StockTwits** | Switched off 2026-10-11. Commercial reuse of public streams isn't confirmed | `NEXIS_PULSE_PUBLIC_STOCKTWITS` | Off until confirmed |
+| 7 | **Hosting terms** | Vercel's Hobby plan is for non-commercial use only. Taking payments requires Vercel Pro ($20/user/month) | Vercel account | **Decision needed before live payments** |
+| 8 | **Stripe live** | Business details, refund and cancellation wording, VAT/tax handling for UAE customers, receipts | Stripe dashboard; `STRIPE-SETUP.md` | Open |
+| 9 | **Operator details** | Terms name the operator and a personal Gmail contact. A business entity and a dedicated contact address are recommended | `Legal.tsx` (`OPERATOR`, `CONTACT`) | Open |
+| 10 | **Wikidata attribution** | CC0, so no attribution is required. Nexis links every statement anyway | World Graph | Fine |
+| 11 | **Reddit** | Automated collection is off. Only member-shared links, through Reddit's official embed | `reddit_links.py` | Fine unless collection is wanted |
+| 12 | **Email** | Transactional email through a Gmail account (500/day, Google's terms): fine for verification and reset; not for marketing email | `NEXIS_SMTP_*` | Fine for now |
