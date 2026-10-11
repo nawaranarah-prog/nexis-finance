@@ -70,6 +70,14 @@ def _site() -> str:
 # ------------------------------------------------------------------ prices (shown on the pricing page)
 
 
+def price_problems_by_plan(db: Session) -> dict[str, list[str]]:
+    """The problems found for each plan key (see ``verify_prices``); a plan with problems is not sold."""
+    out: dict[str, list[str]] = {}
+    for msg in verify_prices(db):
+        out.setdefault(msg.split(":", 1)[0], []).append(msg)
+    return out
+
+
 def verify_prices(db: Session) -> list[str]:
     """Check each configured Stripe price is exactly the plan in ``plans.PRICES`` (amount, currency, interval,
     recurring and active). Returns the problems found (empty = sellable). Cached for 10 minutes."""
@@ -82,8 +90,9 @@ def verify_prices(db: Session) -> list[str]:
     for plan, want in plans.PRICES.items():
         pid = ids.get(plan)
         if not pid:
-            problems.append(f"{plan}: no price id configured")
-            continue
+            if plan in billing.REQUIRED:
+                problems.append(f"{plan}: no price id configured")
+            continue  # an optional (yearly) plan without an id simply isn't on sale
         try:
             p = stripe.Price.retrieve(pid, api_key=_key())
         except stripe.StripeError as exc:
@@ -185,7 +194,10 @@ def checkout_url(db: Session, user: User, plan: str) -> str:
             subscription_data={"metadata": {"nexis_user_id": str(user.id), "nexis_plan": plan}},
             metadata={"nexis_user_id": str(user.id), "nexis_plan": plan},
             success_url=f"{_site()}/pro/welcome?session_id={{CHECKOUT_SESSION_ID}}", cancel_url=f"{_site()}/pro?checkout=canceled",
-            allow_promotion_codes=False, billing_address_collection="auto",
+            # Checkout Studio configuration (hosted page; stripe-python 16 / API 2026-09-30 names it "hosted_page")
+            ui_mode="hosted_page", billing_address_collection="auto", phone_number_collection={"enabled": False},
+            automatic_tax={"enabled": False}, allow_promotion_codes=False, payment_method_collection="always",
+            submit_type="auto", integration_identifier="hosted_web_0001", origin_context="web",
         )  # fmt: skip
     except stripe.StripeError as exc:
         log.warning("stripe checkout failed: %s", exc.__class__.__name__)
@@ -228,7 +240,10 @@ def change_plan(db: Session, sub: Subscription, plan: str) -> None:
         item = (_get(current, "items", "data") or [None])[0]
         if item is None:
             raise billing.BillingUnavailable("We couldn't read your subscription. Please try again.")
-        upgrade = plans.rank(plans.PRICES[plan]["tier"]) > plans.rank(plans.tier_of(sub.plan) or "pro")
+        cur_tier, new_tier = plans.tier_of(sub.plan) or "pro", plans.PRICES[plan]["tier"]
+        to_yearly = plans.PRICES[plan]["interval"] == "year" and billing.interval_of(sub.plan) != "year"
+        # charged now (and refused if the payment fails): a higher tier, or moving to yearly billing
+        upgrade = plans.rank(new_tier) > plans.rank(cur_tier) or (to_yearly and plans.rank(new_tier) >= plans.rank(cur_tier))
         updated = stripe.Subscription.modify(
             sub.subscription_id, api_key=_key(), items=[{"id": _get(item, "id"), "price": price}],
             proration_behavior="always_invoice" if upgrade else "create_prorations",

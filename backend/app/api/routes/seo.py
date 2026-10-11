@@ -43,6 +43,11 @@ PAGES = [
     ("/markets?list=uae_bonds", "daily", "0.8"),
     ("/compare", "weekly", "0.7"),
     ("/valuation", "weekly", "0.7"),
+    ("/pro", "weekly", "0.6"),
+    ("/my-research", "weekly", "0.6"),
+    ("/world-graph", "weekly", "0.6"),
+    ("/time-machine", "weekly", "0.6"),
+    ("/devils-advocate", "weekly", "0.6"),
     ("/terms", "monthly", "0.2"),
     ("/privacy", "monthly", "0.2"),
     ("/disclaimer", "monthly", "0.2"),
@@ -72,7 +77,10 @@ def sitemap(db: Session = Depends(get_db)) -> Response:
         urls += [(f"/markets/{quote(b['symbol'], safe='')}", "daily", "0.6") for b in uae.bonds(db)]
     except NexisError as exc:
         log.warning("sitemap: UAE bonds unavailable: %s", exc)
-    posts = db.scalars(select(Post.id).where(Post.hidden.is_(False)).order_by(Post.created_at.desc()).limit(500))
+    from app.models import User
+
+    posts = db.scalars(select(Post.id).join(User, User.id == Post.user_id)  # the feed is news-only: news pages' posts
+                       .where(Post.hidden.is_(False), User.kind == "page").order_by(Post.created_at.desc()).limit(500))  # fmt: skip
     urls += [(f"/finstagram/p/{pid}", "weekly", "0.4") for pid in posts]
 
     body = "".join(
@@ -171,3 +179,108 @@ def render_discussion(pid: str, slug: str | None = None, db: Session = Depends(g
     title, desc, extra = head_for(d, d.comment_count)
     html = _inject(shell, title, desc, SITE + pulse.url_for(d), extra)
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=60, s-maxage=60"})
+
+
+# ------------------------------------------------------------------ server-rendered heads for other public pages
+# Option A of docs/SSR-PROPOSAL.md. Each page gets its own title, description, canonical URL, Open Graph tags and a
+# short visible text summary inside #root (React replaces it on load). No member data is ever rendered here, and no
+# price data or provider text either: making unlicensed prices indexable would be redistribution (app/markets/policy.py).
+
+STATIC: dict[str, tuple[str, str]] = {
+    "pro": ("Plans and pricing · Nexis Finance", "Free, Nexis Plus and Nexis Pro: what each plan includes, in UAE dirhams. Cancel any time."),
+    "terms": ("Terms of Use · Nexis Finance", "The terms for using Nexis Finance."),
+    "privacy": ("Privacy Policy · Nexis Finance", "What Nexis Finance collects, why, and your choices."),
+    "disclaimer": ("Disclaimer · Nexis Finance", "Nexis Finance provides general information, not investment advice."),
+    "world-graph": ("World Graph: who owns and controls a company · Nexis Finance",
+                    "See a company's owners, subsidiaries, listings, industry and country — every link with its source and how well it is referenced."),
+    "time-machine": ("Time Machine: stress-test your holdings · Nexis Finance",
+                     "What would an oil, stock-market or interest-rate move do to your holdings? Measured sensitivities with their uncertainty — a what-if, never a forecast."),
+    "devils-advocate": ("Devil's Advocate: challenge your investment thesis · Nexis Finance",
+                        "Write your thesis and get the strongest evidence-based case against it, with every quote checked."),
+    "my-research": ("Research tools · Nexis Finance", "World Graph, Time Machine and Devil's Advocate — research tools that show their working."),
+}  # fmt: skip
+
+
+def _page(shell: str, path: str, title: str, desc: str, summary_html: str, extra: str = "", robots: str = "index, follow") -> str:
+    html = _inject(shell, title, desc, SITE + path, '<meta property="og:type" content="website" />' + extra, robots=robots)
+    return html.replace('<div id="root"></div>', f'<div id="root"><main class="seo-summary">{summary_html}</main></div>', 1)
+
+
+def _spa(path: str) -> RedirectResponse:
+    return RedirectResponse(f"{path}?spa=1", status_code=302)  # the app itself serves the page without the enhanced head
+
+
+@router.get("/seo/render/page/{name}", include_in_schema=False)
+def render_static(name: str) -> Response:
+    if name not in STATIC:
+        return _spa(f"/{quote(name, safe='')}")
+    try:
+        shell = _shell()
+    except (httpx.HTTPError, ValueError):
+        return _spa(f"/{name}")
+    title, desc = STATIC[name]
+    e = html_escape
+    html = _page(shell, f"/{name}", title, desc, f"<h1>{e(title.split(' · ')[0])}</h1><p>{e(desc)}</p>")
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300, s-maxage=3600"})
+
+
+@router.get("/seo/render/markets/{symbol}", include_in_schema=False)
+def render_instrument(symbol: str, db: Session = Depends(get_db)) -> Response:
+    from app.models import FinEntity
+    from app.services import markets
+
+    try:
+        sym = markets.clean_symbol(symbol)
+    except NexisError:
+        return _spa(f"/markets/{quote(symbol, safe='')}")
+    try:
+        shell = _shell()
+    except (httpx.HTTPError, ValueError):
+        return _spa(f"/markets/{quote(sym, safe='')}")
+    name, exchange = sym, None
+    try:  # name and exchange are facts; nothing else from the price provider is rendered
+        d = markets.details(db, sym)
+        name, exchange = d.get("name") or sym, d.get("exchange")
+    except NexisError:
+        pass
+    e = html_escape
+    where = f" on {exchange}" if exchange else ""
+    title = f"{name} ({sym}) · Nexis Finance"
+    desc = f"{name} ({sym}){where}: chart, valuation, news, community discussion and research tools on Nexis Finance."
+    facts = ""
+    ent = db.scalar(select(FinEntity).where(FinEntity.symbol == sym))
+    if ent is not None and ent.description:  # Wikidata, CC0
+        facts = f"<p>{e(ent.name)}: {e(ent.description)}{f' · {e(ent.country)}' if ent.country else ''}.</p>"
+    ld = {"@context": "https://schema.org", "@type": "WebPage", "name": title, "url": f"{SITE}/markets/{quote(sym, safe='')}",
+          "about": {"@type": "Corporation" if "." in sym or sym.isalpha() else "Thing", "name": name, "tickerSymbol": sym},
+          "isPartOf": {"@type": "WebSite", "name": "Nexis Finance", "url": SITE + "/"}}  # fmt: skip
+    ld_json = json.dumps(ld).replace("</", "<\\/")  # text can never close the script tag
+    extra = f'<script type="application/ld+json">{ld_json}</script>'
+    body = f"<h1>{e(name)} ({e(sym)})</h1><p>{e(desc)}</p>{facts}"
+    html = _page(shell, f"/markets/{quote(sym, safe='')}", title, desc, body, extra)
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300, s-maxage=600"})
+
+
+@router.get("/seo/render/finstagram/p/{pid}", include_in_schema=False)
+def render_post(pid: int, db: Session = Depends(get_db)) -> Response:
+    from app.markets import policy
+    from app.models import User
+
+    try:
+        shell = _shell()
+    except (httpx.HTTPError, ValueError):
+        return _spa(f"/finstagram/p/{pid}")
+    p = db.get(Post, pid)
+    author = db.get(User, p.user_id) if p is not None else None
+    if p is None or p.hidden or author is None or author.kind != "page" or policy.blocked_url(p.link_url):
+        html = _inject(shell, "Post not found · Nexis Finance", "This post is not available.", f"{SITE}/finstagram", "", robots="noindex")
+        return HTMLResponse(html, status_code=404)
+    e = html_escape
+    headline = (p.link_title or p.body.split("\n")[0])[:200]
+    source = f" — {p.link_source}" if p.link_source else ""
+    title = f"{headline}{source} · Nexis Finance"
+    desc = f"{headline}{source}. Read the original article and the discussion on Nexis Finance."
+    link = f'<p><a href="{e(p.link_url)}" rel="nofollow noopener">Read the original article{e(source)}</a></p>' if p.link_url else ""
+    html = _page(shell, f"/finstagram/p/{pid}", title, desc[:200], f"<h1>{e(headline)}</h1>{link}",
+                 '<meta property="og:type" content="article" />')  # fmt: skip
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300, s-maxage=600"})

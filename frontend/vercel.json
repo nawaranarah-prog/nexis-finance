@@ -31,6 +31,21 @@
       "destination": "https://nexis-finance-api.vercel.app/api/seo/render/pulse/d/:path*"
     },
     {
+      "source": "/markets/:symbol",
+      "missing": [{ "type": "query", "key": "spa" }],
+      "destination": "https://nexis-finance-api.vercel.app/api/seo/render/markets/:symbol"
+    },
+    {
+      "source": "/finstagram/p/:id",
+      "missing": [{ "type": "query", "key": "spa" }],
+      "destination": "https://nexis-finance-api.vercel.app/api/seo/render/finstagram/p/:id"
+    },
+    {
+      "source": "/:name(pro|terms|privacy|disclaimer|world-graph|time-machine|devils-advocate|my-research)",
+      "missing": [{ "type": "query", "key": "spa" }],
+      "destination": "https://nexis-finance-api.vercel.app/api/seo/render/page/:name"
+    },
+    {
       "source": "/((?!assets/|favicon.svg|robots.txt|og-image.png|apple-touch-icon.png|google[0-9a-f]+\\.html).*)",
       "destination": "/index.html"
     }

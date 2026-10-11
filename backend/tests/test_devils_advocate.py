@@ -189,3 +189,35 @@ def test_inputs_and_daily_limit(client, offline, monkeypatch):  # type: ignore[n
     tid = client.post("/api/devils-advocate/theses", json={"symbol": "EMAAR.AE", "thesis": THESIS}).json()["item"]["id"]
     monkeypatch.setattr(route, "DAILY", 2)
     assert [client.post(f"/api/devils-advocate/theses/{tid}/analyse").status_code for _ in range(3)] == [201, 201, 429]
+
+
+def test_a_cut_off_answer_is_retried_once_and_diagnosed(client, offline, monkeypatch):  # type: ignore[no-untyped-def]
+    """Production showed a reasoning model running out of tokens mid-JSON: retry once, and record why."""
+    member(client, "dar")
+    tid = client.post("/api/devils-advocate/theses", json={"symbol": "EMAAR.AE", "thesis": THESIS}).json()["item"]["id"]
+    full = json.dumps(ai_answer())
+    replies = iter(
+        [{"content": full[: len(full) // 2], "_finish": "length"}, {"content": "```json\n" + full + "\n```", "_finish": "stop"}]
+    )
+    seen: list = []
+    monkeypatch.setattr(llm, "chat", lambda messages, **k: seen.append((messages, k)) or next(replies))
+    run = client.post(f"/api/devils-advocate/theses/{tid}/analyse").json()["run"]
+    assert run["status"] == "completed" and len(seen) == 2 and seen[0][1]["max_tokens"] == da.MAX_TOKENS
+    assert (
+        run["output"]["diagnostics"][0]["finish_reason"] == "length"
+        and "cut-off JSON" in run["output"]["diagnostics"][0]["problem"]
+    )
+    assert "only the JSON object" in seen[1][0][-1]["content"]
+
+    monkeypatch.setattr(llm, "chat", lambda messages, **k: {"content": "", "_finish": "length"})
+    failed = client.post(f"/api/devils-advocate/theses/{tid}/analyse").json()["run"]
+    assert (
+        failed["status"] == "failed"
+        and [d["problem"] for d in failed["output"]["diagnostics"]] == ["no JSON object in the answer (empty answer)"] * 2
+    )
+
+
+def test_parse_json_finds_the_object_in_any_wrapping() -> None:
+    assert da.parse_json('Sure!\n```json\n{"a": 1}\n```\nHope that helps {x}') == {"a": 1}
+    with pytest.raises(ValueError, match="cut-off"):
+        da.parse_json('{"a": [1, 2')

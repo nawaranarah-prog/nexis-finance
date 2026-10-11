@@ -24,15 +24,31 @@ Nexis stays within them.
 | **Stripe** | Billing | Secret key | Stripe terms; per-transaction fees only | — | See [STRIPE-SETUP.md](STRIPE-SETUP.md) |
 | **AI: Vercel AI Gateway** (OIDC in production) | Advisor, Help, Devil's Advocate, Pulse narratives | OIDC / optional provider keys | Provider terms | Per gateway plan | Members only; per-member daily and monthly limits; every Advisor answer logged |
 
+## News republishing policy (since 2026-10-11, `backend/app/markets/policy.py`)
+
+Owner decision: zero cost, and no use or redistribution that a source's terms don't permit.
+
+| Policy | Sources | Effect |
+|---|---|---|
+| **Blocked** | Investing.com (terms prohibit reuse); Yahoo Finance news and RSS; Google News (personal, non-commercial use only); chart posts drawn from Yahoo/TradingView prices | Not fetched or posted. Earlier posts are **hidden** (the reversible `hidden` flag), not deleted |
+| **Restricted** | Other publisher RSS: Khaleej Times, Gulf News, The National, Arabian Business, MarketWatch, CNBC (incl. its Tech, Energy and Economy feeds), Cointelegraph | Headline, publisher and link to the original only: no excerpt, no hotlinked image. Earlier posts were trimmed the same way |
+| **Off** | StockTwits | `NEXIS_PULSE_PUBLIC_STOCKTWITS` now defaults to `false` |
+| **Permitted** | YouTube official embeds and the official APIs above | Unchanged |
+
+* Company headlines on instrument pages, the advisor's news tool, Devil's Advocate evidence and Pulse evidence now
+  come from the restricted publisher feeds, matched to the company. Google News and Yahoo are not used.
+* `NEXIS_NEWS_POLICY=licensed` lifts these rules. Set it only once the licences are held.
+* SEO pages never render prices or provider text.
+
 ## Existing sources that are not official APIs (unchanged, behind the registry)
 
 | Source | Used for | Risk | Why it matters | What would replace it |
 |---|---|---|---|---|
-| **Yahoo Finance** (`query1/query2` endpoints, cookie and "crumb") | Quotes, history, fundamentals, analyst consensus, company news, search, peers. The main price source | **High** | No public API licence; Yahoo's terms prohibit automated access and commercial reuse | A licensed market-data feed (owner decision). Add an adapter to `sources.py` and set `NEXIS_PRICE_SOURCE` |
+| **Yahoo Finance** (`query1/query2` endpoints, cookie and "crumb") | Quotes, history, fundamentals, analyst consensus, company news, search, peers. The main price source | **High** | No public API licence; Yahoo's terms prohibit automated access and commercial reuse | A licensed market-data feed (owner decision; no paid feed without discussion). Add an adapter to `sources.py` and set `NEXIS_PRICE_SOURCE`. Meanwhile prices are displayed on the site only: chart posts are blocked and SEO pages carry no prices |
 | **TradingView** (scanner and chart endpoints) | ADX shares, UAE bonds and sukuk, UAE indices | **High** | Internal endpoints behind TradingView's widgets; data use outside the widgets needs a licence | A licensed UAE feed (ADX/DFM data vendors). Set `NEXIS_UAE_SOURCE` |
-| **Google News RSS** | Regional headlines per company | Medium | Feeds are offered for personal, non-commercial reading | Publisher RSS, or a licensed news API |
-| **Publisher RSS** (Khaleej Times, Gulf News, The National, Arabian Business, MarketWatch, CNBC, Investing.com, Cointelegraph, Yahoo Finance) | Finstagram news pages, Pulse evidence | Medium | RSS is published for reading, but republishing in a commercial product can exceed what a publisher allows; Investing.com's terms prohibit it explicitly | Keep headline, short excerpt and link only (current); drop publishers that object; images are linked, never stored, and hotlink-blocked publishers are skipped |
-| **StockTwits** public symbol streams | Pulse "around the web" | Medium | Its public terms let it publish public content through APIs, but commercial reuse by third parties **could not be confirmed** from its public pages | Ask StockTwits, or switch it off: `NEXIS_PULSE_PUBLIC_STOCKTWITS=false` |
+| **Google News RSS** | ~~Regional headlines per company~~ **Blocked since 2026-10-11** | Medium | Feeds are offered for personal, non-commercial reading | Replaced by publisher feeds matched to the company |
+| **Publisher RSS** (Khaleej Times, Gulf News, The National, Arabian Business, MarketWatch, CNBC, Cointelegraph) | Finstagram news pages; company headlines | Medium | RSS is published for reading, but commercial republishing permission isn't verified | **Headline, publisher and link only** (no excerpt, no image). Investing.com and Yahoo RSS are **blocked**. Ask the publishers before showing more |
+| **StockTwits** public symbol streams | Pulse "around the web" | Medium | Its public terms let it publish public content through APIs, but commercial reuse by third parties **could not be confirmed** from its public pages | **Switched off since 2026-10-11** (default). Re-enable only with StockTwits' permission |
 
 ## What these sources cannot tell us
 

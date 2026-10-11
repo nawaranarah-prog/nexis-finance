@@ -71,7 +71,9 @@ def test_news_pages_import_with_attribution(client, monkeypatch):
         post = db.scalars(select(Post).where(Post.link_url.is_not(None))).first()
         page = db.get(User, post.user_id)
         assert page.kind == "page" and "Automated" in page.bio
-        assert post.link_source == "Example" and "EMAAR.AE" in post.symbols and post.link_image
+        assert post.link_source == "Example" and "EMAAR.AE" in post.symbols
+        # restricted source (permission unverified): headline, publisher and link only — no excerpt, no hotlinked image
+        assert post.link_image is None and "short excerpt" not in post.body
         n = db.scalar(select(Post.id).where(Post.link_url.is_not(None)).limit(1))
         assert n is not None
 
@@ -371,3 +373,53 @@ def test_finstagram_is_news_only(client):  # type: ignore[no-untyped-def]
     assert client.get(f"/api/social/posts/{old_id}").status_code == 200
     if page is not None:
         assert client.post(f"/api/social/users/{page.username}/follow").status_code == 200
+
+
+def test_source_policy_blocks_hides_and_trims(client, monkeypatch):
+    """Owner decision 2026-10-11: nothing is republished that a source's terms don't permit (app/markets/policy.py)."""
+    from sqlalchemy import delete, select
+
+    from app.core.config import get_settings
+    from app.db import session as db_session
+    from app.models import MarketCache, Post, User
+    from app.services import chartposts, markets, newsfeed
+
+    monkeypatch.setattr(get_settings(), "external_data_enabled", True)
+    fetched: list = []
+
+    def fetch(src):  # type: ignore[no-untyped-def]
+        fetched.append(src)
+        return []
+
+    monkeypatch.setattr(newsfeed, "_fetch", fetch)
+    charts: list = []
+    monkeypatch.setattr(chartposts, "publish", lambda db, page, hot: charts.append(1) or 0)
+    with db_session.SessionLocal() as db:
+        pages = newsfeed.ensure_pages(db)
+        uae = pages["uae.markets"]
+        old = [Post(user_id=uae.id, body="Emaar up\n\nexcerpt text", link_url="https://news.google.com/rss/articles/x", link_title="Emaar up",
+                    link_source="Reuters", symbols=["EMAAR.AE"], tags=["uae"]),
+               Post(user_id=uae.id, body="Rates\n\nexcerpt", link_url="https://www.investing.com/news/1", link_title="Rates", link_source="Investing.com"),
+               Post(user_id=pages["nexis.charts"].id, body="Chart of the day"),
+               Post(user_id=uae.id, body="Emaar launches tower\n\nlong excerpt here\n\n$EMAAR.AE #uae", link_url="https://www.khaleejtimes.com/a",
+                    link_title="Emaar launches tower", link_source="Khaleej Times", link_image="https://img.kt.com/x.jpg",
+                    symbols=["EMAAR.AE"], tags=["uae"])]  # fmt: skip
+        db.add_all(old)
+        db.execute(delete(MarketCache).where(MarketCache.key.like("newsfeed:%")))
+        db.commit()
+        newsfeed.refresh(db, force=True)
+        for p in old:
+            db.refresh(p)
+        assert [p.hidden for p in old] == [True, True, True, False]  # hidden, not deleted
+        assert old[3].link_image is None and "long excerpt" not in old[3].body and "$EMAAR.AE" in old[3].body
+        kinds = {s[0] for s in fetched}
+        pubs = {s[2] for s in fetched if s[0] == "rss"}
+        assert kinds <= {"rss", "youtube"} and "Investing.com" not in pubs and "Yahoo Finance" not in pubs and charts == []
+        # company news on instrument pages comes from the feeds Nexis may link to
+        monkeypatch.setattr(markets, "details", lambda db, s: {"name": "Emaar Properties PJSC"})
+        db.execute(delete(MarketCache).where(MarketCache.key == "news:EMAAR.AE"))
+        db.commit()
+        news = markets.news(db, "EMAAR.AE")
+        assert [n["publisher"] for n in news["items"]][:1] == ["Khaleej Times"]
+        assert all("google" not in (n.get("url") or "") for n in news["items"])
+        assert db.scalar(select(User).where(User.username == "nexis.charts")).bio.startswith("Automated chart page · Paused")

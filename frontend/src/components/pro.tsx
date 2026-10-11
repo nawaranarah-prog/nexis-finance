@@ -154,7 +154,7 @@ export function UpgradeDialog() {
     {!target && <p>{d.monthly ? `Your allowance resets on ${resets}.` : "Archive or remove one to make room."}</p>}
     {target && d.monthly && resets && <p className="xs muted">Or wait: your allowance resets on {resets}.</p>}
     {target && t && (p?.available ? <p className="pro-price">{t.name} · {priceText(t.price)}</p> : <p className="np-note">Paid plans aren't available to buy yet.</p>)}
-    {target && <p className="xs muted">Billed monthly by Stripe. Cancel any time and keep your plan until the end of the month you paid for.</p>}
+    {target && <p className="xs muted">Billed {(p?.intervals ?? ["month"]).includes("year") ? "monthly or yearly" : "monthly"} by Stripe. Cancel any time and keep your plan until the end of the period you paid for.</p>}
     <div className="np-modal-foot">
       <button type="button" className="btn sm ghost" onClick={close}>Maybe later</button>
       {target && <Link to="/pricing" className="btn sm" onClick={close}>Compare plans</Link>}
@@ -183,42 +183,72 @@ export function UsageNote({ usage, plan }: { usage: AnyObj | null | undefined; p
 const ORDER = ["investments", "advisor", "watchlist"];
 const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 
+/** Every plan on sale except the member's current one: the other tier on the same billing period first, then the
+    same tier on the other period. Prices and keys come from the server catalog, the same one checkout uses. */
+function planChoices(catalog: AnyObj | undefined, s: AnyObj): { key: PlanKey; tier: AnyObj; interval: string; price: AnyObj }[] {
+  const out: { key: PlanKey; tier: AnyObj; interval: string; price: AnyObj }[] = [];
+  const cur = s.interval ?? "month";
+  for (const t of (catalog?.tiers ?? []) as AnyObj[]) {
+    for (const [interval, p] of Object.entries((t.prices ?? {}) as Record<string, AnyObj>)) {
+      if (p.key !== s.price_key) out.push({ key: p.key as PlanKey, tier: t, interval, price: { ...p, interval } });
+    }
+  }
+  return out.filter((c) => c.tier.id !== "free").sort((x, y) => Number(x.interval !== cur) - Number(y.interval !== cur) || Number(x.tier.id === s.plan) - Number(y.tier.id === s.plan));
+}
+
 function ChangePlan({ s, onClose }: { s: AnyObj; onClose: () => void }) {
   const qc = useQueryClient();
   const plans = usePlans();
-  const other = s.plan === "plus" ? "pro" : "plus";
-  const t = tierOf(plans.data, other);
-  const cap = t?.limits?.investments ?? 0;
+  const choices = planChoices(plans.data, s);
+  const [pick, setPick] = useState<PlanKey | null>(null);
+  const c = choices.find((x) => x.key === pick) ?? choices[0];
+  const cap = c?.tier.limits?.investments ?? 0;
   const symbols: string[] = s.investments?.symbols ?? [];
   const needKeep = symbols.length > cap;
   const [keep, setKeep] = useState<string[]>(symbols.slice(0, cap));
+  const [keepFor, setKeepFor] = useState(c?.key);
+  if (c && keepFor !== c.key) { setKeepFor(c.key); setKeep(symbols.slice(0, cap)); }  // a different plan, a different allowance
   const [busy, setBusy] = useState(false);
-  if (!t) return null;
-  const upgrade = other === "pro";
+  if (!c) return null;
+  const rank = (id: string) => ["free", "plus", "pro"].indexOf(id);
+  const toYearly = c.interval === "year" && s.interval !== "year";
+  const chargedNow = rank(c.tier.id) > rank(s.plan) || (toYearly && rank(c.tier.id) >= rank(s.plan));
+  const label = `${c.tier.name}, billed ${c.interval === "year" ? "yearly" : "monthly"}`;
   const go = async () => {
     setBusy(true);
     try {
-      const r = await api.post<AnyObj>("/billing/change-plan", { plan: t.price.key, ...(needKeep ? { keep } : {}) });
+      const r = await api.post<AnyObj>("/billing/change-plan", { plan: c.key, ...(needKeep ? { keep } : {}) });
       qc.setQueryData(["billing-status"], r);
       qc.invalidateQueries({ queryKey: ["portfolio"] });
-      toast("success", `You're now on ${t.name}`);
+      toast("success", `You're now on ${label}`);
       onClose();
     } catch (e) { if (!handlePlanError(e)) toast("error", "Couldn't change your plan", errorMessage(e)); }
     finally { setBusy(false); }
   };
   return <Shell onClose={onClose} label="cp-title">
-    <h2 id="cp-title">Switch to {t.name}</h2>
-    <p><b>{priceText(t.price)}</b> · {t.limits.investments} active investments · {t.limits.advisor} AI Advisor messages a month.</p>
-    <p className="small">{upgrade
-      ? "You'll be charged now for the difference for the rest of this month. If the payment doesn't go through, your plan stays the same."
-      : "The change happens now; the unused part of this month is credited to your next invoice."}</p>
+    <h2 id="cp-title">Change plan</h2>
+    <p className="small">You're on <b>{s.plan_name}</b>{s.billing ? ` (${s.billing})` : ""}.</p>
+    {choices.length > 1 && (
+      <fieldset className="cp-choices"><legend className="sr-only">New plan</legend>
+        {choices.map((x) => (
+          <label key={x.key} className="wg-check">
+            <input type="radio" name="cp-plan" checked={x.key === c.key} onChange={() => setPick(x.key)} />
+            {x.tier.name} · <b>{priceText(x.price)}</b>
+          </label>
+        ))}
+      </fieldset>
+    )}
+    <p><b>{label} · {priceText(c.price)}</b> · {c.tier.limits.investments} active investments · {c.tier.limits.advisor} AI Advisor messages a month.</p>
+    <p className="small">{chargedNow
+      ? "You'll be charged now for the difference for the rest of your current billing period. If the payment doesn't go through, your plan stays the same."
+      : "The change happens now; the unused part of your current billing period is credited to your next invoice."}</p>
     {needKeep && <>
-      <p className="small">{t.name} includes {cap} active investments and you have {symbols.length}. The others are archived — kept, read-only, and restored if you move up again.</p>
+      <p className="small">{c.tier.name} includes {cap} active investments and you have {symbols.length}. The others are archived — kept, read-only, and restored if you move up again.</p>
       <KeepPicker symbols={symbols} limit={cap} value={keep} onChange={setKeep} />
     </>}
     <div className="np-modal-foot">
       <button type="button" className="btn sm ghost" onClick={onClose}>Cancel</button>
-      <button type="button" className="btn primary sm" disabled={busy || (needKeep && keep.length === 0)} onClick={go}>{busy ? "…" : `Switch to ${t.name}`}</button>
+      <button type="button" className="btn primary sm" disabled={busy || (needKeep && keep.length === 0)} onClick={go}>{busy ? "…" : `Switch to ${label}`}</button>
     </div>
   </Shell>;
 }

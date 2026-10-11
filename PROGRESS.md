@@ -432,3 +432,45 @@ choice.**
 * **No new unofficial endpoints. No paid sources.**
 * Results: backend 398/398 (3 new registry tests). The behaviour is unchanged: the registry returns the same clients,
   and every existing market and UAE test passes.
+
+## After PR #17 — production verification and the owner's decisions (2026-10-11)
+
+**Verified on production** (temporary account, deleted afterwards):
+* Migration 0019 applied: the investor profile saved, and the advice log row was written.
+* AI Advisor with the real AI (Vercel AI Gateway, openai/gpt-5.1): 6 data tools, 30 s, profile-aware, disclaimer
+  present, no review flags.
+* Time Machine on real prices; World Graph; a member post on Finstagram refused (403).
+* Pulse fact-check: the FAB "falling rates" story is now held (404).
+
+**Found on production and fixed in this branch (not yet deployed):**
+* **Devil's Advocate failed with the real AI.** The answer couldn't be parsed, most likely because the reasoning
+  model ran out of output tokens. Fix: 8,000 tokens, robust JSON extraction, one retry asking for JSON only, and
+  stored diagnostics (stop reason, length, problem).
+* **The advisor judged an amount** ("a meaningful but not extreme position"). The prompt now forbids this, and the
+  automatic review flags it.
+* **The "easing" story wasn't held.** Its body had been updated to discuss rising yields, but the headline still
+  framed easing. Headlines that frame the opposite of the data are now held too. Over the 20 live headlines, only
+  that one is affected.
+
+**Owner decisions implemented:**
+* **Annual billing:** Plus AED 290/year, Pro AED 990/year.
+  * They go on sale only once their Stripe prices exist and verify; monthly is unaffected either way.
+  * A wrong yearly price takes only yearly off sale.
+  * Plan changes keep or switch the billing period (to yearly: charged now; to monthly: credited).
+  * Settings lists every plan on sale with its price.
+* **Data and terms (zero cost):** a news republishing policy.
+  * Blocked: Investing.com, Yahoo news, Google News and price-chart posts. Earlier posts are hidden, not deleted.
+  * Restricted: other publisher feeds show headline + link only.
+  * StockTwits is off.
+  * Company news now comes from permitted feeds.
+  * Yahoo/TradingView prices still need a licence decision.
+* **SEO option A:** server-rendered heads and visible summaries for instrument pages (no prices), news posts and
+  public pages. No new services or costs.
+* **Docs:** `docs/LEGAL-REVIEW.md` (tracker), `docs/OWNER-SETUP.md` (email, contact, Stripe yearly and live, Vercel
+  Pro), `DATA-SOURCES.md` and `STRIPE-SETUP.md` updated.
+* **Not done, needs the owner:**
+  * the Gmail account and app password for email;
+  * creating the yearly Stripe prices (one command with your test key);
+  * **live payments:** blocked on **Vercel Pro ($20/user/month: Hobby forbids payments)** and Stripe activation.
+
+**Tests:** backend 407/407; billing 43 (incl. yearly); policy, SEO and production-bug regressions added.

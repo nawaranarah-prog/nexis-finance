@@ -55,11 +55,12 @@ PRICES: dict[str, dict[str, Any]] = {
                      "lookup_key": "nexis_plus_monthly_aed", "nickname": "Nexis Plus Monthly (AED)"},
     "pro_monthly": {"tier": "pro", "amount_cents": 6900, "currency": "aed", "interval": "month",
                     "lookup_key": "nexis_pro_monthly_aed", "nickname": "Nexis Pro Monthly (AED)"},
-    # Yearly plans go here once their AED amounts are decided (never guessed), e.g.
-    #   "plus_yearly": {"tier": "plus", "amount_cents": <fils>, "currency": "aed", "interval": "year",
-    #                   "lookup_key": "nexis_plus_yearly_aed", "nickname": "Nexis Plus Yearly (AED)"},
-    # plus the Stripe price id in NEXIS_STRIPE_PLUS_YEARLY_AED_PRICE_ID / NEXIS_STRIPE_PRO_YEARLY_AED_PRICE_ID.
-    # Everything else (checkout, verification, plan changes, the pricing page's monthly/yearly switch) follows.
+    # Yearly prices decided by the owner on 2026-10-11. They go on sale only once their Stripe price ids are set and
+    # verified (STRIPE_PLUS_YEARLY_AED_PRICE_ID / STRIPE_PRO_YEARLY_AED_PRICE_ID); until then only monthly is sold.
+    "plus_yearly": {"tier": "plus", "amount_cents": 29000, "currency": "aed", "interval": "year",
+                    "lookup_key": "nexis_plus_yearly_aed", "nickname": "Nexis Plus Yearly (AED)"},
+    "pro_yearly": {"tier": "pro", "amount_cents": 99000, "currency": "aed", "interval": "year",
+                   "lookup_key": "nexis_pro_yearly_aed", "nickname": "Nexis Pro Yearly (AED)"},
 }  # fmt: skip
 PRODUCTS: dict[str, dict[str, str]] = {
     "plus": {"id": "nexis_plus", "name": "Nexis Plus"},

@@ -158,18 +158,16 @@ class MarketDataConnector(SourceConnector):
 
 
 class NewsConnector(SourceConnector):
-    key, label, kind = "news_search", "Financial news (Yahoo Finance, Google News)", "news"
+    key, label, kind = "news_search", "Financial news (publisher feeds Nexis may link to)", "news"
     requires = "Public news feeds the Markets pages already use (no key)"
 
     def available(self) -> tuple[bool, str]:
         return True, "Headlines, publishers, times and links. Articles are linked, never copied."
 
     def fetch(self, db: Session, asset: AssetRef) -> list[EvidenceItem]:
-        from app.markets import news as news_mod
         from app.services import markets
 
-        value, _ = markets.cached(db, f"news:{asset.symbol}", timedelta(minutes=20),
-                                  lambda: news_mod.instrument_news(asset.symbol, asset.name, limit=25))  # fmt: skip
+        value = markets.news(db, asset.symbol)  # applies the source policy (app/markets/policy.py)
         out = []
         for n in value.get("items") or []:
             when = _parse_time(n.get("published_at"))

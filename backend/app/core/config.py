@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     sec_user_agent: str = "NexisFinance research contact@example.com"
     # Wikidata asks for a descriptive User-Agent with a way to reach the operator (set a real contact in production).
     wikidata_user_agent: str = "NexisFinance/1.0 (https://nexis-finance-five.vercel.app) httpx"
+    # "strict" (default): no republishing that a news source's terms don't permit (app/markets/policy.py).
+    # "licensed": only once the owner holds the licences.
+    news_policy: str = "strict"
     # Which adapter in app/markets/sources.py serves prices and UAE exchange data (today: "yahoo", "tradingview").
     price_source: str = "yahoo"
     uae_source: str = "tradingview"
@@ -132,7 +135,7 @@ class Settings(BaseSettings):
     # Reddit collection needs Reddit's written permission (User Agreement; Data API Terms for commercial use). Off until then.
     pulse_public_reddit: bool = False
     pulse_public_hn: bool = True  # Hacker News (public Algolia search API)
-    pulse_public_stocktwits: bool = True  # StockTwits public symbol streams
+    pulse_public_stocktwits: bool = False  # StockTwits public streams: off until commercial reuse is confirmed (DATA-SOURCES.md)
     # Nexis editorial discussions the background engine may publish or update per run.
     pulse_editorial_per_tick: int = 3
     # ---- Nexis Pro billing (Stripe Checkout + Billing). Unset keys mean billing is off: Pro can't be bought and

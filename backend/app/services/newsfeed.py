@@ -33,7 +33,7 @@ from app.core.config import get_settings
 from app.core.errors import ProviderError
 from app.core.logging import get_logger
 from app.db.base import utcnow
-from app.markets import feeds, sources
+from app.markets import feeds, policy, sources
 from app.markets import news as news_mod
 from app.models import Comment, Like, MarketCache, Media, Post, Save, User
 
@@ -57,7 +57,7 @@ PAGES: list[dict[str, Any]] = [
      "sources": [("rss", "https://www.arabianbusiness.com/feed", "Arabian Business", None), ("google", "Saudi stock market Tadawul"),
                  ("google", "Aramco"), ("google", "Gulf economy")]},
     {"username": "global.markets", "name": "Global Markets", "color": (29, 78, 216), "badge": "GM",
-     "bio": "Automated news page · Wall Street, global indices, rates and the big movers, from Yahoo Finance, MarketWatch, CNBC and Investing.com. Every post links to the original article.",
+     "bio": "Automated news page · Wall Street, global indices, rates and the big movers, from publishers' news feeds. Every post links to the original article.",
      "tags": ["markets", "stocks"],
      "sources": [("rss", "https://finance.yahoo.com/news/rssindex", "Yahoo Finance", None),
                  ("rss", "https://feeds.content.dowjones.io/public/rss/mw_topstories", "MarketWatch", None),
@@ -66,26 +66,28 @@ PAGES: list[dict[str, Any]] = [
     {"username": "tech.stocks", "name": "Tech Stocks", "color": (91, 33, 182), "badge": "TS",
      "bio": "Automated news page · Big tech, chips and AI companies. Every post links to the original article.",
      "tags": ["tech", "ai"],
-     "sources": [("yahoo", "NVDA"), ("yahoo", "AAPL"), ("yahoo", "MSFT"), ("yahoo", "GOOGL"), ("yahoo", "META"), ("yahoo", "AMZN"), ("yahoo", "TSLA")]},
+     "sources": [("rss", "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910", "CNBC", None),
+                 ("yahoo", "NVDA"), ("yahoo", "AAPL"), ("yahoo", "MSFT"), ("yahoo", "GOOGL"), ("yahoo", "META"), ("yahoo", "AMZN"), ("yahoo", "TSLA")]},
     {"username": "energy.desk", "name": "Energy Desk", "color": (180, 83, 9), "badge": "OIL",
      "bio": "Automated news page · Oil, gas, OPEC and energy companies. Every post links to the original article.",
      "tags": ["oil", "energy"],
-     "sources": [("yahoo", "CL=F"), ("yahoo", "XOM"), ("google", "oil prices OPEC")]},
+     "sources": [("rss", "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19836768", "CNBC", None), ("yahoo", "CL=F"), ("yahoo", "XOM"), ("google", "oil prices OPEC")]},
     {"username": "crypto.desk", "name": "Crypto Desk", "color": (202, 138, 4), "badge": "BTC",
-     "bio": "Automated news page · Bitcoin, Ethereum and digital assets, from Cointelegraph and Yahoo Finance. Every post links to the original article.",
+     "bio": "Automated news page · Bitcoin, Ethereum and digital assets, from publishers' news feeds. Every post links to the original article.",
      "tags": ["crypto", "bitcoin"],
      "sources": [("rss", "https://cointelegraph.com/rss", "Cointelegraph", None), ("yahoo", "BTC-USD")]},
     {"username": "macro.watch", "name": "Macro Watch", "color": (21, 128, 61), "badge": "MW",
      "bio": "Automated news page · Central banks, inflation, interest rates and currencies. Every post links to the original article.",
      "tags": ["macro", "rates"],
-     "sources": [("google", "Federal Reserve interest rates"), ("google", "inflation report economy"), ("google", "UAE central bank")]},
+     "sources": [("rss", "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258", "CNBC", None),
+                 ("google", "Federal Reserve interest rates"), ("google", "inflation report economy"), ("google", "UAE central bank")]},
     {"username": "market.tv", "name": "Market TV", "color": (190, 18, 60), "badge": "TV",
      "bio": "Automated video page · The latest market videos from CNBC Television, Yahoo Finance and Bloomberg Television, played from YouTube.",
      "tags": ["video", "markets"],
      "sources": [("youtube", "UCrp_UI8XtuYfpiqluWLD7Lw", "CNBC Television"), ("youtube", "UCEAZeUIeJs0IjQiqTCdVSIg", "Yahoo Finance"),
                  ("youtube", "UCIALMKvObZNtJ6AmdCLP7Lg", "Bloomberg Television")]},
     {"username": "nexis.charts", "name": "Nexis Charts", "color": (15, 23, 42), "badge": "📈",
-     "bio": "Automated chart page · Daily market charts drawn from live prices: the Dubai market pulse, world indices and a chart of the day.",
+     "bio": "Automated chart page · Paused: the charts were drawn from price data Nexis isn't licensed to republish.",
      "tags": ["charts"], "sources": [("charts",)]},
 ]  # fmt: skip
 
@@ -198,6 +200,32 @@ def _body(item: dict[str, Any], tags: list[str], syms: list[str]) -> str:
     return "\n\n".join(parts)
 
 
+POLICY_VERSION = "news-policy-1"
+
+
+def apply_policy(db: Session) -> dict[str, int]:
+    """Bring already-published news posts in line with the source policy, once per policy version: posts from blocked
+    sources are hidden (not deleted; ``hidden`` is reversible), and restricted ones lose their excerpt and image."""
+    done = db.get(MarketCache, f"newsfeed:{POLICY_VERSION}")
+    if done is not None or not policy.strict():
+        return {"hidden": 0, "trimmed": 0}
+    page_ids = {u.id: u.username for u in db.scalars(select(User).where(User.kind == "page"))}
+    hidden = trimmed = 0
+    for p in db.scalars(select(Post).where(Post.user_id.in_(list(page_ids)), Post.hidden.is_(False))):
+        if page_ids[p.user_id] == policy.CHART_PAGE or policy.blocked_url(p.link_url) or policy.blocked_publisher(p.link_source):
+            p.hidden = True
+            hidden += 1
+        elif p.link_title and not policy.full_preview(p.link_url):
+            body = _body({"title": p.link_title}, list(p.tags or []), list(p.symbols or []))
+            if p.body != body or p.link_image:
+                p.body, p.link_image = body, None
+                trimmed += 1
+    db.add(MarketCache(key=f"newsfeed:{POLICY_VERSION}", payload={"v": {"hidden": hidden, "trimmed": trimmed}}, fetched_at=utcnow()))
+    db.commit()
+    log.info("news policy applied: %s hidden, %s trimmed", hidden, trimmed)
+    return {"hidden": hidden, "trimmed": trimmed}
+
+
 def refresh(db: Session, force: bool = False) -> dict[str, Any]:
     """Import new articles, videos and charts; returns counts. Cheap no-op when refreshed recently."""
     if not get_settings().external_data_enabled:
@@ -213,7 +241,10 @@ def refresh(db: Session, force: bool = False) -> dict[str, Any]:
         state.fetched_at = now
     db.commit()
     pages = ensure_pages(db)
-    jobs = [(p["username"], src) for p in PAGES for src in p["sources"] if src[0] != "charts"]
+    apply_policy(db)
+    # Only sources whose terms allow it (app/markets/policy.py): Yahoo, Google News, Investing.com and charts are skipped.
+    jobs = [(p["username"], src) for p in PAGES for src in p["sources"]
+            if src[0] != "charts" and not policy.blocked_kind(src[0]) and not (src[0] == "rss" and policy.blocked_publisher(src[2]))]  # fmt: skip
     results: dict[str, list[dict[str, Any]]] = {p["username"]: [] for p in PAGES}
     errors: list[str] = []
     with ThreadPoolExecutor(max_workers=10) as pool:
@@ -240,8 +271,10 @@ def refresh(db: Session, force: bool = False) -> dict[str, Any]:
             if n_new >= PER_PAGE_PER_REFRESH:
                 break
             k = _key(it["title"])
-            if k in existing or not it.get("url"):
+            if k in existing or not it.get("url") or policy.blocked_url(it["url"]):
                 continue
+            if not policy.full_preview(it["url"]):  # restricted sources: headline, publisher and link only
+                it = {**it, "summary": None, "image": None}
             try:
                 published = (
                     datetime.fromisoformat(it["published_at"]).astimezone(UTC).replace(tzinfo=None)
@@ -270,7 +303,7 @@ def refresh(db: Session, force: bool = False) -> dict[str, Any]:
         hot = max(mentions, key=lambda s: mentions[s]) if mentions else None
         from app.services import chartposts
 
-        charts = chartposts.publish(db, pages["nexis.charts"], hot)
+        charts = 0 if policy.blocked_kind("charts") else chartposts.publish(db, pages["nexis.charts"], hot)
     except Exception:
         db.rollback()
         log.exception("chart posts failed")
