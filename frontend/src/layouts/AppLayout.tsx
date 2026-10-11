@@ -379,7 +379,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       title = "Notifications · Nexis Finance";
     } else if (path === "/pro" || path === "/pricing") {
       title = "Plans and pricing — Free, Nexis Plus, Nexis Pro · Nexis Finance";
-      desc = "Nexis is free to use, including Nexis Pulse. Nexis Plus (AED 29/month) and Nexis Pro (AED 69/month) track more investments, raise the AI Advisor allowance and add portfolio analytics.";
+      desc = "Nexis is free to use, including Nexis Pulse. Nexis Plus and Nexis Pro, billed monthly or annually, track more investments, raise the AI Advisor allowance and add portfolio analytics.";
     } else if (path === "/moderation") {
       title = "Moderation · Nexis Pulse";
     } else if (["/terms", "/privacy", "/disclaimer", "/community-guidelines", "/ai-disclosure"].includes(path)) {

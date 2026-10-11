@@ -313,7 +313,7 @@
         "allowance",
         "limit"
       ],
-      "body": "Open **AI Advisor** and ask a research question about an asset, market or theme. Before answering it checks prices, news, analyst ratings and valuations, and it shows its sources.\n\nMonthly allowance: **Free 20, Nexis Plus 200, Nexis Pro 600** messages, reset on the 1st of each month (UTC). Visitors without an account get 3 per day.\n\nThe Advisor provides general information, not personalised financial advice, and it can be wrong — check important facts.",
+      "body": "Open **AI Advisor** and ask a research question about an asset, market or theme. Before answering it checks prices, news, analyst ratings and valuations, and it shows its sources.\n\nMonthly allowance: **Free 20, Nexis Plus 200, Nexis Pro 600** messages, reset on the 1st of each month (UTC). The AI Advisor needs a free account.\n\nThe Advisor provides general information, not personalised financial advice, and it can be wrong — check important facts.",
       "links": [
         {
           "label": "Open AI Advisor",
@@ -347,7 +347,7 @@
         "upgrade",
         "how much"
       ],
-      "body": "All prices are monthly in UAE dirhams.\n\n- **Free — AED 0:** 1 active investment, 20 AI Advisor messages a month, full access to Nexis Pulse.\n- **Nexis Plus — AED 29/month:** 10 active investments, 200 AI Advisor messages a month, and portfolio insights (concentration, currency exposure, diversification, gain drivers).\n- **Nexis Pro — AED 69/month:** 20 active investments, 600 AI Advisor messages a month, portfolio insights, and portfolio risk analytics (volatility, drawdown, beta, correlations).\n\nNexis Pulse, Markets, Compare & Reports and this Help Center are available on every plan.",
+      "body": "Prices are in UAE dirhams. Paid plans can be billed monthly, or annually as one upfront payment for 12 months (when the pricing page shows annual billing).\n\n- **Free — AED 0:** 1 active investment, 20 AI Advisor messages a month, full access to Nexis Pulse.\n- **Nexis Plus — AED 29/month or AED 229/year** (billed annually upfront; about AED 19.08 a month, saving AED 119 or about 34% vs 12 monthly payments): 10 active investments, 200 AI Advisor messages a month, and portfolio insights (concentration, currency exposure, diversification, gain drivers).\n- **Nexis Pro — AED 69/month or AED 599/year** (billed annually upfront; about AED 49.92 a month, saving AED 229 or about 28%): 20 active investments, 600 AI Advisor messages a month, portfolio insights, and portfolio risk analytics (volatility, drawdown, beta, correlations).\n\nNexis Pulse, Markets, Compare & Reports and this Help Center are available on every plan.",
       "links": [
         {
           "label": "Compare plans",
@@ -403,7 +403,7 @@
         "resume",
         "keep subscription"
       ],
-      "body": "1. Open **Settings → Billing**.\n2. Choose **Cancel subscription** and confirm.\n\nYou keep your plan until the end of the month you've paid for, then move to Free. Before then, choose which investment stays active on Free; the others are archived (read-only), not deleted, and are restored if you subscribe again. Changed your mind? Choose **Keep my subscription** before the period ends.\n\nThe Help Center can't cancel or refund for you. For a billing question it can't answer, use **Manage billing** to see invoices and payment details.",
+      "body": "1. Open **Settings → Billing**.\n2. Choose **Cancel subscription** and confirm.\n\nYou keep your plan until the end of the period you've paid for (the month, or the year for annual plans), then move to Free. Annual plans are paid upfront and aren't refunded when you cancel. Before then, choose which investment stays active on Free; the others are archived (read-only), not deleted, and are restored if you subscribe again. Changed your mind? Choose **Keep my subscription** before the period ends.\n\nThe Help Center can't cancel or refund for you. For a billing question it can't answer, use **Manage billing** to see invoices and payment details.",
       "links": [
         {
           "label": "Open Billing settings",

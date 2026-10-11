@@ -59,7 +59,7 @@ No publishable key is needed: hosted Checkout redirects to Stripe, and nothing S
    been created with them against Stripe yet (no key is available to me). After this change is deployed, sign in with
    a test-email account and start a checkout. If Stripe rejects a parameter, the page says "We couldn't start
    checkout", and the server log names it.
-2. **Create the yearly prices** (AED 290 and AED 990), test mode first: in your own terminal, from `backend`, run
+2. **Create the annual prices** (AED 229 and AED 599), test mode first. Inspect with `--check` first; see STRIPE-SETUP.md: in your own terminal, from `backend`, run
    `$env:STRIPE_SECRET_KEY="sk_test_…"; .venv\Scripts\python -m app.cli.stripe_setup`. Then add the two printed
    price ids to Vercel and redeploy.
 3. **Before going live:** activate the Stripe account, and move Vercel to **Pro** (Hobby forbids taking payments;

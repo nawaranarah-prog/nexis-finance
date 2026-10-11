@@ -7,9 +7,9 @@ the owner.
 
 | | |
 |---|---|
-| Plans | Nexis Plus AED 29/month or **AED 290/year**; Nexis Pro AED 69/month or **AED 990/year** (`backend/app/core/plans.py`, owner's prices 2026-10-11) |
+| Plans | Free AED 0; Nexis Plus AED 29/month or **AED 229/year**; Nexis Pro AED 69/month or **AED 599/year** (`backend/app/core/plans.py`, the owner's final prices). Annual = one upfront payment for 12 months: Plus saves AED 119 (~34%), Pro AED 229 (~28%) vs 12 monthly payments |
 | Mode | **Test mode.** Live mode needs Stripe activation, a live key, and **Vercel Pro**: Vercel's Hobby plan forbids processing payments ($20/user/month, awaiting the owner's OK). Steps: [docs/OWNER-SETUP.md](docs/OWNER-SETUP.md) |
-| Yearly plans | **In code; on sale once the two yearly Stripe prices exist and verify.** Monthly keeps selling either way. Plan changes keep or switch the billing period: moving to yearly is charged now, moving back to monthly is credited |
+| Annual plans | **In code; on sale only once the two annual Stripe prices (AED 229, AED 599) exist and verify.** Monthly keeps selling either way. Subscribers on any earlier price keep it (shown as "Your existing price (unchanged)"); nobody is repriced |
 | Safety | Nexis sells a Stripe price only after confirming, in Stripe, that it has exactly the amount, currency and interval in `plans.PRICES`, and that it is in the same mode as the key. Otherwise the pricing page says plans are unavailable. |
 
 ## Environment variables (names only; set them in Vercel → `nexis-finance-api`)
@@ -22,22 +22,25 @@ the owner.
 | `STRIPE_PLUS_YEARLY_AED_PRICE_ID`, `STRIPE_PRO_YEARLY_AED_PRICE_ID` | Yearly price ids. Only used once yearly plans exist in `plans.PRICES`. |
 | `NEXIS_BILLING_TEST_EMAILS` | With a test key on the public site, only these accounts can buy. |
 
-## Turning on yearly plans
+## Turning on annual plans (AED 229 / AED 599)
 
-1. Decide the two yearly amounts in AED.
-2. Add the `plus_yearly` and `pro_yearly` entries in `backend/app/core/plans.py`. The commented example there shows
-   the shape; amounts are in fils (AED × 100).
-3. Create the Stripe prices (idempotent; test mode unless `--live`):
-   `cd backend && STRIPE_SECRET_KEY=sk_test_… python -m app.cli.stripe_setup`
-   It prints the `STRIPE_*_AED_PRICE_ID` variables to set.
-4. Set the two yearly price-id variables in Vercel and redeploy.
-5. Check: `python -m app.cli.stripe_setup --check` (changes nothing). Then the pricing page shows a Monthly / Yearly
-   switch, and checkout sells the yearly price.
+The amounts are already in `backend/app/core/plans.py`, with lookup keys `nexis_plus_yearly_aed_229` and
+`nexis_pro_yearly_aed_599`. The amount is in the key, so a price created earlier for AED 290/990 is never matched or
+reused.
 
-Nothing else changes in the code: checkout, plan changes, webhooks, the "AED …/year" label and the price
-verification already handle any plan in `plans.PRICES`. This is covered by the tests
-`test_yearly_plans_are_off_until_configured`, `test_yearly_plans_sell_the_configured_stripe_price_and_grant_the_tier`
-and `tests/e2e/pricing.spec.ts`.
+1. **Inspect what exists** (read-only), in your own terminal from `backend`:
+   `$env:STRIPE_SECRET_KEY="sk_test_…"; .venv\Scripts\python -m app.cli.stripe_setup --check`
+   The "Price inventory" lists every price on Nexis Plus and Nexis Pro: id, amount, interval, active and lookup key,
+   and which one each `STRIPE_*_AED_PRICE_ID` should be.
+2. **Create the two annual prices**: `…\python -m app.cli.stripe_setup` (idempotent). It finds the monthly prices,
+   creates Plus AED 229/year and Pro AED 599/year, and prints the four `STRIPE_*_AED_PRICE_ID` lines.
+   * Dashboard alternative: Products → Nexis Plus → Add price → Recurring, Yearly, AED 229.00, lookup key
+     `nexis_plus_yearly_aed_229`. The same for Nexis Pro: AED 599.00, lookup key `nexis_pro_yearly_aed_599`.
+3. In Vercel (`nexis-finance-api`, Production), set `STRIPE_PLUS_YEARLY_AED_PRICE_ID` and
+   `STRIPE_PRO_YEARLY_AED_PRICE_ID` to the printed ids, and redeploy.
+4. **If an earlier AED 290 / AED 990 annual price exists:** don't reuse it. Archive it in Stripe (Products → price →
+   Archive) once no subscription uses it. If test subscriptions use it, they keep it.
+5. Run `--check` again: everything must be OK. The pricing page then shows Monthly / Annual.
 
 ## Going live (owner only)
 

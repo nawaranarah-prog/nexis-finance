@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMe } from "../components/market";
-import { priceText, startCheckout, tierOf, useBilling, usePlans, type PlanKey } from "../components/pro";
+import { annualText, bestAnnualSaving, priceText, startCheckout, tierOf, useBilling, usePlans, type PlanKey } from "../components/pro";
 import { Seg } from "../components/ui";
 import { api } from "../services/api";
 import type { AnyObj } from "../types/api";
@@ -38,7 +38,7 @@ export default function Pro() {
     if (current !== "free") return <Link className="btn" to="/settings#plan">Switch to {t.name}</Link>;
     if (!p.available) return <span className="xs muted">{p.unavailable_reason}</span>;
     return <button type="button" className={`btn ${t.id === "pro" ? "primary" : ""}`} disabled={!!busy} onClick={() => go(priceOf(t).key)}>
-      {busy === priceOf(t).key ? "…" : me ? `Get ${t.name}` : `Create an account to get ${t.name}`}
+      {busy === priceOf(t).key ? "…" : me ? `Get ${t.name}${priceOf(t).annual ? " annually" : ""}` : `Create an account to get ${t.name}`}
     </button>;
   };
   const cols: [AnyObj, string[]][] = [
@@ -48,7 +48,7 @@ export default function Pro() {
     [PR, [`${PR.limits.investments} active investments`, `${PR.limits.advisor} AI Advisor messages a month`, `${caps.portfolio_risk.label} — ${caps.portfolio_risk.summary}`, "Everything in Plus"]],
   ];  // prettier-ignore
   const rows: [string, (t: AnyObj) => string][] = [
-    ["Price", (t) => (t.id === "free" ? "AED 0" : priceText(priceOf(t)))],
+    ["Price", (t) => (t.id === "free" ? "AED 0" : priceText(priceOf(t)) + (interval === "year" && priceOf(t).annual ? " (billed annually upfront)" : ""))],
     ["Active investments in My Nexis", (t) => String(t.limits.investments)],
     ["AI Advisor messages", (t) => `${t.limits.advisor}/month`],
     [caps.portfolio_insights.label, (t) => (t.capabilities.includes("portfolio_insights") ? "Included" : "—")],
@@ -62,8 +62,8 @@ export default function Pro() {
       <header className="np-head">
         <div className="np-eyebrow"><span>Plans</span></div>
         <h1>Free to use. Plus and Pro for serious portfolios.</h1>
-        <p className="np-lede">Nexis Pulse, Markets and Compare & Reports are free for everyone. Paid plans track more investments, raise the AI Advisor allowance and add portfolio analytics. All prices are {yearly ? "monthly or yearly" : "monthly"}, in UAE dirhams.</p>
-        {yearly && <div className="pro-interval"><Seg value={interval} options={[{ value: "month", label: "Monthly" }, { value: "year", label: "Yearly" }]} onChange={setBillingInterval} /></div>}
+        <p className="np-lede">Nexis Pulse, Markets and Compare & Reports are free for everyone. Paid plans track more investments, raise the AI Advisor allowance and add portfolio analytics. All prices are in UAE dirhams{yearly ? ", billed monthly or annually (one upfront payment for 12 months)" : " and billed monthly"}.</p>
+        {yearly && <div className="pro-interval"><Seg value={interval} options={[{ value: "month", label: "Monthly" }, { value: "year", label: `Annual · save up to ${bestAnnualSaving(p)}%` }]} onChange={setBillingInterval} /></div>}
         {sp.get("checkout") === "canceled" && <p className="np-note">Checkout was canceled — your plan hasn't changed and nothing was charged.</p>}
       </header>
 
@@ -72,6 +72,8 @@ export default function Pro() {
           <section key={t.id} className={`pro-col ${t.id}`} aria-labelledby={`tier-${t.id}`}>
             <h2 id={`tier-${t.id}`}>{t.name}</h2>
             <div className="pro-amount">{t.id === "free" ? "AED 0" : priceText(priceOf(t))}</div>
+            {t.id !== "free" && interval === "year" && priceOf(t).annual && <p className="pro-annual small">{annualText(priceOf(t))}</p>}
+            {t.id !== "free" && interval === "month" && t.prices?.year?.annual && <p className="pro-annual xs muted">Or {priceText({ ...t.prices.year, interval: "year" })} billed annually upfront.</p>}
             <ul className="pro-list">{items.map((x) => <li key={x}>{x}</li>)}</ul>
             {action(t)}
           </section>
@@ -92,8 +94,8 @@ export default function Pro() {
       <section className="np-sec pro-faq">
         <h2 className="np-h">Good to know</h2>
         <dl>
-          <dt>How do I pay?</dt><dd>{yearly ? "Monthly or yearly" : "Monthly"}, through Stripe's secure checkout: {p.payment_methods.join(", ")}. Prices are in UAE dirhams (AED). Nexis never sees or stores your card details.</dd>
-          <dt>Can I switch between Plus and Pro?</dt><dd>Yes, in Settings → Billing. Upgrading charges the difference for the rest of the month; moving down credits the unused part to your next invoice.</dd>
+          <dt>How do I pay?</dt><dd>{yearly ? "Monthly, or annually as one upfront payment for 12 months," : "Monthly,"} through Stripe's secure checkout: {p.payment_methods.join(", ")}. Prices are in UAE dirhams (AED). Nexis never sees or stores your card details.</dd>
+          <dt>Can I switch plans or billing period?</dt><dd>Yes, in Settings → Billing, which shows exactly what happens before you confirm. Upgrading charges the difference for the rest of your current period; moving down credits the unused part to your next invoice (credits aren't refunded). Moving to annual billing charges the annual price today, minus a credit for the unused part of your current period, and your plan then renews a year from today.</dd>
           <dt>What happens if I cancel?</dt><dd>{p.cancellation}</dd>
           <dt>What if a payment fails?</dt><dd>Stripe retries it and we'll tell you. You keep your plan while it's being retried; update your card in Manage billing.</dd>
         </dl>
@@ -109,6 +111,7 @@ export function ProWelcome() {
   const qc = useQueryClient();
   const [state, setState] = useState<"activating" | "paid" | "waiting">("activating");
   const [name, setName] = useState("your plan");
+  const [billing, setBilling] = useState<string | null>(null);
   const fromCheckout = !!sp.get("session_id");
   useEffect(() => {
     const sid = sp.get("session_id");
@@ -120,7 +123,7 @@ export function ProWelcome() {
       try {
         const s: AnyObj = sid ? await api.post("/billing/confirm", { session_id: sid }) : await api.get("/billing/status");
         if (s.paid) {
-          setName(s.plan_name); setState("paid"); qc.setQueryData(["billing-status"], s); qc.invalidateQueries({ queryKey: ["advisor-status"] });
+          setName(s.plan_name); setBilling(s.billing ? `${s.billing}${s.interval === "year" ? ", billed annually upfront" : ""}` : null); setState("paid"); qc.setQueryData(["billing-status"], s); qc.invalidateQueries({ queryKey: ["advisor-status"] });
           return;
         }
       } catch { /* the webhook may still be on its way */ }
@@ -136,7 +139,7 @@ export function ProWelcome() {
         {state === "paid" ? (
           <>
             <h1>Welcome to {name}.</h1>
-            <p className="np-lede">Your new limits are active now. Stripe has emailed your receipt.</p>
+            <p className="np-lede">Your new limits are active now.{billing && <> Billing: <b>{billing}</b>.</>} Stripe has emailed your receipt.</p>
             <div className="np-head-actions"><Link className="btn primary" to="/my-nexis/investments">My Nexis</Link><Link className="btn" to="/advisor">Ask the AI Advisor</Link><Link className="btn ghost" to="/settings#plan">Billing</Link></div>
           </>
         ) : (

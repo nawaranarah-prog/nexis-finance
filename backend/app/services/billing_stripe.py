@@ -306,6 +306,15 @@ def _plan_for(price_id: str | None) -> str | None:
     return "pro_legacy" if price_id and price_id in billing.legacy_price_ids() else None
 
 
+def _existing_terms(price_id: str | None, current: str | None, obj: Any) -> str | None:
+    """A subscription on a price Nexis no longer sells (e.g. an earlier annual amount) keeps its tier and its price —
+    it's never repriced — and is labelled as an existing price rather than shown with today's amount."""
+    if not price_id:
+        return current
+    tier = plans.tier_of(current) or plans.tier_of(_get(obj, "metadata", "nexis_plan"))
+    return f"{tier}_legacy" if tier else current
+
+
 def sync(db: Session, obj: Any, user_id: int | None = None) -> Subscription | None:
     """Save a Stripe subscription object onto the member's row (found by subscription, customer, or our metadata)."""
     sid, customer = _get(obj, "id"), _get(obj, "customer")
@@ -339,7 +348,7 @@ def sync(db: Session, obj: Any, user_id: int | None = None) -> Subscription | No
     item = (_get(obj, "items", "data") or [None])[0]
     price = _get(item, "price", "id")
     row.provider, row.subscription_id, row.customer_id = "stripe", sid, customer or row.customer_id
-    row.price_id, row.plan, row.status = price, _plan_for(price) or row.plan, status
+    row.price_id, row.plan, row.status = price, _plan_for(price) or _existing_terms(price, row.plan, obj), status
     # Stripe moved period dates onto subscription items in newer API versions; read either.
     row.current_period_start = _ts(_get(obj, "current_period_start") or _get(item, "current_period_start"))
     row.current_period_end = _ts(_get(obj, "current_period_end") or _get(item, "current_period_end"))

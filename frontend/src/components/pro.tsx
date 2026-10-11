@@ -21,6 +21,22 @@ export const useBilling = (enabled = true) => useQuery({ queryKey: ["billing-sta
 export const money = (amount: number, currency = "AED") =>
   `${currency} ${new Intl.NumberFormat("en-US", { minimumFractionDigits: amount % 1 ? 2 : 0, maximumFractionDigits: 2 }).format(amount)}`;
 export const priceText = (p: AnyObj | undefined) => (p ? `${money(p.amount, p.currency)}/${p.interval}` : "");
+
+/** How annual billing is always described: one upfront payment for 12 months, its monthly equivalent and the real
+    saving against 12 monthly payments — all computed on the server (plans.annual_offer). Never "AED 19/month". */
+export function annualText(p: AnyObj | undefined, opts: { short?: boolean } = {}): string {
+  const a = p?.annual;
+  if (!a) return "";
+  const upfront = money(a.upfront, p!.currency);
+  const per = `about ${money(a.per_month, p!.currency)} a month`;
+  return opts.short
+    ? `${per}, billed annually upfront`
+    : `${per}, billed annually upfront (${upfront} for 12 months). Save ${money(a.saving, p!.currency)} — about ${a.saving_pct}% — vs 12 monthly payments.`;
+}
+
+/** The largest annual saving on offer, for the Monthly / Annual switch. */
+export const bestAnnualSaving = (catalog: AnyObj | undefined) =>
+  Math.max(0, ...((catalog?.tiers ?? []) as AnyObj[]).map((t) => t.prices?.year?.annual?.saving_pct ?? 0));
 export const tierOf = (plans: AnyObj | undefined, id: string) => (plans?.tiers as AnyObj[] | undefined)?.find((t) => t.id === id);
 
 /** Turn a plan-related API error into the right explanation. Returns true when handled. */
@@ -153,8 +169,10 @@ export function UpgradeDialog() {
     {d.upgrade_text && <p><b>{d.upgrade_text}</b> {d.summary ?? d.value}</p>}
     {!target && <p>{d.monthly ? `Your allowance resets on ${resets}.` : "Archive or remove one to make room."}</p>}
     {target && d.monthly && resets && <p className="xs muted">Or wait: your allowance resets on {resets}.</p>}
-    {target && t && (p?.available ? <p className="pro-price">{t.name} · {priceText(t.price)}</p> : <p className="np-note">Paid plans aren't available to buy yet.</p>)}
-    {target && <p className="xs muted">Billed {(p?.intervals ?? ["month"]).includes("year") ? "monthly or yearly" : "monthly"} by Stripe. Cancel any time and keep your plan until the end of the period you paid for.</p>}
+    {target && t && (p?.available ? (
+      <p className="pro-price">{t.name} · {priceText(t.price)}{t.prices?.year && <> or {priceText({ ...t.prices.year, interval: "year" })} <span className="xs muted">({annualText(t.prices.year, { short: true })})</span></>}</p>
+    ) : <p className="np-note">Paid plans aren't available to buy yet.</p>)}
+    {target && <p className="xs muted">Billed {(p?.intervals ?? ["month"]).includes("year") ? "monthly, or annually as one upfront payment," : "monthly"} by Stripe. Cancel any time and keep your plan until the end of the period you paid for.</p>}
     <div className="np-modal-foot">
       <button type="button" className="btn sm ghost" onClick={close}>Maybe later</button>
       {target && <Link to="/pricing" className="btn sm" onClick={close}>Compare plans</Link>}
@@ -213,7 +231,9 @@ function ChangePlan({ s, onClose }: { s: AnyObj; onClose: () => void }) {
   const rank = (id: string) => ["free", "plus", "pro"].indexOf(id);
   const toYearly = c.interval === "year" && s.interval !== "year";
   const chargedNow = rank(c.tier.id) > rank(s.plan) || (toYearly && rank(c.tier.id) >= rank(s.plan));
-  const label = `${c.tier.name}, billed ${c.interval === "year" ? "yearly" : "monthly"}`;
+  const label = `${c.tier.name}, billed ${c.interval === "year" ? "annually" : "monthly"}`;
+  const intervalChange = c.interval !== (s.interval ?? "month");
+  const renews = s.renews_at ? date(s.renews_at) : "your next renewal";
   const go = async () => {
     setBusy(true);
     try {
@@ -233,15 +253,19 @@ function ChangePlan({ s, onClose }: { s: AnyObj; onClose: () => void }) {
         {choices.map((x) => (
           <label key={x.key} className="wg-check">
             <input type="radio" name="cp-plan" checked={x.key === c.key} onChange={() => setPick(x.key)} />
-            {x.tier.name} · <b>{priceText(x.price)}</b>
+            {x.tier.name} · <b>{priceText(x.price)}</b>{x.interval === "year" && <span className="xs muted"> · {annualText(x.price, { short: true })}</span>}
           </label>
         ))}
       </fieldset>
     )}
     <p><b>{label} · {priceText(c.price)}</b> · {c.tier.limits.investments} active investments · {c.tier.limits.advisor} AI Advisor messages a month.</p>
-    <p className="small">{chargedNow
-      ? "You'll be charged now for the difference for the rest of your current billing period. If the payment doesn't go through, your plan stays the same."
-      : "The change happens now; the unused part of your current billing period is credited to your next invoice."}</p>
+    <p className="small" data-testid="cp-terms">{intervalChange
+      ? (c.interval === "year"
+        ? `You'll be charged ${priceText(c.price).replace("/year", "")} today for 12 months, minus a credit for the unused part of your current period. Your plan then renews one year from today. If the payment doesn't go through, your plan stays the same.`
+        : "A new monthly billing period starts today and your renewal date changes to today. The unused part of your annual payment becomes a credit used toward your monthly invoices — it isn't refunded.")
+      : chargedNow
+        ? `You'll be charged now for the difference for the rest of your current billing period. Your renewal date stays ${renews}. If the payment doesn't go through, your plan stays the same.`
+        : `The change happens now; the unused part of your current billing period is credited to your next invoice (not refunded). Your renewal date stays ${renews}.`}</p>
     {needKeep && <>
       <p className="small">{c.tier.name} includes {cap} active investments and you have {symbols.length}. The others are archived — kept, read-only, and restored if you move up again.</p>
       <KeepPicker symbols={symbols} limit={cap} value={keep} onChange={setKeep} />
@@ -277,7 +301,7 @@ export function BillingSection() {
       {s.payment_issue && <p className="banner error small" role="alert">{s.payment_message}</p>}
       <dl className="pro-kv">
         <dt>Current plan</dt><dd>{s.plan_name}</dd>
-        {s.billing && <><dt>Billing</dt><dd>{s.billing}</dd></>}
+        {s.billing && <><dt>Billing</dt><dd>{s.billing}{s.interval === "year" && " · billed annually upfront"}</dd></>}
         {s.renews_at && <><dt>Renews</dt><dd>{date(s.renews_at)}</dd></>}
         {s.access_until && <><dt>Plan ends</dt><dd>{date(s.access_until)} <span className="muted">· cancellation scheduled; it won't renew</span></dd></>}
       </dl>

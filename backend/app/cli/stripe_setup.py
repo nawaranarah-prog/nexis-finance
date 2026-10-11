@@ -78,6 +78,27 @@ def check(mode: str, url: str) -> int:
             got == (want["amount_cents"], want["currency"], want["interval"], True, mode == "LIVE"),
             f"{key}: {p.id} = {p.unit_amount / 100:.2f} {p.currency.upper()}/{got[2]}, active={p.active}, livemode={p.livemode}",
         )
+    # Inventory: every price on the two products, so the owner can see which ids exist (e.g. an earlier AED 290 annual
+    # price) before setting any STRIPE_*_PRICE_ID. Nothing is changed; a price is never reused for a different amount.
+    print("  Price inventory (all prices on nexis_plus / nexis_pro, newest first):")
+    wanted = {(v["tier"], v["amount_cents"], v["interval"]): k for k, v in plans.PRICES.items()}
+    for tier in ("plus", "pro"):
+        try:
+            prices = stripe.Price.list(product=plans.PRODUCTS[tier]["id"], limit=100).data
+        except stripe.InvalidRequestError:
+            print(f"    {tier}: product {plans.PRODUCTS[tier]['id']} not found")
+            continue
+        for p in prices:
+            interval = p.recurring.interval if p.recurring else "one-off"
+            plan = wanted.get((tier, p.unit_amount, interval)) if p.currency == "aed" else None
+            env = (
+                f"-> set STRIPE_{plan.upper()}_AED_PRICE_ID"
+                if plan and p.active and p.lookup_key == plans.PRICES[plan]["lookup_key"]
+                else "(not used by Nexis)"
+            )
+            print(
+                f"    {p.id}  {p.unit_amount / 100:,.2f} {p.currency.upper()}/{interval}  active={p.active}  lookup_key={p.lookup_key}  {env}"
+            )
     hooks = [w for w in stripe.WebhookEndpoint.list(limit=100).data if w.url == url]
     if not hooks:
         line(False, f"no webhook endpoint for {url}")
