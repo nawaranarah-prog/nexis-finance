@@ -68,6 +68,11 @@ def instrument_news(symbol: str, name: str | None, limit: int = 15) -> dict[str,
     """Merged, de-duplicated headlines, newest first, with a note of which feeds answered."""
     items: list[dict[str, Any]] = []
     feeds: dict[str, str] = {}
+    from app.markets import policy
+
+    if policy.strict():  # Yahoo and Google News may not be republished (app/markets/policy.py): see markets.news
+        return {"items": [], "feeds": {"Yahoo Finance": "not used (licence)", "Google News": "not used (licence)"},
+                "retrieved_at": datetime.now(UTC).isoformat()}  # fmt: skip
     # Yahoo does not know Abu Dhabi listings or bonds (its search would match unrelated tickers): use name search only.
     if not symbol.endswith((".AD", ".BOND")):
         try:

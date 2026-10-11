@@ -453,7 +453,35 @@ def news(db: Session, symbol: str) -> dict[str, Any]:
     except ProviderError:
         name = None
     value, meta = cached(db, f"news:{sym}", timedelta(minutes=20), lambda: news_mod.instrument_news(sym, name))
-    return {**value, "symbol": sym, "cache": meta}
+    items = list(value.get("items") or [])
+    from app.markets import policy
+
+    if policy.strict():  # headlines from the publisher feeds Nexis may link to, matched to this company
+        items = _feed_headlines(db, sym, name) + items
+    return {**value, "items": items[:15], "symbol": sym, "cache": meta}
+
+
+def _feed_headlines(db: Session, sym: str, name: str | None, days: int = 30, limit: int = 15) -> list[dict[str, Any]]:
+    """Recent news-page posts (permitted or restricted sources only) that mention the company: headline, publisher and
+    link — the original article is always linked, never copied."""
+    from sqlalchemy import select
+
+    from app.markets.news import clean_company_name
+    from app.models import Post, User
+
+    since = utcnow() - timedelta(days=days)
+    key = clean_company_name(name).lower() if name else None
+    rows = db.scalars(select(Post).join(User, User.id == Post.user_id)
+                      .where(User.kind == "page", Post.hidden.is_(False), Post.link_url.is_not(None), Post.created_at >= since)
+                      .order_by(Post.created_at.desc()).limit(1500)).all()  # fmt: skip
+    out = []
+    for p in rows:
+        if sym in (p.symbols or []) or (key and len(key) > 3 and key in (p.link_title or "").lower()):
+            out.append({"title": p.link_title or p.body.split("\n")[0], "publisher": p.link_source or None, "url": p.link_url,
+                        "published_at": p.created_at.isoformat() + "Z", "source": p.link_source or "News feed"})  # fmt: skip
+        if len(out) >= limit:
+            break
+    return out
 
 
 # ---------------------------------------------------------------------- history
