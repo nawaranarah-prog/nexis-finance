@@ -30,7 +30,8 @@ from app.db.base import utcnow
 from app.models import EvidenceRecord, FinEntity, FinRelationship, ResearchItem, SourceEvent
 from app.services import knowledge, llm, markets
 
-MODEL_VERSION = "da-1.0"
+MODEL_VERSION = "da-1.1"
+MAX_TOKENS = 8000
 MAX_EVIDENCE = 28
 MIN_QUOTE = 8
 STATUSES = ("supported", "contradicted", "mixed", "untested")
@@ -290,6 +291,21 @@ def validate(
 # ---------------------------------------------------------------------------------------------- an analysis
 
 
+def parse_json(content: str) -> dict[str, Any]:
+    """The first complete JSON object in the AI's reply (code fences and stray text around it are ignored)."""
+    text = re.sub(r"```(?:json)?", "", content or "")
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("no JSON object in the answer" + (" (empty answer)" if not text.strip() else ""))
+    try:
+        raw, _ = json.JSONDecoder().raw_decode(text[start:])
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid or cut-off JSON at character {exc.pos} of {len(text) - start}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("the JSON is not an object")
+    return raw
+
+
 def check_input(symbol: str, thesis: str) -> tuple[str, str]:
     sym = markets.clean_symbol(symbol)
     t = re.sub(r"\s+", " ", thesis or "").strip()
@@ -336,29 +352,38 @@ def analyse(db: Session, item: ResearchItem) -> dict[str, Any]:
             "status": "failed",
             "output": {"error": "Not enough evidence could be gathered for this company to challenge the thesis."},
         }
-    try:
-        msg = llm.chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": _prompt(symbol, thesis, st.get("horizon"), labels, st.get("claims"))}],
-                       max_tokens=2600, temperature=0.1)  # fmt: skip
-    except llm.LLMUnavailable:
-        return {
-            **base,
-            "status": "failed",
-            "output": {"error": "The analysis could not be completed: the AI service is unavailable. Nothing was concluded."},
-        }
-    m = re.search(r"\{.*\}", msg.get("content") or "", re.S)
-    try:
-        raw = json.loads(m.group(0)) if m else None
-        if not isinstance(raw, dict):
-            raise ValueError("not an object")
-        result = validate(raw, labels, thesis, st.get("claims"))
-    except (ValueError, json.JSONDecodeError):
-        return {
-            **base,
-            "status": "failed",
-            "output": {
-                "error": "The analysis could not be completed: the AI's answer couldn't be checked. Nothing was concluded."
-            },
-        }
+    convo = [
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": _prompt(symbol, thesis, st.get("horizon"), labels, st.get("claims"))},
+    ]
+    diagnostics: list[dict[str, Any]] = []
+    result = None
+    msg: dict[str, Any] = {}
+    for attempt in range(2):  # one retry, asking for valid JSON only, if the first answer can't be read
+        try:
+            # reasoning models spend part of max_tokens thinking: leave plenty of room for the JSON itself
+            msg = llm.chat(convo, max_tokens=MAX_TOKENS, temperature=0.1)
+        except llm.LLMUnavailable:
+            return {**base, "status": "failed",
+                    "output": {"error": "The analysis could not be completed: the AI service is unavailable. Nothing was concluded.",
+                               "diagnostics": diagnostics}}  # fmt: skip
+        content = msg.get("content") or ""
+        try:
+            raw = parse_json(content)
+            result = validate(raw, labels, thesis, st.get("claims"))
+            break
+        except ValueError as exc:
+            diagnostics.append(
+                {"attempt": attempt + 1, "finish_reason": msg.get("_finish"), "chars": len(content), "problem": str(exc)[:200]}
+            )
+            convo = [*convo, {"role": "assistant", "content": content[:4000]},
+                     {"role": "user", "content": "That wasn't a single valid JSON object in the requested shape. Reply with only the JSON object, "
+                                                 "shorter if needed (fewer, tighter points), and nothing else."}]  # fmt: skip
+    if result is None:
+        return {**base, "status": "failed",
+                "output": {"error": "The analysis could not be completed: the AI's answer couldn't be checked. Nothing was concluded.",
+                           "diagnostics": diagnostics}}  # fmt: skip
+    result["diagnostics"] = diagnostics
     result["ai"] = {"provider": msg.get("_provider"), "model": msg.get("_model")}
     return {**base, "status": "completed", "output": result}
 

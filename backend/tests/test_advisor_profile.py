@@ -25,7 +25,13 @@ def test_risk_band_is_computed_by_code() -> None:
     assert investor_profile.score(HIGH, "under_1y") == (25, "balanced")  # money needed soon caps the band
     mid = {**LOW, "drop": "wait", "priority": "balance", "income_stability": "somewhat"}
     assert investor_profile.score(mid, "3_7y") == (11, "balanced")  # 3 + 3 + 3 + 1 + 1
-    capacity_only = {"drop": "hold_add_small", "priority": "growth", "income_stability": "stable", "experience": "some", "share": "small"}
+    capacity_only = {
+        "drop": "hold_add_small",
+        "priority": "growth",
+        "income_stability": "stable",
+        "experience": "some",
+        "share": "small",
+    }
     assert investor_profile.score(capacity_only, "over_7y") == (21, "growth")  # high score, no high-risk appetite
     assert investor_profile.score({**capacity_only, "priority": "max_growth"}, "over_7y") == (22, "adventurous")
     with pytest.raises(ValidationFailed):
@@ -117,3 +123,13 @@ def test_without_a_profile_the_advisor_is_told_so(client, monkeypatch):  # type:
     assert "hasn't completed an investor profile" in seen[-1][0]["content"]
     assert client.get("/api/me/advice-log").json()["items"][0]["profile"] is None
     assert json.dumps(seen[-1][0]["content"]).count("Current date and time") == 1
+
+
+def test_review_flags_judging_the_amount_seen_in_production() -> None:
+    # wording from a real production answer (2026-10-11)
+    assert "judges the amount for the member" in advice_log.review(
+        "500 shares (AED 5,690) would be a meaningful but not extreme position for you. Educational guidance — not a recommendation to buy or sell."
+    )
+    assert "judges the amount for the member" in advice_log.review(
+        "In isolation, that position size is reasonable for a single UAE blue chip. Educational guidance — not a recommendation."
+    )

@@ -99,3 +99,20 @@ def test_no_data_means_no_action(client, monkeypatch) -> None:  # type: ignore[n
         assert pulse_checks.rates_trend(db) == {"direction": "unknown"} and pulse_checks.review(db) == []
         db.refresh(d)
         assert d.status == "visible"
+
+
+def test_a_headline_framing_the_opposite_is_held_even_if_the_body_is_balanced(rising) -> None:  # type: ignore[no-untyped-def]
+    """Production, 2026-10-11: the body had been updated to discuss rising yields, the headline still asked about easing."""
+    d = _story(
+        rising,
+        EASING,
+        "The debate centers on whether rising interest rates and Treasury yields will keep pressuring risk assets.",
+    )
+    held = {h["id"]: h["reason"] for h in pulse_checks.review(rising)}
+    assert d.public_id in held and held[d.public_id].startswith("Headline frames rates as falling")
+    fine = _story(
+        rising,
+        "Rates: what higher yields mean for UAE banks",
+        "Rising rates help margins; if rates were falling, margins would shrink.",
+    )
+    assert fine.public_id not in {h["id"] for h in pulse_checks.review(rising)}

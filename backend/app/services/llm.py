@@ -180,7 +180,9 @@ def chat(
             _fail(t, reason, errors)
             continue
         try:
-            msg = r.json()["choices"][0]["message"]
+            choice = r.json()["choices"][0]
+            msg = choice["message"]
+            msg["_finish"] = choice.get("finish_reason")  # "length" = cut off at max_tokens
         except (ValueError, KeyError, IndexError):
             _fail(t, f"{t['provider']}: unexpected response", errors)
             continue

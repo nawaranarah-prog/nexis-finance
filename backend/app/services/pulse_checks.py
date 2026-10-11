@@ -106,11 +106,17 @@ def claims_direction(text: str) -> set[str]:
 def contradiction(d: PulseDiscussion, trend: dict[str, Any]) -> str | None:
     if trend.get("direction") not in ("rising", "falling"):
         return None
-    said = claims_direction(_text(d))
     opposite = "falling" if trend["direction"] == "rising" else "rising"
+    data = (f"Nexis data shows US rates {trend['direction']} over the last {WEEKS} weeks (10-year {trend['us10y_bp']:+d}bp, "
+            f"13-week bill {trend['us13w_bp']:+d}bp, {trend['from']} to {trend['to']}).")  # fmt: skip
+    # The headline is what readers see in the feed: one that frames the opposite direction is held even if the body,
+    # updated later, discusses both (seen in production: "how much easing…" over a body about rising yields).
+    headline = claims_direction(d.title)
+    if opposite in headline and trend["direction"] not in headline:
+        return f"Headline frames rates as {opposite}, but {data}"
+    said = claims_direction(_text(d))
     if opposite in said and trend["direction"] not in said:
-        return (f"Says rates are {opposite}, but Nexis data shows US rates {trend['direction']} over the last {WEEKS} weeks "
-                f"(10-year {trend['us10y_bp']:+d}bp, 13-week bill {trend['us13w_bp']:+d}bp, {trend['from']} to {trend['to']}).")  # fmt: skip
+        return f"Says rates are {opposite}, but {data}"
     return None
 
 

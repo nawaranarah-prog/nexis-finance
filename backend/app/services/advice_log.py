@@ -23,6 +23,8 @@ DIRECTIVE = [
     (r"\b(?:my|our) recommendation is to (?:buy|sell|hold)\b", "gives a buy/sell recommendation"),
     (r"\b(?:put|invest|allocate) (?:\d[\d,.]*\s*%|aed\s*\d[\d,]*|\$\s*\d[\d,]*) (?:of your [a-z]+ )?(?:in|into) (?!a\b|an\b|diversified)",
      "prescribes an amount for a specific holding"),
+    (r"\b(?:position|trade|amount)(?: size)? (?:is|would be|looks) (?:a )?(?:reasonable|sensible|appropriate|fine)\b"
+     r"|\b(?:reasonable|sensible|appropriate) (?:position )?size\b|\bmeaningful but not extreme\b", "judges the amount for the member"),
     (r"\bguarantee(?:d|s)? (?:return|profit|gain)s?\b", "promises returns"),
 ]  # fmt: skip
 
@@ -35,7 +37,9 @@ def review(answer: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
-def record(db: Session, user: User, question: str, answer: str, profile: dict[str, Any] | None, meta: dict[str, Any]) -> AdviceLog:
+def record(
+    db: Session, user: User, question: str, answer: str, profile: dict[str, Any] | None, meta: dict[str, Any]
+) -> AdviceLog:
     ai = meta.get("ai") or {}
     row = AdviceLog(
         user_id=user.id,
