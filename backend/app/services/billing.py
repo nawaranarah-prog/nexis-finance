@@ -5,7 +5,8 @@ webhooks). Another provider would add its own module and its own ``subscriptions
 (``app/core/plans.py``), entitlements and usage stay the same.
 
 Nothing here trusts the browser: a member can only buy the plans in ``plans.PRICES``, sold at the Stripe prices
-configured on the server — and only if Stripe confirms those prices are exactly AED 29/month (Plus) and AED 69/month
+configured on the server — and only if Stripe confirms each price is exactly the amount, currency and interval in
+``plans.PRICES`` (the single source of the prices) —
 (Pro). Paid access comes only from subscription state Stripe reported (``entitlements.tier_of``).
 """
 
@@ -21,7 +22,8 @@ from app.core.errors import NexisError, ValidationFailed
 from app.models import User
 from app.services import entitlements
 
-CANCELLATION = ("Cancel any time. You keep your plan until the end of the month you've paid for, then move to Free. Before then "
+CANCELLATION = ("Cancel any time. You keep your plan until the end of the period you've paid for (the month, or the year for "
+                "annual plans), then move to Free. Annual plans are paid upfront and aren't refunded when you cancel. Before then "
                 "you choose which investment stays active on Free; the others are archived, never deleted, and come back if "
                 "you subscribe again. Pulse and your account are unaffected.")  # fmt: skip
 

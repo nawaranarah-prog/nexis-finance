@@ -4,7 +4,7 @@
 
 | | Free | Nexis Plus | Nexis Pro |
 |---|---|---|---|
-| Price | AED 0 | AED 29 / month | AED 69 / month |
+| Price | AED 0 | AED 29 / month or AED 229 / year (upfront) | AED 69 / month or AED 599 / year (upfront) |
 | Active investments (My Nexis holdings, distinct assets) | 1 | 10 | 20 |
 | AI Advisor messages / month (reset on the 1st, UTC) | 20 | 200 | 600 |
 | Portfolio insights (`/api/me/portfolio/insights`) | — | ✓ | ✓ |
@@ -14,7 +14,8 @@
 | Help Center articles / AI help answers per day | unlimited / 40 | unlimited / 40 | unlimited / 40 |
 
 Visitors without an account can't use the AI (Advisor, help answers): they get the "join Nexis" sheet, and the API
-answers 401. Monthly billing today; yearly plans switch on by configuration once their AED amounts are decided — see
+answers 401. Billed monthly, or annually (Plus AED 229, Pro AED 599, one upfront payment for 12 months) once the annual Stripe
+prices are configured. Subscribers on an earlier price keep it. See
 [STRIPE-SETUP.md](../STRIPE-SETUP.md). Pulse is never metered by plan; anti-spam rate limits (`pulse_discussions_per_day`,
 `pulse_comments_per_hour`, no repeated posts) apply to everyone equally.
 

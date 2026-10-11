@@ -17,7 +17,7 @@ DETAILS = {
     "quote": {"price": 14.85, "week52_low": 11.2, "week52_high": 15.9, "ma50": 14.1, "ma200": 13.6, "market_time": "2026-10-09T12:00:00Z"},
     "valuation": {"pe_trailing": 9.4, "pe_forward": 8.8, "price_to_book": 1.6, "ev_to_ebitda": 6.1, "market_cap": 131_000_000_000},
     "financials": {"revenue_growth": 0.31, "earnings_growth": -0.04, "profit_margin": 0.37, "return_on_equity": 0.18, "debt_to_equity_pct": 21.0},
-    "dividends": {"yield": 5.2, "rate": 0.75, "payout_ratio": 0.48},
+    "dividends": {"yield": 0.052, "rate": 0.75, "payout_ratio": 0.48},  # yield is a fraction, as markets.details returns it
     "analysts": {"count": 11, "recommendation": "buy", "target_mean": 17.2, "target_low": 12.0, "target_high": 20.5},
 }  # fmt: skip
 NEWS = {"items": [
@@ -86,7 +86,7 @@ def test_evidence_is_gathered_as_separate_bounded_items(client, offline) -> None
         labels = _labels(db)
     kinds = [v["source_kind"] for v in labels.values()]
     assert kinds[:5] == ["market_data"] * 5 and kinds.count("news") == 2
-    assert "Dividend yield 5.20%" in labels["E4"]["excerpt"] and "Payout ratio 48.0%" in labels["E4"]["excerpt"]
+    assert "Dividend yield 5.2%" in labels["E4"]["excerpt"]  # production showed "0.09%" for 8.8% before this was fixed and "Payout ratio 48.0%" in labels["E4"]["excerpt"]
     assert labels["E6"]["excerpt"] == "Headline: Dubai property transactions hit a record in September"
     assert all(len(v["excerpt"]) <= 600 for v in labels.values())
 

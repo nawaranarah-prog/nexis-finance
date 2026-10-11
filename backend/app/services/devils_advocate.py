@@ -103,7 +103,7 @@ def market_evidence(db: Session, symbol: str) -> list[EvidenceRecord]:
                                                                   ("Return on equity", _f(fin.get("return_on_equity"), pct=True)),
                                                                   ("Debt/equity", _f(fin.get("debt_to_equity_pct")) and f"{_f(fin.get('debt_to_equity_pct'))}%"),
                                                                   ("Free cash flow", _f(fin.get("free_cash_flow"), d=0))])),
-        ("dividend", "Dividend", _join([("Dividend yield", _f(dv.get("yield")) and f"{_f(dv.get('yield'))}%"), ("Annual dividend", _f(dv.get("rate"))),
+        ("dividend", "Dividend", _join([("Dividend yield", _f(dv.get("yield"), pct=True)), ("Annual dividend", _f(dv.get("rate"))),
                                         ("Payout ratio", _f(dv.get("payout_ratio"), pct=True)),
                                         ("5-year average yield", _f(dv.get("five_year_avg_yield_pct")) and f"{_f(dv.get('five_year_avg_yield_pct'))}%")])),
         ("analysts", "Analyst consensus", _join([("Analysts", _f(an.get("count"), d=0)), ("Recommendation", an.get("recommendation")),

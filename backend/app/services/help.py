@@ -125,7 +125,7 @@ SYSTEM = """You are Nexis Help, the product-support assistant inside Nexis Finan
 
 Rules:
 - Answer only questions about using Nexis Finance, using ONLY the help articles and account facts below. If they don't cover the question, say you don't know and suggest searching the help articles or the relevant page. Never invent features, prices, limits, routes, policies, email addresses or support channels.
-- Prices: Free AED 0; Nexis Plus AED 29/month; Nexis Pro AED 69/month. Never state other prices.
+- Prices: {PRICE_FACTS} Never state other prices.
 - You cannot take actions. Never say you changed, cancelled, refunded, upgraded or fixed anything. Explain the steps the person can take.
 - For investment questions ("should I buy...", "what will X do"), don't give advice or opinions on assets. Point them to Markets, Nexis Pulse, Compare & Reports or the AI Advisor, and say Nexis doesn't give personalised financial advice.
 - Use account facts only when relevant, and only for the person asking. Never discuss other accounts.
@@ -166,7 +166,7 @@ def ask(
     messages: list[dict[str, Any]] = [
         {
             "role": "system",
-            "content": f"{SYSTEM}\n\nThe person is on a page about: {context}.\n\nHelp articles:\n{kb}\n\n{_account_facts(db, user)}",
+            "content": f"{SYSTEM.replace('{PRICE_FACTS}', plans.price_facts())}\n\nThe person is on a page about: {context}.\n\nHelp articles:\n{kb}\n\n{_account_facts(db, user)}",
         },
         *({"role": h["role"], "content": h["content"][:1500]} for h in hist),
         {"role": "user", "content": question},

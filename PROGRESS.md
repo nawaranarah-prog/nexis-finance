@@ -474,3 +474,41 @@ choice.**
   * **live payments:** blocked on **Vercel Pro ($20/user/month: Hobby forbids payments)** and Stripe activation.
 
 **Tests:** backend 407/407; billing 43 (incl. yearly); policy, SEO and production-bug regressions added.
+
+## Final subscription prices (owner's brief, 2026-10-11)
+
+* **Prices:** Free AED 0; Plus AED 29/month or **AED 229/year**; Pro AED 69/month or **AED 599/year**. Annual means
+  one upfront payment for 12 months.
+* **Single source:** `plans.PRICES`. The annual offer is computed centrally (`plans.annual_offer`):
+  * Plus: about AED 19.08/month, saves AED 119 (34%);
+  * Pro: about AED 49.92/month, saves AED 229 (28%).
+* **No Stripe price reuse:** the annual lookup keys carry the amount (`nexis_plus_yearly_aed_229`,
+  `nexis_pro_yearly_aed_599`), so a Stripe price created for AED 290/990 can't be reused.
+* **Surfaces updated:**
+  * the pricing page: Monthly / "Annual · save up to 34%" switch, upfront amount, monthly equivalent, saving, table
+    note, "Get … annually", FAQ;
+  * the upgrade prompt (both prices);
+  * Settings billing ("billed annually upfront");
+  * the plan-change dialog: every plan on sale with its price, plus accurate terms for each kind of change (charged
+    today / renewal date unchanged / renews a year from today / credit, not refund);
+  * the success screen (what was bought);
+  * the Help Center articles and the Help agent (prices now generated from `plans.PRICES`);
+  * the app page description (no hardcoded prices);
+  * cancellation text (period-neutral; annual plans aren't refunded).
+* **Existing subscribers:**
+  * Never modified in Stripe.
+  * A subscription on a price Nexis no longer sells keeps its tier and is shown as "Your existing price
+    (unchanged)", never with today's amount.
+  * Monthly price ids are unchanged.
+* **`stripe_setup --check`** now prints a read-only price inventory (every price on Nexis Plus/Pro, with which env var
+  each should be).
+* **Tests:**
+  * Backend: 410/410. Billing: 46, including the pinned final prices, saving maths, annual checkout and status,
+    interval switching proration, a wrong annual price only disabling annual, earlier-price subscribers never
+    repriced, unpaid/expired checkouts granting nothing, and help prices matching config.
+  * Pricing e2e: 14 (12 in three browsers + layout at 375/1440).
+* **Not done, owner only:**
+  * creating the two annual Stripe prices and setting their ids;
+  * live payments (Vercel Pro and Stripe activation);
+  * subscription terms in the Terms of Use (LEGAL-REVIEW #13);
+  * the VAT decision.

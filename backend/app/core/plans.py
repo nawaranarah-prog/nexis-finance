@@ -55,12 +55,13 @@ PRICES: dict[str, dict[str, Any]] = {
                      "lookup_key": "nexis_plus_monthly_aed", "nickname": "Nexis Plus Monthly (AED)"},
     "pro_monthly": {"tier": "pro", "amount_cents": 6900, "currency": "aed", "interval": "month",
                     "lookup_key": "nexis_pro_monthly_aed", "nickname": "Nexis Pro Monthly (AED)"},
-    # Yearly prices decided by the owner on 2026-10-11. They go on sale only once their Stripe price ids are set and
-    # verified (STRIPE_PLUS_YEARLY_AED_PRICE_ID / STRIPE_PRO_YEARLY_AED_PRICE_ID); until then only monthly is sold.
-    "plus_yearly": {"tier": "plus", "amount_cents": 29000, "currency": "aed", "interval": "year",
-                    "lookup_key": "nexis_plus_yearly_aed", "nickname": "Nexis Plus Yearly (AED)"},
-    "pro_yearly": {"tier": "pro", "amount_cents": 99000, "currency": "aed", "interval": "year",
-                   "lookup_key": "nexis_pro_yearly_aed", "nickname": "Nexis Pro Yearly (AED)"},
+    # Annual prices (owner's final prices, 2026-10-11): one upfront payment for 12 months. They go on sale only once their
+    # Stripe price ids are set and verified (STRIPE_PLUS_YEARLY_AED_PRICE_ID / STRIPE_PRO_YEARLY_AED_PRICE_ID).
+    # The lookup keys carry the amount, so a Stripe price made for an earlier amount (AED 290 / 990) is never reused.
+    "plus_yearly": {"tier": "plus", "amount_cents": 22900, "currency": "aed", "interval": "year",
+                    "lookup_key": "nexis_plus_yearly_aed_229", "nickname": "Nexis Plus Annual (AED 229)"},
+    "pro_yearly": {"tier": "pro", "amount_cents": 59900, "currency": "aed", "interval": "year",
+                   "lookup_key": "nexis_pro_yearly_aed_599", "nickname": "Nexis Pro Annual (AED 599)"},
 }  # fmt: skip
 PRODUCTS: dict[str, dict[str, str]] = {
     "plus": {"id": "nexis_plus", "name": "Nexis Plus"},
@@ -90,6 +91,45 @@ def price_key_for(tier: str, interval: str = "month") -> str:
                 next(k for k, v in PRICES.items() if v["tier"] == tier))  # fmt: skip
 
 
+def annual_offer(tier: str) -> dict[str, Any] | None:
+    """What annual billing means for ``tier`` versus 12 monthly payments: the upfront amount, its monthly equivalent and
+    the saving. Computed from PRICES, never typed in anywhere else."""
+    month = next((v for v in PRICES.values() if v["tier"] == tier and v["interval"] == "month"), None)
+    year = next((v for v in PRICES.values() if v["tier"] == tier and v["interval"] == "year"), None)
+    if not month or not year:
+        return None
+    twelve = month["amount_cents"] * 12
+    saving = twelve - year["amount_cents"]
+    return {
+        "upfront": year["amount_cents"] / 100,
+        "per_month": round(year["amount_cents"] / 1200, 2),
+        "twelve_monthly": twelve / 100,
+        "saving": saving / 100,
+        "saving_pct": round(saving * 100 / twelve),
+    }
+
+
+def price_facts() -> str:
+    """One sentence with every plan price, from PRICES (used by the Help agent so it can't drift from checkout)."""
+    parts = ["Free AED 0"]
+    for t in PAID_TIERS:
+        m = PRICES.get(price_key_for(t, "month"))
+        y = next((v for v in PRICES.values() if v["tier"] == t and v["interval"] == "year"), None)
+        text = f"{NAMES[t]} AED {m['amount_cents'] / 100:,.0f}/month" if m else NAMES[t]
+        if y:
+            o = annual_offer(t)
+            text += (
+                (
+                    f" or AED {y['amount_cents'] / 100:,.0f}/year paid upfront for 12 months (about AED {o['per_month']:,.2f} a month; "
+                    f"saves AED {o['saving']:,.0f}, about {o['saving_pct']}%, vs 12 monthly payments)"
+                )
+                if o
+                else ""
+            )
+        parts.append(text)
+    return "; ".join(parts) + ". Annual plans are only on sale when the pricing page shows them."
+
+
 def intervals() -> list[str]:
     """Billing intervals on sale, monthly first."""
     return sorted({v["interval"] for v in PRICES.values()}, key=lambda i: (i != "month", i))
@@ -102,7 +142,7 @@ def allows(tier: str, capability: str) -> bool:
 def price_label(price_key: str | None) -> str | None:
     p = PRICES.get(price_key or "")
     if not p:
-        return None
+        return "Your existing price (unchanged)" if (price_key or "").endswith("_legacy") else None
     amount = p["amount_cents"] / 100
     return f"AED {amount:,.2f}/{p['interval']}" if amount % 1 else f"AED {amount:,.0f}/{p['interval']}"
 
@@ -115,7 +155,8 @@ def public() -> dict[str, Any]:
              "price": ({"key": price_key_for(t), "amount": PRICES[price_key_for(t)]["amount_cents"] / 100,
                         "currency": PRICES[price_key_for(t)]["currency"].upper(), "interval": PRICES[price_key_for(t)]["interval"]}
                        if t in PAID_TIERS else {"key": None, "amount": 0, "currency": "AED", "interval": "month"}),
-             "prices": ({v["interval"]: {"key": k, "amount": v["amount_cents"] / 100, "currency": v["currency"].upper()}
+             "prices": ({v["interval"]: {"key": k, "amount": v["amount_cents"] / 100, "currency": v["currency"].upper(),
+                                         **({"annual": annual_offer(t)} if v["interval"] == "year" and annual_offer(t) else {})}
                          for k, v in PRICES.items() if v["tier"] == t} if t in PAID_TIERS else {}),
              "capabilities": [c for c, v in CAPABILITIES.items() if t in v["tiers"]]}
             for t in TIERS

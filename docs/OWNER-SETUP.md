@@ -31,7 +31,8 @@ Once you tell me the address (it isn't a secret), I set the data-provider identi
 
 ## 2. Annual billing: create the yearly Stripe prices (test mode first)
 
-The code sells Plus at AED 290/year and Pro at AED 990/year only once matching Stripe prices exist.
+The code sells Plus at AED 229/year and Pro at AED 599/year (one upfront payment for 12 months) only once matching
+Stripe prices exist. First run `--check` to see the price inventory; full steps in [STRIPE-SETUP.md](../STRIPE-SETUP.md).
 1. In a terminal on your computer (not in a chat), from the `backend` folder:
    `$env:STRIPE_SECRET_KEY="sk_test_…"; .venv\Scripts\python -m app.cli.stripe_setup`
    This is idempotent: it finds the existing monthly prices and creates the two yearly ones. It prints

@@ -156,11 +156,15 @@ def test_final_plan_values():
                             "pro": {"investments": 20, "watchlist": 50, "advisor": 600}}  # fmt: skip
     assert {k: (v["tier"], v["amount_cents"], v["currency"], v["interval"]) for k, v in plans.PRICES.items()} == {
         "plus_monthly": ("plus", 2900, "aed", "month"), "pro_monthly": ("pro", 6900, "aed", "month"),
-        "plus_yearly": ("plus", 29000, "aed", "year"), "pro_yearly": ("pro", 99000, "aed", "year")}  # fmt: skip  # owner's prices, 2026-10-11
+        "plus_yearly": ("plus", 22900, "aed", "year"), "pro_yearly": ("pro", 59900, "aed", "year")}  # fmt: skip  # owner's final prices
     assert [t for t in plans.TIERS if plans.allows(t, "portfolio_insights")] == ["plus", "pro"]
     assert [t for t in plans.TIERS if plans.allows(t, "portfolio_risk")] == ["pro"]
     assert plans.price_label("plus_monthly") == "AED 29/month" and plans.price_label("pro_monthly") == "AED 69/month"
-    assert plans.price_label("plus_yearly") == "AED 290/year" and plans.price_label("pro_yearly") == "AED 990/year"
+    assert plans.price_label("plus_yearly") == "AED 229/year" and plans.price_label("pro_yearly") == "AED 599/year"
+    # annual offer vs 12 monthly payments (computed from PRICES, shown on the pricing page)
+    assert plans.annual_offer("plus") == {"upfront": 229.0, "per_month": 19.08, "twelve_monthly": 348.0, "saving": 119.0, "saving_pct": 34}
+    assert plans.annual_offer("pro") == {"upfront": 599.0, "per_month": 49.92, "twelve_monthly": 828.0, "saving": 229.0, "saving_pct": 28}
+    assert all(v["lookup_key"].endswith(str(v["amount_cents"] // 100)) for k, v in plans.PRICES.items() if k.endswith("_yearly"))
     assert plans.tier_of("pro_yearly") == "pro" and plans.tier_of("pro_legacy") == "pro"  # earlier USD subscriptions stay Pro
 
 
@@ -269,7 +273,7 @@ def test_earlier_usd_subscriptions_are_still_pro(client, db, stripe_on, monkeypa
     u = _signup(client, "legacy")
     _go_pro(client, stripe_on, u, price="price_old_usd_yearly")
     st = client.get("/api/billing/status").json()
-    assert st["plan"] == "pro" and st["billing_plan"] == "pro_legacy" and st["billing"] is None
+    assert st["plan"] == "pro" and st["billing_plan"] == "pro_legacy" and st["billing"] == "Your existing price (unchanged)"
     _out(client)
 
 
@@ -732,14 +736,14 @@ def test_shared_workspace_is_read_only_for_the_public(client, db, monkeypatch):
     _out(client)
 
 
-# ------------------------------------------------------------------ yearly plans (AED 290 / AED 990, sold once configured)
+# ------------------------------------------------------------------ annual plans (AED 229 / AED 599, sold once configured)
 
 
-def _yearly_on(monkeypatch, world, plus_amount: int = 29000) -> None:  # type: ignore[no-untyped-def]
+def _yearly_on(monkeypatch, world, plus_amount: int = 22900) -> None:  # type: ignore[no-untyped-def]
     s = get_settings()
     monkeypatch.setattr(s, "stripe_plus_yearly_price_id", "price_plus_y")
     monkeypatch.setattr(s, "stripe_pro_yearly_aed_price_id", "price_pro_y")
-    for pid, amount in (("price_plus_y", plus_amount), ("price_pro_y", 99000)):
+    for pid, amount in (("price_plus_y", plus_amount), ("price_pro_y", 59900)):
         world["prices"][pid] = {"id": pid, "active": True, "unit_amount": amount, "currency": "aed",
                                 "recurring": {"interval": "year", "interval_count": 1}, "livemode": False}  # fmt: skip
 
@@ -766,20 +770,20 @@ def test_yearly_checkout_status_and_switching(client, db, stripe_on, monkeypatch
     cat = client.get("/api/billing/plans").json()
     assert cat["intervals"] == ["month", "year"] and cat["billing_interval"] == "monthly or yearly"
     tiers = {t["id"]: t for t in cat["tiers"]}
-    assert tiers["plus"]["prices"]["year"] == {"key": "plus_yearly", "amount": 290.0, "currency": "AED"}
-    assert tiers["pro"]["prices"]["year"] == {"key": "pro_yearly", "amount": 990.0, "currency": "AED"}
+    assert tiers["plus"]["prices"]["year"] == {"key": "plus_yearly", "amount": 229.0, "currency": "AED", "annual": plans.annual_offer("plus")}
+    assert tiers["pro"]["prices"]["year"] == {"key": "pro_yearly", "amount": 599.0, "currency": "AED", "annual": plans.annual_offer("pro")}
 
     u = _signup(client, "yearly")
     assert client.post("/api/billing/checkout", json={"plan": "plus_yearly"}).status_code == 200
     assert stripe_on["created"][-1]["line_items"] == [{"price": "price_plus_y", "quantity": 1}]
     sid = _go_pro(client, stripe_on, u, price="price_plus_y")
     st = client.get("/api/billing/status").json()
-    assert (st["plan"], st["billing"], st["interval"], st["price_key"]) == ("plus", "AED 290/year", "year", "plus_yearly")
+    assert (st["plan"], st["billing"], st["interval"], st["price_key"]) == ("plus", "AED 229/year", "year", "plus_yearly")
 
     assert client.post("/api/billing/change-plan", json={"plan": "plus_yearly"}).status_code == 422  # already on it
     st = client.post("/api/billing/change-plan", json={"plan": "pro_yearly"}).json()  # tier up, stays yearly
     kw = stripe_on["modified"][-1][1]
-    assert st["billing"] == "AED 990/year" and kw["items"][0]["price"] == "price_pro_y" and kw["proration_behavior"] == "always_invoice"
+    assert st["billing"] == "AED 599/year" and kw["items"][0]["price"] == "price_pro_y" and kw["proration_behavior"] == "always_invoice"
     st = client.post("/api/billing/change-plan", json={"plan": "pro_monthly"}).json()  # yearly -> monthly: credited, not charged
     assert st["billing"] == "AED 69/month" and stripe_on["modified"][-1][1]["proration_behavior"] == "create_prorations"
     client.post("/api/billing/change-plan", json={"plan": "pro_yearly"})  # monthly -> yearly: charged now
@@ -788,7 +792,7 @@ def test_yearly_checkout_status_and_switching(client, db, stripe_on, monkeypatch
 
 
 def test_a_wrong_yearly_price_only_disables_yearly(client, db, stripe_on, monkeypatch):
-    _yearly_on(monkeypatch, stripe_on, plus_amount=19900)  # not AED 290: never sold at a surprise price
+    _yearly_on(monkeypatch, stripe_on, plus_amount=29000)  # an earlier AED 290 price: never sold at a surprise price
     _fresh_price_check(db)
     cat = client.get("/api/billing/plans").json()
     assert cat["available"] is True and cat["intervals"] == ["month"]  # monthly keeps selling
@@ -796,3 +800,55 @@ def test_a_wrong_yearly_price_only_disables_yearly(client, db, stripe_on, monkey
     assert client.post("/api/billing/checkout", json={"plan": "plus_yearly"}).status_code == 422
     assert client.post("/api/billing/checkout", json={"plan": "plus_monthly"}).status_code == 200
     _out(client)
+
+
+def test_existing_subscribers_on_an_earlier_annual_price_are_never_repriced(client, db, stripe_on, monkeypatch):
+    """A subscription bought at an earlier annual amount (e.g. AED 290 in testing) keeps its tier and its price: the
+    webhook doesn't move it to today's price, nothing is modified in Stripe, and Settings doesn't show today's amount."""
+    _yearly_on(monkeypatch, stripe_on)
+    _fresh_price_check(db)
+    u = _signup(client, "legacyyear")
+    sid = f"sub_old290_{u['id']}"
+    old = _sub(sid, u["id"], price="price_plus_y_290_old")  # a price id Nexis no longer sells
+    old["metadata"]["nexis_plan"] = "plus_yearly"  # checkout always records the plan on the subscription
+    stripe_on["subs"][sid] = old
+    _send(client, _event("checkout.session.completed", {"id": "cs_old", "object": "checkout.session", "mode": "subscription",
+                                                         "client_reference_id": str(u["id"]), "subscription": sid}))  # fmt: skip
+    _send(client, _event("customer.subscription.updated", old))  # renewal / any later event
+    st = client.get("/api/billing/status").json()
+    assert (st["plan"], st["price_key"], st["billing"]) == ("plus", "plus_legacy", "Your existing price (unchanged)")
+    assert stripe_on["modified"] == [] and stripe_on["canceled"] == []  # nothing changed in Stripe
+    _out(client)
+
+
+def test_an_unpaid_or_failed_checkout_grants_nothing(client, stripe_on):
+    u = _signup(client, "unpaid")
+    sid = f"sub_unpaid_{u['id']}"
+    stripe_on["subs"][sid] = _sub(sid, u["id"], status="incomplete", price=PLUS)  # first payment not completed
+    _send(client, _event("checkout.session.completed", {"id": "cs_unpaid", "object": "checkout.session", "mode": "subscription",
+                                                         "client_reference_id": str(u["id"]), "subscription": sid}))  # fmt: skip
+    assert client.get("/api/billing/status").json()["plan"] == "free"
+    stripe_on["subs"][sid]["status"] = "incomplete_expired"
+    _send(client, _event("customer.subscription.updated", stripe_on["subs"][sid]))
+    assert client.get("/api/billing/status").json()["plan"] == "free"
+    _send(client, _event("checkout.session.expired", {"id": "cs_unpaid", "object": "checkout.session", "client_reference_id": str(u["id"])}))
+    assert client.get("/api/billing/status").json()["plan"] == "free"
+    _out(client)
+
+
+def test_help_prices_come_from_the_single_configuration():
+    import json
+    from pathlib import Path
+
+    from app.services import help as help_svc
+
+    facts = plans.price_facts()
+    for t in plans.PAID_TIERS:
+        for v in (v for v in plans.PRICES.values() if v["tier"] == t):
+            assert f"AED {v['amount_cents'] // 100}/{v['interval']}" in facts
+    arts = json.loads(Path(help_svc.__file__).resolve().parent.parent.joinpath("content", "help_articles.json").read_text(encoding="utf-8"))
+    text = json.dumps(arts)
+    for v in plans.PRICES.values():  # the help center states exactly the configured prices
+        assert f"AED {v['amount_cents'] // 100}/{v['interval']}" in text
+    for old in ("AED 290", "AED 990"):
+        assert old not in text and old not in facts
