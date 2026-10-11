@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConfigurationError, NexisError, ProviderError
 from app.db.base import utcnow
-from app.models import MarketCache
+from app.models import MarketCache, User
 from app.services import advisor_voice as voice
 from app.services import compare as cmp
 from app.services import llm, markets, valuation
@@ -30,10 +30,10 @@ DISCLAIMER = (
     "Markets can fall; consider your goals, horizon and risk tolerance, and consult a licensed professional before investing."
 )
 
-SYSTEM = """You are Nexis Advisor — the AI financial advisor inside the Nexis Finance app. You talk like a brilliant, warm,
-senior wealth adviser and equity analyst sitting across the table from the user: natural conversation, clear opinions,
-real numbers, zero fluff. Your advice should be more thorough and more useful than any generic chatbot's, because you
-work from live data.
+SYSTEM = """You are Nexis Advisor — the AI wealth guide inside the Nexis Finance app. You talk like a brilliant, warm,
+senior wealth educator and equity analyst sitting across the table from the user: natural conversation, clear
+explanations, real numbers, zero fluff. Your guidance should be more thorough and more useful than any generic chatbot's,
+because you work from live data and from the member's own profile.
 
 Context: the app is built for investors in the UAE (dirham is pegged to the US dollar at 3.6725). When a UAE share is discussed,
 compare it with UAE sector peers and the local index; when an investor asks about bonds or low-risk options, look at UAE
@@ -55,21 +55,30 @@ How you work
   data is missing, say so plainly.
 
 How you answer
-- Open with a direct answer to the question in one or two sentences (a clear view — e.g. "I'd buy some, but in stages" /
-  "I'd wait" / "I'd trim"), then explain. Write in flowing, conversational paragraphs with a few short headings or bullets
-  where they genuinely help; bold the key numbers.
+- Open with a plain one- or two-sentence answer: what the data shows and how the idea fits this member's profile (for
+  example "For a cautious profile with a 1–3 year horizon, a single property developer is a high-risk holding — here's
+  why"). Then explain. Write in flowing, conversational paragraphs with a few short headings or bullets where they
+  genuinely help; bold the key numbers.
 - Cover what matters for the decision: what the business does and how it's doing; what's in the news and why it matters;
-  valuation vs history, peers and analyst targets; momentum and risk (drawdowns, volatility); income; the bull case and the
-  bear case; and your recommendation with reasoning.
-- Make it actionable: for a buy idea, suggest a sensible position size (as a share of the portfolio), an entry approach
-  (e.g. split into 2–3 purchases), what would make you change your mind, and what to watch next (earnings dates, catalysts).
-  When the user gives a quantity or amount, show the cost, scenarios (52-week low, analyst target) and dividend income.
-- Tailor to the person: if you don't know their horizon, risk tolerance or how big this is versus their savings, give your
-  best general advice and ask one or two sharp follow-up questions at the end.
+  valuation vs history, peers and analyst targets; momentum and risk (drawdowns, volatility); income; the bull case and
+  the bear case.
+- Tailor it to the member (their profile is below): relate their risk band, horizon, goals, monthly budget, savings and
+  existing holdings to the idea — concentration, currency, liquidity, money needed soon, preferences such as
+  Sharia-compliant only. Point out mismatches plainly and kindly.
+- Describe the options and how each fits the profile (e.g. a diversified fund vs a single share; buying in stages as one
+  way some investors reduce timing risk; what's commonly considered prudent concentration for a profile like theirs). Do
+  NOT tell the member to buy, sell or hold a specific security, and do NOT prescribe how much to put into it: lay out the
+  trade-offs so they can decide. If they ask "should I buy X?", answer with the considerations, how it fits their profile,
+  what they'd need to believe for it to make sense and what argues against it.
+- When the user gives a quantity or amount, show the cost, scenarios (52-week low, analyst target) and dividend income,
+  and what share of their stated monthly budget or savings it represents.
+- If key facts are missing (horizon, how big this is versus their savings), say how the answer would change and ask one
+  or two sharp follow-up questions at the end.
 - Be honest about uncertainty; never promise returns; never suggest putting everything in one position.
 - Reply in the user's language (Arabic if they write in Arabic, etc.).
 - Length: as long as the question deserves — usually 300–700 words for an investment question, shorter for simple ones.
-- End with one short italic line: *Educational guidance based on public data — not personalised financial advice.*"""
+- End with one short italic line: *Educational guidance tailored to the profile you gave, based on public data — not a
+  recommendation to buy or sell. For personal advice, speak to a licensed adviser.*"""
 
 
 TOOLS: list[dict[str, Any]] = [
@@ -192,14 +201,36 @@ def _status_text(name: str, args: dict[str, Any]) -> str:
         return tpl
 
 
-def stream(db: Session, messages: list[dict[str, str]], language: str | None = None) -> Iterator[dict[str, Any]]:
-    """Answer as a stream of events: ``status`` (what is being looked up), ``delta`` (answer text) and ``done``."""
+def stream(
+    db: Session, messages: list[dict[str, str]], language: str | None = None, user: User | None = None
+) -> Iterator[dict[str, Any]]:
+    """Answer as a stream of events: ``status`` (what is being looked up), ``delta`` (answer text) and ``done``.
+
+    For a member, the answer is tailored to their investor profile and holdings, and recorded in the advice log."""
     if not messages or messages[-1]["role"] != "user":
         raise ConfigurationError("the last message must be from the user")
+    if user is None:
+        yield from _stream(db, messages, language, None)
+        return
+    from app.services import advice_log, investor_profile
+
+    member_context, snapshot = investor_profile.context(db, user)
+    text: list[str] = []
+    for ev in _stream(db, messages, language, member_context):
+        if ev["type"] == "delta":
+            text.append(ev["text"])
+        elif ev["type"] == "done":
+            advice_log.record(db, user, messages[-1]["content"], "".join(text), snapshot, ev.get("meta") or {})
+        yield ev
+
+
+def _stream(
+    db: Session, messages: list[dict[str, str]], language: str | None, member_context: str | None
+) -> Iterator[dict[str, Any]]:
     trace: list[dict[str, Any]] = []
     sent_text = False
     try:
-        for ev in _llm_stream(db, messages, trace, language):
+        for ev in _llm_stream(db, messages, trace, language, member_context):
             if ev["type"] == "delta":
                 sent_text = True
             yield ev
@@ -219,10 +250,10 @@ def stream(db: Session, messages: list[dict[str, str]], language: str | None = N
     yield {"type": "done", "meta": out}
 
 
-def ask(db: Session, messages: list[dict[str, str]], language: str | None = None) -> dict[str, Any]:
+def ask(db: Session, messages: list[dict[str, str]], language: str | None = None, user: User | None = None) -> dict[str, Any]:
     """Non-streaming variant: collects the stream into one answer."""
     text, meta = [], {}
-    for ev in stream(db, messages, language):
+    for ev in stream(db, messages, language, user):
         if ev["type"] == "delta":
             text.append(ev["text"])
         elif ev["type"] == "done":
@@ -231,7 +262,11 @@ def ask(db: Session, messages: list[dict[str, str]], language: str | None = None
 
 
 def _llm_stream(
-    db: Session, messages: list[dict[str, str]], trace: list[dict[str, Any]], language: str | None = None
+    db: Session,
+    messages: list[dict[str, str]],
+    trace: list[dict[str, Any]],
+    language: str | None = None,
+    member_context: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     today = datetime.now(UTC).strftime("%A %d %B %Y, %H:%M UTC")
     lang = (
@@ -239,7 +274,8 @@ def _llm_stream(
         if language == "ar"
         else ""
     )
-    convo: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM + lang + f"\n\nCurrent date and time: {today}."}]
+    member = f"\n\n{member_context}" if member_context else ""
+    convo: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM + lang + member + f"\n\nCurrent date and time: {today}."}]
     convo += [{"role": m["role"], "content": m["content"][:6000]} for m in messages[-16:]]
     news_used: list[dict[str, Any]] = []
     symbols: list[str] = []

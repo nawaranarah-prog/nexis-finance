@@ -55,6 +55,11 @@ PRICES: dict[str, dict[str, Any]] = {
                      "lookup_key": "nexis_plus_monthly_aed", "nickname": "Nexis Plus Monthly (AED)"},
     "pro_monthly": {"tier": "pro", "amount_cents": 6900, "currency": "aed", "interval": "month",
                     "lookup_key": "nexis_pro_monthly_aed", "nickname": "Nexis Pro Monthly (AED)"},
+    # Yearly plans go here once their AED amounts are decided (never guessed), e.g.
+    #   "plus_yearly": {"tier": "plus", "amount_cents": <fils>, "currency": "aed", "interval": "year",
+    #                   "lookup_key": "nexis_plus_yearly_aed", "nickname": "Nexis Plus Yearly (AED)"},
+    # plus the Stripe price id in NEXIS_STRIPE_PLUS_YEARLY_AED_PRICE_ID / NEXIS_STRIPE_PRO_YEARLY_AED_PRICE_ID.
+    # Everything else (checkout, verification, plan changes, the pricing page's monthly/yearly switch) follows.
 }  # fmt: skip
 PRODUCTS: dict[str, dict[str, str]] = {
     "plus": {"id": "nexis_plus", "name": "Nexis Plus"},
@@ -78,8 +83,15 @@ def tier_of(price_key: str | None) -> str | None:
     return head if head in PAID_TIERS else None
 
 
-def price_key_for(tier: str) -> str:
-    return next(k for k, v in PRICES.items() if v["tier"] == tier)
+def price_key_for(tier: str, interval: str = "month") -> str:
+    """The price key selling ``tier`` billed every ``interval`` (falls back to the tier's first price)."""
+    return next((k for k, v in PRICES.items() if v["tier"] == tier and v["interval"] == interval),
+                next(k for k, v in PRICES.items() if v["tier"] == tier))  # fmt: skip
+
+
+def intervals() -> list[str]:
+    """Billing intervals on sale, monthly first."""
+    return sorted({v["interval"] for v in PRICES.values()}, key=lambda i: (i != "month", i))
 
 
 def allows(tier: str, capability: str) -> bool:
@@ -102,9 +114,12 @@ def public() -> dict[str, Any]:
              "price": ({"key": price_key_for(t), "amount": PRICES[price_key_for(t)]["amount_cents"] / 100,
                         "currency": PRICES[price_key_for(t)]["currency"].upper(), "interval": PRICES[price_key_for(t)]["interval"]}
                        if t in PAID_TIERS else {"key": None, "amount": 0, "currency": "AED", "interval": "month"}),
+             "prices": ({v["interval"]: {"key": k, "amount": v["amount_cents"] / 100, "currency": v["currency"].upper()}
+                         for k, v in PRICES.items() if v["tier"] == t} if t in PAID_TIERS else {}),
              "capabilities": [c for c, v in CAPABILITIES.items() if t in v["tiers"]]}
             for t in TIERS
         ],
+        "intervals": intervals(),
         "anonymous": dict(ANONYMOUS),
         "limits": {k: dict(v) for k, v in LIMITS.items()},
         "features": {k: {kk: vv for kk, vv in v.items() if kk in ("label", "unit", "monthly")} for k, v in FEATURES.items()},

@@ -21,7 +21,6 @@ from app.core.errors import NexisError, ValidationFailed
 from app.models import User
 from app.services import entitlements
 
-PLAN_KEYS = tuple(plans.PRICES)
 CANCELLATION = ("Cancel any time. You keep your plan until the end of the month you've paid for, then move to Free. Before then "
                 "you choose which investment stays active on Free; the others are archived, never deleted, and come back if "
                 "you subscribe again. Pulse and your account are unaffected.")  # fmt: skip
@@ -43,8 +42,11 @@ class PaymentFailed(NexisError):
 
 
 def price_ids() -> dict[str, str | None]:
+    """Stripe price id for every plan on sale (``plans.PRICES``); yearly ids only matter once a yearly plan exists."""
     s = get_settings()
-    return {"plus_monthly": s.stripe_plus_price_id, "pro_monthly": s.stripe_pro_price_id}
+    known = {"plus_monthly": s.stripe_plus_price_id, "pro_monthly": s.stripe_pro_price_id,
+             "plus_yearly": s.stripe_plus_yearly_price_id, "pro_yearly": s.stripe_pro_yearly_aed_price_id}  # fmt: skip
+    return {k: known.get(k) for k in plans.PRICES}
 
 
 def legacy_price_ids() -> set[str]:
@@ -89,7 +91,8 @@ def catalog(db: Session, user: User | None = None) -> dict[str, Any]:
     """Plans, limits and prices from ``plans.py`` — one source for the pricing page, Settings and checkout."""
     sellable, reason = _sellable(db, user)
     return {**plans.public(), "available": sellable, "unavailable_reason": reason, "test_mode": sellable and test_mode(),
-            "payment_methods": payment_methods(), "billing_interval": "monthly", "cancellation": CANCELLATION}  # fmt: skip
+            "payment_methods": payment_methods(), "billing_interval": "monthly" if plans.intervals() == ["month"] else "monthly or yearly",
+            "cancellation": CANCELLATION}  # fmt: skip
 
 
 def status(db: Session, user: User) -> dict[str, Any]:
@@ -124,7 +127,7 @@ def status(db: Session, user: User) -> dict[str, Any]:
 
 
 def checkout(db: Session, user: User, plan: str) -> dict[str, str]:
-    if plan not in PLAN_KEYS:
+    if plan not in plans.PRICES:
         raise ValidationFailed("unknown plan")
     if entitlements.has_paid(db, user):
         raise AlreadyPro("You already have a paid Nexis plan. To switch between Plus and Pro, use Change plan in Settings.")
@@ -139,7 +142,7 @@ def checkout(db: Session, user: User, plan: str) -> dict[str, str]:
 def change_plan(db: Session, user: User, plan: str, keep: list[str] | None = None) -> dict[str, Any]:
     """Switch a live subscription between Plus and Pro. Moving to a smaller allowance with more active investments
     than it allows needs the member's choice of which to keep first (never chosen for them)."""
-    if plan not in PLAN_KEYS:
+    if plan not in plans.PRICES:
         raise ValidationFailed("unknown plan")
     sub = entitlements.subscription(db, user)
     tier = entitlements.sub_tier(sub)

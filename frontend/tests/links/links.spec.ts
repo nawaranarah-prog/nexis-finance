@@ -8,7 +8,8 @@ import { PAGES } from "../support/pages";
 test("no internal link leads to the 404 page", async ({ page }) => {
   test.setTimeout(10 * 60_000);
   await mockApi(page);
-  const found = new Map<string, string>();  // route -> first page it was seen on
+  const found = new Map<string, string>();  // a concrete URL to open -> the page it was first seen on
+  const patterns = new Set<string>();  // route patterns already sampled (one URL each)
   for (const p of PAGES.filter((x) => x.name !== "about")) {
     await page.goto(p.path, { waitUntil: "domcontentloaded" });
     await page.locator(p.ready).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
@@ -18,7 +19,8 @@ test("no internal link leads to the 404 page", async ({ page }) => {
       const u = new URL(h);
       if (u.origin !== new URL(page.url()).origin || u.pathname.startsWith("/api/")) continue;
       const route = u.pathname.replace(/\/(p|d|u|s|t|asset|ticker)\/[^/]+.*$/, "/$1/:id");  // one sample per dynamic route pattern
-      if (!found.has(route)) found.set(u.pathname + u.search, p.path);
+      // (this used to test the pattern against concrete URLs, so it never deduplicated and opened every story)
+      if (!patterns.has(route)) { patterns.add(route); found.set(u.pathname + u.search, p.path); }
     }
   }
   const broken: string[] = [];

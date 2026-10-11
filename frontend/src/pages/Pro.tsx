@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMe } from "../components/market";
 import { priceText, startCheckout, tierOf, useBilling, usePlans, type PlanKey } from "../components/pro";
+import { Seg } from "../components/ui";
 import { api } from "../services/api";
 import type { AnyObj } from "../types/api";
 
@@ -13,6 +14,7 @@ export default function Pro() {
   const [sp] = useSearchParams();
   const status = useBilling(!!me);
   const [busy, setBusy] = useState<string | null>(null);
+  const [interval, setBillingInterval] = useState<"month" | "year">("month");
   const p = plans.data;
   if (plans.isError) return <div className="np pro-page"><p className="np-note" role="alert">Plans couldn't be loaded. Please reload the page.</p></div>;
   if (!p) return <div className="np pro-page"><div className="wire-skel"><span className="skel w60" /><span className="skel w80" /></div></div>;
@@ -20,6 +22,10 @@ export default function Pro() {
   const F = tierOf(p, "free"), PL = tierOf(p, "plus"), PR = tierOf(p, "pro");
   if (!F || !PL || !PR) return <div className="np pro-page"><p className="np-note" role="alert">Plans couldn't be loaded. Please reload the page.</p></div>;
   const caps = p.capabilities as Record<string, AnyObj>;
+  // Yearly billing appears only when yearly plans exist on the server (plans.PRICES); amounts always come from there.
+  const intervals: string[] = p.intervals ?? ["month"];
+  const yearly = intervals.includes("year");
+  const priceOf = (t: AnyObj): AnyObj => (t.prices?.[interval] ? { ...t.prices[interval], interval } : t.price);
   const go = async (key: PlanKey) => {
     if (!me) { window.location.assign(`/login?mode=signup&next=${encodeURIComponent("/pricing")}`); return; }
     setBusy(key);
@@ -31,8 +37,8 @@ export default function Pro() {
     if (t.id === "free") return me ? null : <Link className="btn" to="/login?mode=signup&next=/pulse">Create a free account</Link>;
     if (current !== "free") return <Link className="btn" to="/settings#plan">Switch to {t.name}</Link>;
     if (!p.available) return <span className="xs muted">{p.unavailable_reason}</span>;
-    return <button type="button" className={`btn ${t.id === "pro" ? "primary" : ""}`} disabled={!!busy} onClick={() => go(t.price.key)}>
-      {busy === t.price.key ? "…" : me ? `Get ${t.name}` : `Create an account to get ${t.name}`}
+    return <button type="button" className={`btn ${t.id === "pro" ? "primary" : ""}`} disabled={!!busy} onClick={() => go(priceOf(t).key)}>
+      {busy === priceOf(t).key ? "…" : me ? `Get ${t.name}` : `Create an account to get ${t.name}`}
     </button>;
   };
   const cols: [AnyObj, string[]][] = [
@@ -42,7 +48,7 @@ export default function Pro() {
     [PR, [`${PR.limits.investments} active investments`, `${PR.limits.advisor} AI Advisor messages a month`, `${caps.portfolio_risk.label} — ${caps.portfolio_risk.summary}`, "Everything in Plus"]],
   ];  // prettier-ignore
   const rows: [string, (t: AnyObj) => string][] = [
-    ["Price", (t) => (t.id === "free" ? "AED 0" : priceText(t.price))],
+    ["Price", (t) => (t.id === "free" ? "AED 0" : priceText(priceOf(t)))],
     ["Active investments in My Nexis", (t) => String(t.limits.investments)],
     ["AI Advisor messages", (t) => `${t.limits.advisor}/month`],
     [caps.portfolio_insights.label, (t) => (t.capabilities.includes("portfolio_insights") ? "Included" : "—")],
@@ -56,7 +62,8 @@ export default function Pro() {
       <header className="np-head">
         <div className="np-eyebrow"><span>Plans</span></div>
         <h1>Free to use. Plus and Pro for serious portfolios.</h1>
-        <p className="np-lede">Nexis Pulse, Markets and Compare & Reports are free for everyone. Paid plans track more investments, raise the AI Advisor allowance and add portfolio analytics. All prices are monthly, in UAE dirhams.</p>
+        <p className="np-lede">Nexis Pulse, Markets and Compare & Reports are free for everyone. Paid plans track more investments, raise the AI Advisor allowance and add portfolio analytics. All prices are {yearly ? "monthly or yearly" : "monthly"}, in UAE dirhams.</p>
+        {yearly && <div className="pro-interval"><Seg value={interval} options={[{ value: "month", label: "Monthly" }, { value: "year", label: "Yearly" }]} onChange={setBillingInterval} /></div>}
         {sp.get("checkout") === "canceled" && <p className="np-note">Checkout was canceled — your plan hasn't changed and nothing was charged.</p>}
       </header>
 
@@ -64,7 +71,7 @@ export default function Pro() {
         {cols.map(([t, items]) => (
           <section key={t.id} className={`pro-col ${t.id}`} aria-labelledby={`tier-${t.id}`}>
             <h2 id={`tier-${t.id}`}>{t.name}</h2>
-            <div className="pro-amount">{t.id === "free" ? "AED 0" : priceText(t.price)}</div>
+            <div className="pro-amount">{t.id === "free" ? "AED 0" : priceText(priceOf(t))}</div>
             <ul className="pro-list">{items.map((x) => <li key={x}>{x}</li>)}</ul>
             {action(t)}
           </section>
@@ -85,7 +92,7 @@ export default function Pro() {
       <section className="np-sec pro-faq">
         <h2 className="np-h">Good to know</h2>
         <dl>
-          <dt>How do I pay?</dt><dd>Monthly, through Stripe's secure checkout: {p.payment_methods.join(", ")}. Prices are in UAE dirhams (AED). Nexis never sees or stores your card details.</dd>
+          <dt>How do I pay?</dt><dd>{yearly ? "Monthly or yearly" : "Monthly"}, through Stripe's secure checkout: {p.payment_methods.join(", ")}. Prices are in UAE dirhams (AED). Nexis never sees or stores your card details.</dd>
           <dt>Can I switch between Plus and Pro?</dt><dd>Yes, in Settings → Billing. Upgrading charges the difference for the rest of the month; moving down credits the unused part to your next invoice.</dd>
           <dt>What happens if I cancel?</dt><dd>{p.cancellation}</dd>
           <dt>What if a payment fails?</dt><dd>Stripe retries it and we'll tell you. You keep your plan while it's being retried; update your card in Manage billing.</dd>

@@ -58,7 +58,17 @@ def _tags(body: str) -> tuple[list[str], list[str]]:
     return syms, tags
 
 
+NEWS_ONLY = "Finstagram is a news feed: only news pages post here. You can like, comment on and follow posts and pages."
+
+
+def can_post(user: User) -> bool:
+    """Finstagram is news-only: news pages (and admins, for corrections) post; members like, comment and follow."""
+    return user.kind == "page" or getattr(user, "role", None) == "admin"
+
+
 def create_post(db: Session, request: Any, user: User, body: str, image: bytes | None) -> Post:
+    if not can_post(user):
+        raise Forbidden(NEWS_ONLY)
     ratelimit.hit(db, f"post:{user.id}", get_settings().posts_per_hour)
     body = (body or "").strip()
     if not body and not image:
@@ -193,6 +203,8 @@ def feed(
         except Exception:  # importing news must never take the feed down
             db.rollback()
     q = select(Post).where(Post.hidden.is_(False))
+    if not username:  # the feeds are news-only (same rule as can_post); a member's earlier posts stay on their profile
+        q = q.where(Post.user_id.in_(select(User.id).where(or_(User.kind == "page", User.role == "admin"))))
     prefs = _prefs(db, viewer)
     hidden_for_me = {int(k[5:]) for k, w in prefs.items() if k.startswith("post:") and w <= -5}
     if hidden_for_me:

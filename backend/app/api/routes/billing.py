@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,12 +19,16 @@ class _Base(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# The plan is a key of plans.PRICES (checked by the billing service, which answers 422 for anything else).
+PLAN_PATTERN = r"^(plus|pro)_(monthly|yearly)$"
+
+
 class CheckoutIn(_Base):
-    plan: Literal["plus_monthly", "pro_monthly"]
+    plan: str = Field(pattern=PLAN_PATTERN)
 
 
 class ChangePlanIn(_Base):
-    plan: Literal["plus_monthly", "pro_monthly"]
+    plan: str = Field(pattern=PLAN_PATTERN)
     keep: list[str] | None = Field(default=None, max_length=20)
 
 

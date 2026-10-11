@@ -27,6 +27,10 @@ export default defineConfig({
     { name: "webkit", testMatch: /e2e\/.*\.spec\.ts/, use: { ...devices["Desktop Safari"] } },
     { name: "responsive", testMatch: /responsive\/.*\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "a11y", testMatch: /a11y\/.*\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    // real device profiles: touch, mobile user agent, device pixel ratio and each device's own viewport
+    { name: "iphone", testMatch: /devices\/.*\.spec\.ts/, use: { ...devices["iPhone 14"] } },
+    { name: "pixel", testMatch: /devices\/.*\.spec\.ts/, use: { ...devices["Pixel 7"] } },
+    { name: "ipad", testMatch: /devices\/.*\.spec\.ts/, use: { ...devices["iPad (gen 7)"] } },
     { name: "live-smoke", testMatch: /live\/.*\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "links", testMatch: /links\/.*\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "record", testMatch: /record\/.*\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },

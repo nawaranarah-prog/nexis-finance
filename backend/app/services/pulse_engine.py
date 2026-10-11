@@ -98,6 +98,13 @@ def tick(db: Session, max_assets: int = 2, force: bool = False) -> dict[str, Any
             db.rollback()
             errors.append(f"editorial {job[1]}: {exc.message}")
     result["editorial"] = editorial
+    from app.services import pulse_checks
+
+    try:  # editorial text that contradicts our own market data is held for review (including what was just written)
+        result["held"] = pulse_checks.review(db)
+    except Exception as exc:  # a failed check must not stop the tick; it simply runs again next time
+        db.rollback()
+        errors.append(f"checks: {exc.__class__.__name__}")
     from app.services import public_discussions
 
     try:

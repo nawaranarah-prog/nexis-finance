@@ -14,7 +14,17 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models import User
-from app.services import alerts, auth, entitlements, investments, portfolio, portfolio_analytics, ratelimit
+from app.services import (
+    advice_log,
+    alerts,
+    auth,
+    entitlements,
+    investments,
+    investor_profile,
+    portfolio,
+    portfolio_analytics,
+    ratelimit,
+)
 
 router = APIRouter(tags=["me"])
 AssetType = Literal["stock", "etf", "fund", "bond", "crypto", "other"]
@@ -236,3 +246,32 @@ def digest_send(
 @router.get("/me/digests")
 def digests(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     return alerts.digests(db, user)
+
+
+# ---------------------------------------------------------------------------------------------- investor profile & advice log
+
+
+class ProfileIn(_Base):
+    goals: list[str] = Field(min_length=1, max_length=4)
+    horizon: str = Field(max_length=16)
+    monthly_budget_aed: int | None = Field(default=None, ge=0, le=10_000_000)
+    savings_band: str | None = Field(default=None, max_length=16)
+    constraints: list[str] = Field(default_factory=list, max_length=6)
+    answers: dict[str, str] = Field(default_factory=dict)
+
+
+@router.get("/me/investor-profile")
+def get_investor_profile(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict:
+    """The member's profile (or null) plus the questionnaire — the risk band is computed by the server."""
+    return {"profile": investor_profile.profile_json(investor_profile.get(db, user)), **investor_profile.public_questions()}
+
+
+@router.put("/me/investor-profile")
+def put_investor_profile(body: ProfileIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict:
+    ratelimit.hit(db, f"profile:{user.id}", 30)
+    return {"profile": investor_profile.profile_json(investor_profile.save(db, user, body.model_dump()))}
+
+
+@router.get("/me/advice-log")
+def get_advice_log(before: int | None = None, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict:
+    return {"items": advice_log.entries(db, user, 30, before)}

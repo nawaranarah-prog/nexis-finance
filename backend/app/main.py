@@ -18,6 +18,7 @@ from app.api.routes import (
     billing,
     connectivity,
     data,
+    devils_advocate,
     help,
     legal,
     markets,
@@ -30,6 +31,7 @@ from app.api.routes import (
     seo,
     social,
     system,
+    time_machine,
     world_graph,
 )
 from app.core.config import APP_VERSION, get_settings
@@ -184,5 +186,7 @@ for r in (
     billing.router,
     help.router,
     world_graph.router,
+    time_machine.router,
+    devils_advocate.router,
 ):
     app.include_router(r, prefix="/api")

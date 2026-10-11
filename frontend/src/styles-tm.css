@@ -1,0 +1,45 @@
+/* Time Machine */
+.tm { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.tm-card { padding: 16px; min-width: 0; }
+.tm h2, .tm-card h2 { font-size: max(16px, var(--fs-floor)); margin: 0 0 10px; }
+.tm h3 { font-size: max(15px, var(--fs-floor)); margin: 0 0 8px; }
+.tm-list { margin: 8px 0 12px; padding-inline-start: 20px; line-height: 1.6; }
+.tm-saved, .tm-runs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tm-runs .linkish.on { font-weight: 700; text-decoration: none; }
+
+.tm-positions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.tm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.tm-sym { font-family: var(--mono); font-weight: 600; min-width: 110px; font-size: max(13px, var(--fs-floor)); }
+.tm-num { width: 140px; max-width: 100%; height: 38px; font-variant-numeric: tabular-nums; }
+.tm-add { max-width: 520px; }
+.tm-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tm-factors { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px 14px; }
+.tm-factors .fld .tm-num { width: 100%; }
+.tm-window { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; }
+.tm-explicit { margin-top: 12px; }
+.tm-explicit > summary, .tm-val > summary, .tm-how-box > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
+.tm-val > summary h2 { margin: 0; }
+.tm-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tm-save .input { width: min(320px, 100%); height: 38px; }
+
+.tm-results { display: flex; flex-direction: column; gap: 12px; }
+.tm-big { font-size: max(26px, var(--fs-floor)); font-weight: 700; font-variant-numeric: tabular-nums; }
+.tm-big-pct { font-size: max(18px, var(--fs-floor)); font-weight: 600; }
+.tm-big.neg { color: var(--neg); }
+.tm-big.pos { color: var(--pos); }
+.tm-table td { vertical-align: top; }
+.tm-table td.tm-how { white-space: normal; min-width: 260px; max-width: 460px; }
+.tm-flag { color: var(--warn); margin-top: 2px; }
+.tm-valres p { margin: 4px 0; }
+.tm-how-box ul { margin: 4px 0; padding-inline-start: 20px; line-height: 1.6; }
+.tm-saved-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.tm-saved-head h2 { margin: 0; font-size: max(20px, var(--fs-floor)); }
+/* controls keep their natural width instead of stretching across the card */
+.tm-window { align-items: flex-start; }
+.tm-explicit .row .input { width: min(260px, 100%); height: 38px; }
+.tm-row { flex-wrap: nowrap; }
+@media (max-width: 480px) {
+  .tm-sym { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+  .tm-row .tm-num { width: 110px; flex: 0 0 auto; }
+}
+.tm-links { display: flex; flex-wrap: wrap; gap: 0 10px; margin-top: 2px; }

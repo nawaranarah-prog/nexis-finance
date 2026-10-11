@@ -13,8 +13,9 @@
 | Watchlist tickers (anti-abuse cap, not a paid feature) | 50 | 50 | 50 |
 | Help Center articles / AI help answers per day | unlimited / 40 | unlimited / 40 | unlimited / 40 |
 
-Visitors without an account: 3 AI Advisor messages and 10 AI help answers per day (per IP). Monthly billing only;
-no yearly plan. Pulse is never metered by plan; anti-spam rate limits (`pulse_discussions_per_day`,
+Visitors without an account can't use the AI (Advisor, help answers): they get the "join Nexis" sheet, and the API
+answers 401. Monthly billing today; yearly plans switch on by configuration once their AED amounts are decided — see
+[STRIPE-SETUP.md](../STRIPE-SETUP.md). Pulse is never metered by plan; anti-spam rate limits (`pulse_discussions_per_day`,
 `pulse_comments_per_hour`, no repeated posts) apply to everyone equally.
 
 ## How it works

@@ -13,7 +13,7 @@ import pytest
 
 from app.markets import feeds
 from app.services import advisor, llm, oauth, social
-from tests.helpers import TERMS, member
+from tests.helpers import TERMS, allow_posting, member
 
 RSS = b"""<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>
 <item><title>Emaar posts record sales &amp; profit</title><link>https://example.com/business/emaar-record</link>
@@ -90,6 +90,7 @@ def test_engagement_save_feedback_topics_and_search(client, monkeypatch):
     assert r.status_code == 201, r.text
     me = r.json()
     assert me["username"] == "reader" and me["email"] == "reader@example.com"
+    allow_posting("reader")  # Finstagram is news-only; an admin may post (corrections)
     pid = client.post("/api/social/posts", data={"body": "Watching $EMAAR.AE #dubai"}).json()["id"]
 
     assert client.post(f"/api/social/posts/{pid}/save").json() == {"saved": True}
@@ -344,3 +345,29 @@ def test_advisor_language_reaches_the_model(client, monkeypatch):
     monkeypatch.setattr(llm, "chat_stream", fake_stream)
     r = client.post("/api/advisor/chat", json={"messages": [{"role": "user", "content": "hello"}], "language": "ar"}).json()
     assert "Arabic" in seen["system"] and r["answer"] == "مرحبا"
+
+
+def test_finstagram_is_news_only(client):  # type: ignore[no-untyped-def]
+    """Members like, comment and follow; only news pages post. A member's earlier posts are kept on their profile."""
+    from sqlalchemy import select
+
+    from app.db import session as db_session
+    from app.models import Post, User
+
+    m = member(client, "newsonly")
+    r = client.post("/api/social/posts", data={"body": "my take on $EMAAR.AE"})
+    assert r.status_code == 403 and "only news pages post" in r.json()["error"]["message"]
+    with db_session.SessionLocal() as db:  # a post written before the change
+        old = Post(user_id=m["id"], body="old member post $EMAAR.AE #legacy", symbols=["EMAAR.AE"], tags=["legacy"])
+        db.add(old)
+        page = db.scalars(select(User).where(User.kind == "page")).first()
+        db.commit()
+        old_id = old.id
+    feed = [p["id"] for p in client.get("/api/social/feed", params={"mode": "latest"}).json()["items"]]
+    assert old_id not in feed
+    assert old_id not in [p["id"] for p in client.get("/api/social/feed", params={"symbol": "EMAAR.AE"}).json()["items"]]
+    prof = client.get("/api/social/feed", params={"user": m["username"]}).json()["items"]
+    assert [p["id"] for p in prof] == [old_id]  # still there, on the member's own profile
+    assert client.get(f"/api/social/posts/{old_id}").status_code == 200
+    if page is not None:
+        assert client.post(f"/api/social/users/{page.username}/follow").status_code == 200

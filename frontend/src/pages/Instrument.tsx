@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Plot from "../components/Plot";
 import { Card, ErrorState, Loading, QueryView, Seg } from "../components/ui";
+import { ResearchLinks } from "../components/research";
 import { Change, fmtBig, fmtPrice, SymbolSearch, TYPE_LABEL } from "../components/market";
 import { api } from "../services/api";
 import type { AnyObj } from "../types/api";
@@ -65,7 +66,6 @@ export default function Instrument() {
             <Link className="btn primary" to={`/advisor?q=${encodeURIComponent(`What's happening with ${i.name} (${sym})? Should I consider buying?`)}`}>Ask the advisor</Link>
             <Link className="btn" to={`/compare?s=${encodeURIComponent(sym)}`}>Compare</Link>
             {i.type === "equity" && <Link className="btn" to={`/valuation/${encodeURIComponent(sym)}`}>Valuation</Link>}
-            <Link className="btn" to={`/finstagram?compose=${encodeURIComponent(`$${sym} `)}`}>Post</Link>
           </div>
         </div>
       </div>
@@ -188,6 +188,10 @@ export default function Instrument() {
               <table className="dt"><tbody>{i.fund.top_holdings.map((t: AnyObj) => <tr key={t.symbol ?? t.name}><td className="mono">{t.symbol}</td><td>{t.name}</td><td className="r num">{pct(t.weight, 2)}</td></tr>)}</tbody></table>
             </Card>
           )}
+          <Card title="Research tools" sub="free for members">
+            <p className="small muted">See who owns and controls it, stress-test it against market moves, or challenge your thesis with checked evidence.</p>
+            <div className="row"><ResearchLinks symbol={sym} /></div>
+          </Card>
           <Card title={`Finstagram · $${sym}`} actions={<><Link className="btn sm" to={`/pulse/asset/${encodeURIComponent(sym)}`}>Pulse discussions</Link> <Link className="btn sm" to={`/finstagram?symbol=${encodeURIComponent(sym)}`}>Open feed</Link></>}>
             <QueryView q={posts} label="Loading posts">
               {(p) => p.items.length ? (
@@ -197,7 +201,7 @@ export default function Instrument() {
                     <span className="xs muted"> · ♥ {it.like_count} · 💬 {it.comment_count}</span>
                   </Link>
                 ))}</div>
-              ) : <div className="small text2">No posts about ${sym} yet. <Link to={`/finstagram?compose=${encodeURIComponent(`$${sym} `)}`}>Be the first.</Link></div>}
+              ) : <div className="small text2">No news posts about ${sym} yet.</div>}
             </QueryView>
           </Card>
         </div>

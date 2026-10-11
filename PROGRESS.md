@@ -174,3 +174,261 @@ address in the User-Agent string; both services ask for one).
 
 **Not deployed.** Vercel's Preview environment uses the same Postgres database as Production, so any deploy of this
 branch would run migrations 0017 and 0018 on the live database. That needs your go-ahead.
+
+## Deployed: Phases 1–3 (PR #16, merged 2026-10-10)
+
+Production was checked after the merge (both Vercel projects were Ready):
+* As a visitor, the World Graph API and the AI chat return 401.
+* A temporary member account searched "Emaar" against live Wikidata and opened its graph: 17 entities, 1 referenced
+  link, 15 unreferenced, linked to `EMAAR.AE`. This confirms migrations 0017 and 0018 ran.
+* It saved and deleted an investigation, and the account was then deleted.
+
+## Phase 4 — Time Machine
+
+**What changed**
+* `/time-machine` (members only; visitors see what it is and the join sheet). Holdings come from "My investments"
+  (USD, latest delayed prices) or a list the member enters.
+* The member sets moves for oil, the S&P 500, the DFM index, gold, EUR/USD and the US 10-year yield (with presets),
+  their own move for any single holding, and the history window (1, 2 or 3 years).
+* Four deterministic methods, each named on every result line:
+  1. **Your move:** applied as given.
+  2. **Measured sensitivity:** OLS of weekly (Friday) returns on the shocked factors, giving β ± 95%, R², the number
+     of weeks and the dates, and an impact range from the betas' covariance.
+  3. **Bond duration:** modified duration and convexity, for bonds with known coupon, maturity and yield.
+  4. **DCF check:** the existing valuation model re-run with growth, discount-rate and long-run-growth changes.
+* Flags:
+  * The move is larger than any 3-month move in the data, so the result extrapolates.
+  * The 95% range includes zero: the data can't tell the direction.
+  * Weak relationship (R² below 0.2).
+  * Not enough history (fewer than 26 weeks): no number is given.
+  * A factor has no data: the move isn't applied, and the page says so.
+* No probabilities, Monte Carlo or AI. The same inputs and the same data give the same output.
+* Saved scenarios are research items. Each run is immutable (inputs, data snapshot, model version, output). "Run again
+  on today's data" adds a run; runs can be compared (first against latest) and a scenario duplicated and edited.
+  Private: another member gets 404.
+* API: `/api/time-machine/{factors,run,scenarios,scenarios/{id},scenarios/{id}/rerun,runs/{id},compare}`. All are
+  401 for visitors, and runs are rate-limited (40 per hour).
+* Checked on live data (locally):
+  * Oil −30% with the S&P 500 −10%: XOM −12.4% (range −16.5 to −8.2) and AAPL −13.4%.
+  * Emaar +7.4%, but its range (−0.3 to +15.0) includes zero and R² is 0.14. The page says the direction is unclear
+    and the relationship is weak.
+  * Rates +100bp: TLT −13.5% (R² 0.89); the UAE 2034 bond −6.0% (duration 6.2).
+  * Two rule changes came from this check. Moves are now compared with 3-month moves, because the old single-week
+    comparison flagged every preset. Ranges that cross zero are now called out.
+* No database migration: scenarios and runs use the Phase 2 tables.
+* Also fixed: the link checker's deduplication. It compared route patterns with concrete URLs, so it never
+  deduplicated and opened every story. The fix keeps it inside its 10-minute limit.
+
+**Results**
+* Backend: 364/364 (19 new Time Machine tests). These use synthetic series with known sensitivities and check that
+  the regression recovers them; bond duration and convexity are checked against full repricing. Ruff clean.
+* Playwright, full run: 350 passed. The only failure was the link checker's time limit; with the fix it passes on
+  its own (8.1 min, no broken links).
+* The Time Machine spec passes 12/12 in Chromium, Firefox and WebKit. It includes layout and axe checks at 375 and
+  1440 in light and dark.
+* Unit tests 6/6; build and typecheck pass; lint on touched files 0 errors.
+* Screenshots at 375 and 1440 reviewed. Fixed after review: full-width selects, a stretched history-window control,
+  and the remove button wrapping on phones.
+
+## Phase 5 — Devil's Advocate
+
+**What changed**
+* `/devils-advocate` (members only). A member saves a thesis (company, text of 30–3,000 characters, optional
+  horizon); "Challenge this thesis" runs one analysis:
+  1. **Evidence** (code) is stored as bounded evidence records labelled E1…En:
+     * market data: price and range, multiples, profitability and growth, dividend, analyst consensus — each a
+       separate item, dated;
+     * recent headlines (headline text only; articles aren't read) and Nexis source events;
+     * the company's World Graph links.
+  2. **One AI call** splits the thesis into claims (first run only; they are then fixed, so their status can be
+     tracked) and argues against it. Every argument must cite `{evidence, quote}`.
+  3. **The validator** (code):
+     * drops a citation whose quote isn't verbatim in that item (case, whitespace and quote style are ignored;
+       minimum 8 characters);
+     * drops counter-arguments and risks left without a valid citation;
+     * computes each claim's status from the surviving citations (supported, contradicted, mixed or untested);
+     * flags figures that appear in neither the evidence nor the thesis (years aren't counted).
+  4. If the AI is unavailable, the answer can't be parsed, or there's too little evidence, the run is stored as
+     **failed** and nothing is shown as a result.
+* The page shows sections A–H:
+  * A: claims
+  * B and C: evidence for and against, as quotes linked to their sources
+  * D: the strongest case against
+  * E: assumption check, with the change since the last challenge
+  * F: risks
+  * G: what would change the view
+  * H: gaps, the validator's counts, the AI model, and the full evidence list
+* Runs are immutable and kept, failed ones included. Rewriting the thesis resets its claims. Each thesis has a status
+  (active, under review, archived). 10 challenges per member per day.
+* API: `/api/devils-advocate/theses` (create), `/theses/{id}` (get, patch), `/theses/{id}/analyse`, `/runs/{id}`.
+  Visitors get 401; another member gets 404.
+* No AI key is configured locally or in Vercel env vars. Production reaches the AI through the Vercel AI Gateway
+  using the deployment's OIDC token, so the real end-to-end check happens on production after the merge.
+
+## Phase 6 — integration
+
+* `/my-research` hub: the three tools, plus everything the member saved, grouped by tool. It is first in the Research
+  navigation.
+* The company travels between tools:
+  * World Graph → Stress-test / Challenge a thesis;
+  * each Time Machine result line → Connections / Challenge;
+  * Devil's Advocate → Connections / Stress-test;
+  * every instrument page has a "Research tools" card.
+* **PDF reports of saved runs** (Time Machine scenarios and completed challenges). Each report prints the stored run
+  exactly, without recomputing or calling the AI again. Reports are private, through the existing owner-only download.
+  The standard PDF fonts cover Windows-1252 only, so other characters (e.g. Arabic) print as "?" (a known limitation).
+* Accessibility fixes found by the new specs:
+  * text-style buttons use the higher-contrast link colour (dark mode was below 4.5:1);
+  * evidence links are underlined;
+  * the Edit link is a 44px target;
+  * the assumption table stacks into cards on phones.
+
+**Results (Phases 5 + 6)**
+* Backend: 378/378. New tests cover Devil's Advocate (12: verbatim-quote validation, dropped arguments, computed
+  statuses, figure flags, fixed claims, AI-down / unparseable / no-evidence failures, privacy, daily limit) and
+  reports (2).
+* Playwright, full run on the Phase 5 code: 376 passed.
+* After Phase 6: the tool and integration specs passed 77/78 in Chromium, Firefox and WebKit. The one failure was the
+  existing "AI assistant answers" test in Chromium, which didn't reproduce in 12 repeats across three browsers
+  (intermittent under heavy parallel load; noted, not hidden). Responsive and axe checks for the new and changed
+  pages pass 65/65.
+* Unit tests 6/6; build and typecheck pass; lint on touched files 0 errors.
+* Screenshots reviewed at 375 and 1440.
+
+## Overhaul Step 7 — Pulse: contradiction checks; the wrong FAB and "easing" stories
+
+* **The problem, from Nexis's own data:** the US 10-year yield rose from 4.05% to 5.24% over the past year, and the
+  13-week bill from 3.53% to 4.06% since December. Two Nexis editorial stories nevertheless presented falling rates
+  as the current situation:
+  * "Falling rates are a headwind for FAB's net interest margin" (cites no sources);
+  * "Interest rates: how much easing is the market expecting?"
+* **New `services/pulse_checks.py`, run on every Pulse engine tick:**
+  * It reads the direction of US rates from Nexis market data: both the 10-year and the 13-week bill moving ±20bp or
+    more over 26 weeks, cached for 6 hours. If the data is missing, nothing is cached and nothing is held.
+  * It holds for review (**not deleted**) any visible editorial story that presents the opposite direction as current.
+  * Each hold writes a moderation-log entry with the numbers. One "approve" from a moderator restores a story.
+  * Members' posts are never checked.
+* **Run over the 20+ live editorial stories (offline copy):** it flags exactly those two. Stories that discuss both
+  directions conditionally (Emirates NBD margins, NASDAQ) and the other FAB story are left alone.
+* **Takes effect on production on the first Pulse visit after deploy** (the engine tick runs then).
+* **Outdated copy fixed:** Pulse no longer says it collects from Reddit (collection has been off since #15). Reddit
+  posts appear only when a member shares one, through Reddit's embed. A pre-existing lint error in the Pulse search
+  box was also fixed.
+
+## Overhaul Step 8 — device profiles
+
+* New Playwright projects `iphone` (iPhone 14, Safari engine), `pixel` (Pixel 7, Chrome) and `ipad` (iPad 7th gen,
+  Safari engine). Each uses touch, a mobile user agent and device pixel ratio.
+* `tests/devices/devices.spec.ts` checks every main page's layout on the device's own viewport, plus three touch
+  flows: navigation drawer → Time Machine; a scenario run; World Graph → evidence.
+* Result: 72/72.
+
+## Overhaul Step 4 — Finstagram is a news feed
+
+* **The server enforces it.** Only news pages (`kind = page`) post, plus admins for corrections. A member gets 403
+  with a plain explanation.
+* **Feeds are news-only.** "For you", following, trending, and symbol and hashtag pages show only posts by news pages
+  and admins (the same rule as posting).
+* **Members' earlier posts are kept, not deleted.** They stay on the member's profile and at their own address.
+  Members can still like, comment, save and follow.
+* **UI.** Members see "Finstagram is a news feed…" instead of a composer. Visitors get the join sheet. The instrument
+  page's "Post" button and "Be the first" link are gone.
+* **Tests.** The three older backend tests that posted as members now post with the admin role. A news-page account
+  couldn't be used for them because those accounts can't sign in. A new test covers news-only feeds, kept member
+  posts and the 403. A new e2e test checks the member view.
+* **Results.**
+  * Backend: 383/383.
+  * e2e (core, access, research): 57/57 in Chromium, Firefox and WebKit, plus the new check in Chromium and WebKit.
+  * Responsive and axe on Finstagram, post, instrument and Pulse pages: 65/65.
+
+## Overhaul Step 5 — Stripe: yearly plans ready, `STRIPE-SETUP.md`
+
+* Billing now handles **any** plan in `plans.PRICES`:
+  * price ids per key (new `STRIPE_PLUS_YEARLY_AED_PRICE_ID` / `STRIPE_PRO_YEARLY_AED_PRICE_ID`, kept separate from
+    the legacy USD yearly id);
+  * validation of checkout and plan changes against `plans.PRICES`;
+  * "AED …/year" labels;
+  * the catalog lists `intervals` and per-tier `prices` by interval;
+  * the setup tool prints every price variable.
+* **No yearly amounts were added.** They are the owner's decision, and the rule is never to invent prices. Until they
+  exist, nothing changes: there is no switch on the pricing page, and `plus_yearly` checkout answers 422.
+* The pricing page shows a Monthly / Yearly switch only when the server lists yearly plans. Amounts always come from
+  the server.
+* The safety check still applies: a yearly Stripe price is sold only if its amount, currency, interval and mode match
+  `plans.PRICES` exactly.
+* `STRIPE-SETUP.md`: status, variable names, the 5 steps to turn yearly on, and going live (owner only).
+  `docs/BILLING.md` was corrected (visitors have no AI; yearly by configuration).
+* Results:
+  * Backend: 385/385. The billing tests (42) cover the off state and, with example yearly plans injected only in the
+    test, checkout with the yearly Stripe price, the "AED …/year" status and refusal of a mismatched yearly amount.
+  * e2e pricing: 4/4 in Chromium and WebKit.
+
+## Overhaul Step 6 — AI wealth advisor: profile, personalisation, advice log, evaluation cases
+
+* **Investor profile:**
+  * Goals, horizon, monthly amount, savings band, preferences (e.g. Sharia-compliant only), and five risk questions.
+  * **Scored by code**, 5–25: cautious / balanced / growth / adventurous.
+  * Caps: money needed within a year → at most balanced. "Adventurous" requires an explicitly high-risk answer
+    (buy more after a fall, or the highest possible growth), otherwise it is capped at growth. That cap was found by
+    the e2e test: capacity alone (stable income, a small share of savings) had produced "adventurous".
+  * `GET/PUT /api/me/investor-profile`.
+* **Personalisation:**
+  * The advisor receives the member's profile and tracked holdings (weights, largest position).
+  * Its answer rules were rewritten to stay within an **educational** frame. It relates ideas to the profile, explains
+    options and trade-offs, and computes costs and their share of the budget. It no longer issues buy/sell/hold calls
+    or prescribes amounts.
+  * Reason: the previous prompt ("I'd buy some", position sizes) amounted to personal investment advice, a licensed
+    activity in the UAE (SCA). **This is the owner's decision to confirm**; it is one prompt section.
+* **Advice log:**
+  * Migration **0019** (additive: `investor_profiles`, `advice_log`; up/down/up tested, no drift).
+  * Every member answer is stored with the profile it used, the instruments, the tools and the model.
+  * An automatic review flags buy/sell instructions, personal calls, prescribed amounts, promised returns and a
+    missing disclaimer, for quality control. Flags are stored, not shown to members.
+  * `GET /api/me/advice-log`. The `/advisor/history` page shows the member their own record.
+* **UI:** a "Personalise the advisor" / "Tailored to your profile" bar on the Advisor page, with the questionnaire
+  form, and the history page.
+* **`tests/ai-cases.md`:** 27 evaluation cases across 6 profiles, with "must / must never" lists and a results log.
+  They are to be run against the real model after deploy (no AI key here).
+* **Legal pages:**
+  * Terms: AI answers may be tailored to the profile but remain general information.
+  * Privacy: the advisor profile, advice history and research tools are listed.
+  * **The version was not bumped.** Bumping makes every member re-accept; that is the owner's call, after the counsel
+    review the file already asks for.
+* **Results:**
+  * Backend: 395/395. The 10 advisor tests cover scoring and caps, routes and validation (the band can't be set by
+    the client), profile and holdings in the prompt, logging, review flags and privacy.
+  * The two existing billing tests that stub the advisor were updated for its new signature.
+  * e2e: profile and history 3/3; core and access in three browsers 54/54.
+* Full Playwright suite after Steps 4–6: **479 passed, 0 failed**:
+  * Chromium, Firefox and WebKit e2e;
+  * responsive at 9 sizes;
+  * axe in light and dark;
+  * iPhone, Pixel and iPad;
+  * links (run separately, after the session restart interrupted the first attempt).
+
+## Overhaul Step 9 — SEO / server rendering: proposal only
+
+[docs/SSR-PROPOSAL.md](docs/SSR-PROPOSAL.md) recommends option A: extend the existing head injection that Pulse
+discussions use to instrument pages, news posts and static pages, with a visible text summary. That is small and
+reversible. The alternatives are prerendering (B) or a full SSR rewrite (C). **Not built; it waits for the owner's
+choice.**
+
+## Overhaul Step 3 — data layer: every source behind one interface, `DATA-SOURCES.md` complete
+
+* `backend/app/markets/sources.py` is the provider interface and registry. Prices (`price_source()`), UAE exchange
+  data (`uae_exchange()`) and news reach Yahoo, TradingView and the feeds only through it. Their code is unchanged,
+  as instructed. A licensed feed can replace one by adding an adapter and setting `NEXIS_PRICE_SOURCE` /
+  `NEXIS_UAE_SOURCE`.
+* `GET /api/system/sources` lists every source: official or not, licence, terms risk, code location, and which one is
+  active.
+* `DATA-SOURCES.md` now covers every source, with terms and free limits checked on 2026-10-11:
+  * FRED: 120 requests/min with a free key;
+  * Hacker News (Algolia): 10,000/hour per IP;
+  * World Bank: CC BY 4.0, no quota;
+  * Treasury: public domain;
+  * Wikidata and SEC as before.
+  It also lists what each unofficial source would be replaced by. StockTwits' commercial terms couldn't be confirmed,
+  and the file says so.
+* **No new unofficial endpoints. No paid sources.**
+* Results: backend 398/398 (3 new registry tests). The behaviour is unchanged: the registry returns the same clients,
+  and every existing market and UAE test passes.

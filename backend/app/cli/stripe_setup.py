@@ -165,8 +165,8 @@ def main() -> None:
 
     print("\nSet these on the API (Vercel > nexis-finance-api > Settings > Environment Variables):")
     print("  STRIPE_SECRET_KEY=<the key you used>")
-    print(f"  STRIPE_PLUS_MONTHLY_AED_PRICE_ID={ids['plus_monthly']}")
-    print(f"  STRIPE_PRO_MONTHLY_AED_PRICE_ID={ids['pro_monthly']}")
+    for key, pid in ids.items():  # every plan in plans.PRICES, e.g. STRIPE_PLUS_MONTHLY_AED_PRICE_ID (and yearly, once added)
+        print(f"  STRIPE_{key.upper()}_AED_PRICE_ID={pid}")
     print(f"  STRIPE_WEBHOOK_SECRET={secret or '<signing secret of the webhook endpoint>'}")
 
 

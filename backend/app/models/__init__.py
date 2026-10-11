@@ -1,5 +1,6 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
+from app.models.advisor import AdviceLog, InvestorProfile
 from app.models.billing import BillingEvent, Subscription, UsageEvent
 from app.models.community import (
     Comment,
@@ -85,6 +86,7 @@ from app.models.research import (
 
 __all__ = [
     "Account",
+    "AdviceLog",
     "AlertRule",
     "Anomaly",
     "ApiKey",
@@ -115,6 +117,7 @@ __all__ = [
     "Holding",
     "ImportBatch",
     "IngestionRun",
+    "InvestorProfile",
     "Job",
     "LegalAcceptance",
     "Like",

@@ -12,7 +12,7 @@ import { requireAccount, type AccountReason } from "./account";
    which is built from backend/app/core/plans.py; what a member may do is decided by the server. No number is typed here. */
 
 const EVENT = "nexis:upgrade";
-export type PlanKey = "plus_monthly" | "pro_monthly";
+export type PlanKey = `${"plus" | "pro"}_${"monthly" | "yearly"}`;
 const PLAN_ERRORS = ["usage_limit", "sign_in_required", "already_pro", "upgrade_required", "investment_selection_required", "payment_failed"];
 
 export const usePlans = () => useQuery({ queryKey: ["billing-plans"], queryFn: () => api.get<AnyObj>("/billing/plans"), staleTime: 600_000 });

@@ -1,0 +1,62 @@
+/* Devil's Advocate */
+.da { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.da-card { padding: 16px; min-width: 0; }
+.da h2, .da-card h2 { font-size: max(16px, var(--fs-floor)); margin: 0 0 10px; }
+.da h3 { font-size: max(15px, var(--fs-floor)); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.da-letter { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-size: max(12px, var(--fs-floor)); font-weight: 700; }
+.da-form { display: flex; flex-direction: column; gap: 8px; max-width: 760px; }
+.da-form textarea { width: 100%; padding: 8px 10px; }
+.da-form select.input { max-width: 260px; height: 38px; }
+.da-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.da-head h2 { font-size: max(20px, var(--fs-floor)); overflow-wrap: anywhere; }
+.da-status { height: 38px; width: auto; }
+.da-thesis { margin: 8px 0 12px; padding: 10px 14px; border-inline-start: 3px solid var(--accent); background: var(--surface-2); line-height: 1.55; overflow-wrap: anywhere; }
+.da-card textarea.input { width: 100%; padding: 8px 10px; }
+.da-runs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.da-result { display: flex; flex-direction: column; gap: 12px; }
+.da-claims { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.5; }
+.da-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.da-cites { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding-inline-start: 10px; border-inline-start: 2px solid var(--border-strong); }
+.da-quote { font-style: italic; }
+.da-unverified { color: var(--warn); }
+.da-table td { white-space: normal; vertical-align: top; min-width: 90px; }
+.da-table td:first-child { min-width: 220px; }
+.da-evidence { margin: 10px 0 0; padding-inline-start: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.da-evidence li { padding: 8px 10px; background: var(--surface-2); border-radius: var(--radius); overflow-wrap: anywhere; scroll-margin-top: 80px; }
+.da-evidence li:target { outline: 2px solid var(--accent); }
+.badge.da-st-supported { color: var(--pos); background: var(--pos-soft); border-color: transparent; }
+.badge.da-st-contradicted { color: var(--neg); background: var(--neg-soft); border-color: transparent; }
+.badge.da-st-mixed { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.badge.da-st-untested { color: var(--text-2); }
+.badge.da-weak { color: var(--neg); background: var(--neg-soft); border-color: transparent; }
+.badge.da-strong { color: var(--pos); background: var(--pos-soft); border-color: transparent; }
+.da a[href^="#ev-"] { text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
+.da-thesis .linkish { min-width: 44px; min-height: 44px; padding: 0 6px; }
+/* phones: each claim becomes a small card instead of a table row that needs sideways scrolling */
+@media (max-width: 640px) {
+  .da-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .da-table, .da-table tbody, .da-table tr, .da-table td { display: block; width: 100%; }
+  .da-table tr { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .da-table td { border: 0; padding: 2px 0; min-width: 0; }
+  .da-table td:first-child { min-width: 0; font-weight: 600; }
+  .da-table td:not(:first-child)::before { content: attr(data-label) ": "; color: var(--muted); }
+}
+
+/* My research hub */
+.mr-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.mr-tool { display: flex; flex-direction: column; gap: 6px; padding: 16px; color: inherit; text-decoration: none; min-height: 44px; }
+.mr-tool:hover, .mr-tool:focus-visible { border-color: var(--accent); }
+.mr-tool b { font-size: max(15px, var(--fs-floor)); color: var(--accent-ink); }
+
+/* Investor profile and advice history */
+.ip-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.ip-form { flex-basis: 100%; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.ip-form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ip-form legend { font-weight: 600; font-size: max(13px, var(--fs-floor)); margin-bottom: 4px; padding: 0; }
+.ip-opts { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.ip-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
+.ip-row .fld { margin-top: 0; }
+.ip-row .input { height: 38px; }
+.ah-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ah-list summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; overflow-wrap: anywhere; }
+.ah-answer { margin-top: 8px; overflow-wrap: anywhere; }

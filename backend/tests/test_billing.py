@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from app.core import plans
 from app.core.config import get_settings
 from app.db.base import utcnow
-from app.models import BillingEvent, Subscription, UsageEvent, User, UserHolding, UserNotification
+from app.models import BillingEvent, MarketCache, Subscription, UsageEvent, User, UserHolding, UserNotification
 from app.services import advisor, entitlements
 from tests.helpers import TERMS
 
@@ -578,7 +578,7 @@ def _ask(client, headers: dict[str, str] | None = None):  # type: ignore[no-unty
 
 
 def test_advisor_free_20_plus_200_pro_600(client, db, stripe_on, monkeypatch):
-    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None: {"answer": "ok"})
+    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None, user=None: {"answer": "ok"})
     monkeypatch.setattr(get_settings(), "advisor_requests_per_hour", 10_000)  # the separate per-IP burst guard
     u = _signup(client, "meter")
     assert [_ask(client).status_code for _ in range(20)] == [200] * 20
@@ -636,7 +636,7 @@ def test_parallel_requests_cannot_exceed_the_limit(client, db, stripe_on):
 
 def test_visitors_cannot_use_the_advisor_at_all(client, monkeypatch):
     called = []
-    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None: called.append(1) or {"answer": "ok"})
+    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None, user=None: called.append(1) or {"answer": "ok"})
     _out(client)
     for path in ("/api/advisor/chat", "/api/advisor/chat/stream"):
         r = client.post(path, json={"messages": [{"role": "user", "content": "Is Emaar cheap?"}]})
@@ -723,4 +723,50 @@ def test_shared_workspace_is_read_only_for_the_public(client, db, monkeypatch):
     db.get(User, u["id"]).role = "admin"
     db.commit()
     assert client.post("/api/developer/api-keys", json={}).status_code != 403  # the Nexis team can
+    _out(client)
+
+
+# ------------------------------------------------------------------ yearly plans (switched on by configuration only)
+
+EXAMPLE_YEARLY = {  # illustrative amounts for the test only — the real ones are the owner's decision (STRIPE-SETUP.md)
+    "plus_yearly": {"tier": "plus", "amount_cents": 1111, "currency": "aed", "interval": "year", "lookup_key": "t_plus_y", "nickname": "t"},
+    "pro_yearly": {"tier": "pro", "amount_cents": 2222, "currency": "aed", "interval": "year", "lookup_key": "t_pro_y", "nickname": "t"},
+}  # fmt: skip
+
+
+def test_yearly_plans_are_off_until_configured(client, stripe_on):
+    cat = client.get("/api/billing/plans").json()
+    assert cat["intervals"] == ["month"] and cat["billing_interval"] == "monthly"
+    u = _signup(client, "noyear")
+    assert client.post("/api/billing/checkout", json={"plan": "plus_yearly"}).status_code == 422
+    assert u
+
+
+def test_yearly_plans_sell_the_configured_stripe_price_and_grant_the_tier(client, db, stripe_on, monkeypatch):
+    monkeypatch.setattr(plans, "PRICES", {**plans.PRICES, **EXAMPLE_YEARLY})
+    s = get_settings()
+    monkeypatch.setattr(s, "stripe_plus_yearly_price_id", "price_plus_y")
+    monkeypatch.setattr(s, "stripe_pro_yearly_aed_price_id", "price_pro_y")
+    for pid, key in (("price_plus_y", "plus_yearly"), ("price_pro_y", "pro_yearly")):
+        want = EXAMPLE_YEARLY[key]
+        stripe_on["prices"][pid] = {"id": pid, "active": True, "unit_amount": want["amount_cents"], "currency": "aed",
+                                    "recurring": {"interval": "year", "interval_count": 1}, "livemode": False}  # fmt: skip
+    cat = client.get("/api/billing/plans").json()
+    assert cat["available"] is True and cat["intervals"] == ["month", "year"]
+    plus = next(t for t in cat["tiers"] if t["id"] == "plus")
+    assert plus["prices"]["year"] == {"key": "plus_yearly", "amount": 11.11, "currency": "AED"}
+
+    u = _signup(client, "yearly")
+    assert client.post("/api/billing/checkout", json={"plan": "plus_yearly"}).status_code == 200
+    assert stripe_on["created"][-1]["line_items"] == [{"price": "price_plus_y", "quantity": 1}]
+    _go_pro(client, stripe_on, u, price="price_pro_y")
+    st = client.get("/api/billing/status").json()
+    assert st["plan"] == "pro" and st["billing"] == "AED 22.22/year"
+
+    # a yearly price whose amount differs from plans.PRICES makes the plans unsellable (nothing is ever sold at a surprise price)
+    stripe_on["prices"]["price_plus_y"]["unit_amount"] = 9999
+    for row in db.scalars(select(MarketCache).where(MarketCache.key.like("billing:%"))):
+        db.delete(row)
+    db.commit()
+    assert client.get("/api/billing/plans").json()["available"] is False
     _out(client)

@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     sec_user_agent: str = "NexisFinance research contact@example.com"
     # Wikidata asks for a descriptive User-Agent with a way to reach the operator (set a real contact in production).
     wikidata_user_agent: str = "NexisFinance/1.0 (https://nexis-finance-five.vercel.app) httpx"
+    # Which adapter in app/markets/sources.py serves prices and UAE exchange data (today: "yahoo", "tradingview").
+    price_source: str = "yahoo"
+    uae_source: str = "tradingview"
     # Tests only: answer Wikidata calls from recorded responses in this directory instead of the network.
     wikidata_fixtures_dir: str | None = None
 
@@ -146,6 +149,13 @@ class Settings(BaseSettings):
     )
     stripe_pro_price_id: str | None = Field(
         default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_MONTHLY_AED_PRICE_ID", "STRIPE_PRO_MONTHLY_AED_PRICE_ID")
+    )
+    # Yearly AED prices: only used once a matching "*_yearly" entry (amount) exists in plans.PRICES — see STRIPE-SETUP.md.
+    stripe_plus_yearly_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PLUS_YEARLY_AED_PRICE_ID", "STRIPE_PLUS_YEARLY_AED_PRICE_ID")
+    )
+    stripe_pro_yearly_aed_price_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("NEXIS_STRIPE_PRO_YEARLY_AED_PRICE_ID", "STRIPE_PRO_YEARLY_AED_PRICE_ID")
     )
     # Earlier Nexis Pro prices (USD monthly/yearly). No longer sold; subscriptions on them are recognised as Nexis Pro.
     stripe_pro_monthly_price_id: str | None = Field(

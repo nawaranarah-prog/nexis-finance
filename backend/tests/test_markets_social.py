@@ -17,7 +17,7 @@ from app.markets.news import clean_company_name
 from app.markets.yahoo import YahooClient
 from app.services import advisor, llm, valuation
 from app.services import compare as cmp
-from tests.helpers import TERMS, member
+from tests.helpers import TERMS, allow_posting, member
 
 
 def _client(handler) -> httpx.Client:  # type: ignore[no-untyped-def]
@@ -269,6 +269,9 @@ def test_instafin_end_to_end(client, monkeypatch):
     assert r.status_code == 201 and r.json()["username"] == "trader_one"
     assert client.post("/api/auth/register", json={**TERMS, "username": "trader_one", "password": "longenough1"}).status_code == 409
     assert client.get("/api/auth/me").json()["user"]["display_name"] == "Trader One"
+    no = client.post("/api/social/posts", data={"body": "members can't post"})
+    assert no.status_code == 403 and "news feed" in no.json()["error"]["message"]
+    allow_posting("trader_one")  # Finstagram is news-only; an admin may post (corrections)
 
     p = client.post("/api/social/posts", data={"body": "Loading up on $EMAAR.AE before results #dubai #realestate"},
                     files={"image": ("chart.jpg", _png_with_exif(), "image/jpeg")})  # fmt: skip
@@ -355,6 +358,7 @@ def test_account_deletion_removes_everything(client, monkeypatch):
     monkeypatch.setattr(social.markets, "quotes", lambda db, syms: [])
     client.cookies.clear()
     client.post("/api/auth/register", json={**TERMS, "username": "leaver", "password": "longenough9"})
+    allow_posting("leaver")
     pid = client.post("/api/social/posts", data={"body": "bye $AAPL"}).json()["id"]
     client.post(f"/api/social/posts/{pid}/like")
     assert client.post("/api/auth/me/delete", json={"password": "wrong"}).status_code == 401

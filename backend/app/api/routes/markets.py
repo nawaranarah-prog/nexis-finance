@@ -163,7 +163,7 @@ def advisor_chat(
 ) -> dict[str, Any]:
     rid = _advisor_gate(db, request, viewer)
     try:
-        return advisor.ask(db, [m.model_dump() for m in req.messages], req.language)
+        return advisor.ask(db, [m.model_dump() for m in req.messages], req.language, viewer)
     except Exception:
         db.rollback()
         entitlements.refund(db, rid)
@@ -180,12 +180,14 @@ def advisor_chat_stream(
     """
     rid = _advisor_gate(db, request, viewer)
     messages = [m.model_dump() for m in req.messages]
+    uid = viewer.id
 
     def events() -> Iterator[str]:
         answered = False
         with db_session.SessionLocal() as s:
             try:
-                for ev in advisor.stream(s, messages, req.language):
+                member = s.get(User, uid)  # this session's copy (the request's session is closed while streaming)
+                for ev in advisor.stream(s, messages, req.language, member):
                     answered = answered or ev.get("type") == "delta"
                     yield f"data: {json.dumps(ev, default=str)}\n\n"
             except NexisError as exc:
