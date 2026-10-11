@@ -94,6 +94,8 @@ const PRIVACY: Doc = {
         <li><b>Account information:</b> email address and/or mobile number, a password hash (never the password itself), the sign-in method (for example Google), interface language, and the versions of the Terms and Privacy Policy you accepted and when.</li>
         <li><b>Content:</b> Pulse discussions, comments, reactions, follows, saves and reports; Community (Finstagram) posts and profile details if you use that feature, which is public by design.</li>
         <li><b>My Nexis:</b> investments (asset, quantity, purchase price and date, notes), your watchlist, notification preferences and the notifications we create for you.</li>
+        <li><b>AI Advisor:</b> the investor profile you choose to give (goals, time horizon, monthly amount, savings band, preferences and your answers to five risk questions) and a record of the questions you ask and the answers you receive, kept so you can review them in "Your advice history" and so we can check the quality of answers. Deleted with your account.</li>
+        <li><b>Research tools:</b> the World Graph investigations, Time Machine scenarios and Devil's Advocate theses you save, their runs, and the PDF reports you make from them. Private to your account and deleted with it.</li>
         <li><b>Public posts from other sites:</b> when Pulse shows a public thread from Reddit, Hacker News or StockTwits, Nexis stores the thread title, short excerpts of replies, their links and times. It removes usernames and mentions and does not keep anything about the people who wrote them. Ask at {CONTACT} to have an excerpt removed.</li>
         <li><b>Technical information:</b> session tokens (stored only as a cryptographic hash), request metadata needed for security and rate limiting (for example IP address, kept briefly), and error logs.</li>
       </ul>
@@ -140,7 +142,7 @@ const DISCLAIMER: Doc = {
     <>
       <p className="lg-callout">Nothing on Nexis Finance is a recommendation to buy, sell or hold any investment, or personalised financial advice.</p>
       <ul>
-        <li><b>General information only.</b> Content on Nexis — market data, analysis, Nexis editorial discussions, AI Advisor answers, reports, scores and community posts — is general information. It does not consider your objectives, financial situation or needs.</li>
+        <li><b>General information only.</b> Content on Nexis — market data, analysis, Nexis editorial discussions, AI Advisor answers, reports, scores and community posts — is general information. The AI Advisor can tailor its explanations to the investor profile you choose to give it, but its answers remain general information: they do not assess your full financial situation and are not a recommendation to buy, sell or hold anything.</li>
         <li><b>Not licensed advice.</b> Nexis does not hold itself out as a licensed investment adviser, broker or other regulated financial institution, and the Service is not a substitute for advice from a professional licensed where you live.</li>
         <li><b>Risk.</b> All investing involves risk. You can lose some or all of the money you invest. Leveraged products, crypto-assets and concentrated positions can be especially volatile. Past performance does not guarantee future results.</li>
         <li><b>No guarantees.</b> We do not guarantee the accuracy, completeness or timeliness of any information, or any outcome or return. Prices may be delayed. Sources can be wrong. AI-assisted content can contain errors.</li>

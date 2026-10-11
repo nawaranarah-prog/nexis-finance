@@ -47,3 +47,16 @@
 .mr-tool { display: flex; flex-direction: column; gap: 6px; padding: 16px; color: inherit; text-decoration: none; min-height: 44px; }
 .mr-tool:hover, .mr-tool:focus-visible { border-color: var(--accent); }
 .mr-tool b { font-size: max(15px, var(--fs-floor)); color: var(--accent-ink); }
+
+/* Investor profile and advice history */
+.ip-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.ip-form { flex-basis: 100%; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.ip-form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ip-form legend { font-weight: 600; font-size: max(13px, var(--fs-floor)); margin-bottom: 4px; padding: 0; }
+.ip-opts { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.ip-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
+.ip-row .fld { margin-top: 0; }
+.ip-row .input { height: 38px; }
+.ah-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ah-list summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; overflow-wrap: anywhere; }
+.ah-answer { margin-top: 8px; overflow-wrap: anywhere; }

@@ -362,3 +362,53 @@ Production was checked after the merge (both Vercel projects were Ready):
   * Backend: 385/385. The billing tests (42) cover the off state and, with example yearly plans injected only in the
     test, checkout with the yearly Stripe price, the "AED …/year" status and refusal of a mismatched yearly amount.
   * e2e pricing: 4/4 in Chromium and WebKit.
+
+## Overhaul Step 6 — AI wealth advisor: profile, personalisation, advice log, evaluation cases
+
+* **Investor profile:**
+  * Goals, horizon, monthly amount, savings band, preferences (e.g. Sharia-compliant only), and five risk questions.
+  * **Scored by code**, 5–25: cautious / balanced / growth / adventurous.
+  * Caps: money needed within a year → at most balanced. "Adventurous" requires an explicitly high-risk answer
+    (buy more after a fall, or the highest possible growth), otherwise it is capped at growth. That cap was found by
+    the e2e test: capacity alone (stable income, a small share of savings) had produced "adventurous".
+  * `GET/PUT /api/me/investor-profile`.
+* **Personalisation:**
+  * The advisor receives the member's profile and tracked holdings (weights, largest position).
+  * Its answer rules were rewritten to stay within an **educational** frame. It relates ideas to the profile, explains
+    options and trade-offs, and computes costs and their share of the budget. It no longer issues buy/sell/hold calls
+    or prescribes amounts.
+  * Reason: the previous prompt ("I'd buy some", position sizes) amounted to personal investment advice, a licensed
+    activity in the UAE (SCA). **This is the owner's decision to confirm**; it is one prompt section.
+* **Advice log:**
+  * Migration **0019** (additive: `investor_profiles`, `advice_log`; up/down/up tested, no drift).
+  * Every member answer is stored with the profile it used, the instruments, the tools and the model.
+  * An automatic review flags buy/sell instructions, personal calls, prescribed amounts, promised returns and a
+    missing disclaimer, for quality control. Flags are stored, not shown to members.
+  * `GET /api/me/advice-log`. The `/advisor/history` page shows the member their own record.
+* **UI:** a "Personalise the advisor" / "Tailored to your profile" bar on the Advisor page, with the questionnaire
+  form, and the history page.
+* **`tests/ai-cases.md`:** 27 evaluation cases across 6 profiles, with "must / must never" lists and a results log.
+  They are to be run against the real model after deploy (no AI key here).
+* **Legal pages:**
+  * Terms: AI answers may be tailored to the profile but remain general information.
+  * Privacy: the advisor profile, advice history and research tools are listed.
+  * **The version was not bumped.** Bumping makes every member re-accept; that is the owner's call, after the counsel
+    review the file already asks for.
+* **Results:**
+  * Backend: 395/395. The 10 advisor tests cover scoring and caps, routes and validation (the band can't be set by
+    the client), profile and holdings in the prompt, logging, review flags and privacy.
+  * The two existing billing tests that stub the advisor were updated for its new signature.
+  * e2e: profile and history 3/3; core and access in three browsers 54/54.
+* Full Playwright suite after Steps 4–6: **479 passed, 0 failed**:
+  * Chromium, Firefox and WebKit e2e;
+  * responsive at 9 sizes;
+  * axe in light and dark;
+  * iPhone, Pixel and iPad;
+  * links (run separately, after the session restart interrupted the first attempt).
+
+## Overhaul Step 9 — SEO / server rendering: proposal only
+
+[docs/SSR-PROPOSAL.md](docs/SSR-PROPOSAL.md) recommends option A: extend the existing head injection that Pulse
+discussions use to instrument pages, news posts and static pages, with a visible text summary. That is small and
+reversible. The alternatives are prerendering (B) or a full SSR rewrite (C). **Not built; it waits for the owner's
+choice.**

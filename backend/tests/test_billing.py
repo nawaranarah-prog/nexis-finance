@@ -578,7 +578,7 @@ def _ask(client, headers: dict[str, str] | None = None):  # type: ignore[no-unty
 
 
 def test_advisor_free_20_plus_200_pro_600(client, db, stripe_on, monkeypatch):
-    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None: {"answer": "ok"})
+    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None, user=None: {"answer": "ok"})
     monkeypatch.setattr(get_settings(), "advisor_requests_per_hour", 10_000)  # the separate per-IP burst guard
     u = _signup(client, "meter")
     assert [_ask(client).status_code for _ in range(20)] == [200] * 20
@@ -636,7 +636,7 @@ def test_parallel_requests_cannot_exceed_the_limit(client, db, stripe_on):
 
 def test_visitors_cannot_use_the_advisor_at_all(client, monkeypatch):
     called = []
-    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None: called.append(1) or {"answer": "ok"})
+    monkeypatch.setattr(advisor, "ask", lambda db, messages, language=None, user=None: called.append(1) or {"answer": "ok"})
     _out(client)
     for path in ("/api/advisor/chat", "/api/advisor/chat/stream"):
         r = client.post(path, json={"messages": [{"role": "user", "content": "Is Emaar cheap?"}]})

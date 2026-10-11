@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageHead } from "../components/ui";
+import { ProfileBar } from "../components/investor";
 import { Markdown } from "../components/markdown";
 import { api, buildUrl, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
@@ -170,7 +171,7 @@ export default function Advisor() {
   const s = status.data;
   return (
     <>
-      <PageHead title={t("AI Financial Advisor")} desc="Talk to it like you would to a private banker: it researches live prices, fundamentals, analyst ratings and today's news before answering, then gives you a clear view and the numbers behind it."
+      <PageHead title={t("AI Financial Advisor")} desc="Talk to it like you would to a private banker: it researches live prices, fundamentals, analyst ratings and today's news before answering, then explains the numbers and how an idea fits your profile — so you can decide."
         actions={<>
           <button type="button" className="btn ghost" onClick={() => window.dispatchEvent(new Event("nexis:help-open"))}>{t("Help")}</button>
           {turns.length > 0 && <button className="btn" onClick={() => { setTurns([]); pending.current = ""; }}>{t("New chat")}</button>}
@@ -182,6 +183,7 @@ export default function Advisor() {
           <Link className="btn sm" to="/login?next=/advisor">Sign in</Link>
         </div>
       )}
+      {signedIn && <ProfileBar />}
       {s && !s.available && (
         <div className="banner neutral small" style={{ marginBottom: 12 }}>
           <span aria-hidden>ⓘ</span>
