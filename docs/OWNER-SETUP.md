@@ -29,17 +29,66 @@ Once you tell me the address (it isn't a secret), I set the data-provider identi
 * `NEXIS_WIKIDATA_USER_AGENT` = `NexisFinance/1.0 (https://nexis-finance-five.vercel.app; <address>)`
 * `NEXIS_SEC_USER_AGENT` = `Nexis Finance <address>`
 
-## 2. Annual billing: create the yearly Stripe prices (test mode first)
+## 2. Annual billing: create the two annual Stripe prices (test mode)
 
-The code sells Plus at AED 229/year and Pro at AED 599/year (one upfront payment for 12 months) only once matching
-Stripe prices exist. First run `--check` to see the price inventory; full steps in [STRIPE-SETUP.md](../STRIPE-SETUP.md).
-1. In a terminal on your computer (not in a chat), from the `backend` folder:
-   `$env:STRIPE_SECRET_KEY="sk_test_…"; .venv\Scripts\python -m app.cli.stripe_setup`
-   This is idempotent: it finds the existing monthly prices and creates the two yearly ones. It prints
-   `STRIPE_PLUS_YEARLY_AED_PRICE_ID` and `STRIPE_PRO_YEARLY_AED_PRICE_ID`.
-2. Add those two variables in Vercel (Production) and redeploy.
-3. Check: `…\python -m app.cli.stripe_setup --check` must report everything OK. The pricing page then shows Monthly
-   / Yearly.
+**Official prices** (set in `backend/app/core/plans.py`): Free AED 0 · Nexis Plus AED 29/month or **AED 229/year** ·
+Nexis Pro AED 69/month or **AED 599/year**. Annual is one upfront payment for 12 months.
+
+**Status (checked 2026-10-13):** the annual plans are **not on sale yet**. In Vercel, `nexis-finance-api` has the
+two monthly AED price ids but **not** `STRIPE_PLUS_YEARLY_AED_PRICE_ID` or `STRIPE_PRO_YEARLY_AED_PRICE_ID`, and the
+live catalog lists monthly billing only. Until both are set and match the amounts above, the site shows monthly
+prices only and never offers an annual checkout.
+
+> `STRIPE_PRO_YEARLY_PRICE_ID` (no `AED`) is the old USD price. Leave it: it only recognises old subscriptions.
+> Don't copy it into the new variables.
+
+### A. Create the prices in the Stripe Dashboard (no terminal needed)
+
+1. Open https://dashboard.stripe.com and turn on **Test mode** (the toggle at the top right must say test mode).
+2. **Product catalog** → **Nexis Plus** → **Add another price**:
+   * Pricing model: **Recurring**
+   * Amount: **229.00**, currency **AED**
+   * Billing period: **Yearly**
+   * Under "Advanced" / "More options", **Lookup key**: `nexis_plus_yearly_aed_229`
+   * Description/nickname (optional): `Nexis Plus Annual (AED 229)`
+   * Save. Copy the new price id (it starts with `price_`).
+3. **Product catalog** → **Nexis Pro** → **Add another price**: the same, with **599.00** AED, Yearly, lookup key
+   `nexis_pro_yearly_aed_599`. Copy its price id.
+4. If an older annual price exists on either product (for example AED 290 or AED 990), **don't use it**. Archive it
+   once no subscription uses it.
+
+**Terminal alternative:** from `backend`, in your own terminal (never in a chat):
+`$env:STRIPE_SECRET_KEY="sk_test_…"; .venv\Scripts\python -m app.cli.stripe_setup --check` lists every price
+first. If the monthly prices show the lookup keys `nexis_plus_monthly_aed` / `nexis_pro_monthly_aed`, then
+`.venv\Scripts\python -m app.cli.stripe_setup` creates only the two annual prices and prints their ids. If the
+monthly prices have no lookup keys, use the Dashboard steps above instead (the script would add duplicate monthly
+prices).
+
+### B. Set the two environment variables
+
+Vercel → **nexis-finance-api** → Settings → Environment Variables → Add (environment: **Production**, and Preview if
+you test on previews):
+
+| Variable | Value |
+|---|---|
+| `STRIPE_PLUS_YEARLY_AED_PRICE_ID` | the Nexis Plus AED 229/year price id |
+| `STRIPE_PRO_YEARLY_AED_PRICE_ID` | the Nexis Pro AED 599/year price id |
+
+Then **Deployments** → the latest production deployment → **Redeploy** (variables apply only to new deployments).
+
+### C. Check before calling it done
+
+1. https://nexis-finance-api.vercel.app/api/billing/plans must show `"intervals":["month","year"]`, with Plus
+   `"amount":229.0` and Pro `"amount":599.0` under `"year"`. If it still shows only `"month"`, the server rejected
+   a price: run `--check` (above) and it names the mismatch (amount, currency, interval or test/live mode).
+2. Sign in with an address listed in `NEXIS_BILLING_TEST_EMAILS`, open **/pricing**, choose **Annual**, and buy
+   Nexis Plus with the test card `4242 4242 4242 4242` (any future date, any CVC). Stripe's page must show
+   **AED 229.00 per year**.
+3. After returning to Nexis, Settings → Plan must show Nexis Plus, "billed annually upfront". In Stripe (test mode)
+   → Subscriptions, the subscription must be on the AED 229 yearly price.
+4. Cancel that test subscription in Stripe afterwards.
+
+Only after step 3 passes are the annual plans purchasable (in test mode). Live payments are a separate step (§3).
 
 ## 3. Live payments
 
