@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Plot from "../components/Plot";
 import { Card, Disclaimer, Kpi, PageHead, QueryView, StatusBadge } from "../components/ui";
 import { DateRange, PortfolioSelect } from "../components/pickers";
-import { dateAxis, diverging, INK, sectorColor, seriesColor } from "../components/charts";
+import { dateAxis, diverging, INK, sectorColor, seriesColor, fs } from "../components/charts";
 import { line, PCT_AXIS } from "../components/metrics";
 import { usePortfolios } from "../hooks/queries";
 import { useResolvedTheme, useWorkspace } from "../hooks/workspace";
@@ -148,7 +148,7 @@ function OverviewBody({ d, theme }: { d: AnyObj; theme: "light" | "dark" }) {
             type: "bar", orientation: "h", y: top.map((x) => x.symbol), x: top.map((x) => x.cumulative_return),
             marker: { color: top.map((x) => (x.cumulative_return >= 0 ? seriesColor(theme, 0) : seriesColor(theme, 7))) },
             hovertemplate: "%{y}: %{x:.1%}<extra></extra>",
-          }]} layout={{ hovermode: "closest", xaxis: { tickformat: ".0%" }, yaxis: { autorange: "reversed", tickfont: { size: 10 } }, bargap: 0.25, margin: { l: 50, r: 10, t: 8, b: 30 } }} />
+          }]} layout={{ hovermode: "closest", xaxis: { tickformat: ".0%" }, yaxis: { autorange: "reversed", tickfont: { size: fs(10) } }, bargap: 0.25, margin: { l: 50, r: 10, t: 8, b: 30 } }} />
         </Card>
       </div>
       <div className="row-between">

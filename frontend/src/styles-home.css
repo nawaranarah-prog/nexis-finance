@@ -185,6 +185,7 @@
 .wl-x { width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 15px; cursor: pointer; opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
 .wl tr:hover .wl-x, .wl-x:focus-visible { opacity: 1; }
+@media (hover: none) { .wl-x { opacity: 1; } }  /* touch screens can't hover: the remove button is always visible */
 .wl-x:hover { background: var(--surface-2); color: var(--text); }
 @media (hover: none) { .wl-x { opacity: 1; } }
 .hm-empty-state { padding: 4px 0 2px; }

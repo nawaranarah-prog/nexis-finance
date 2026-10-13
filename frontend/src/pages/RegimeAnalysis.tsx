@@ -5,7 +5,7 @@ import Plot from "../components/Plot";
 import DataTable from "../components/DataTable";
 import { Card, Field, JobStatus, Kpi, PageHead, QueryView, StatusBadge } from "../components/ui";
 import { AssetSelect, defaultBenchmark } from "../components/pickers";
-import { dateAxis, INK, sequential, seriesColor } from "../components/charts";
+import { dateAxis, INK, sequential, seriesColor, fs, phone } from "../components/charts";
 import { useAssets, useExperiment, useExperiments, useJobRunner } from "../hooks/queries";
 import { useResolvedTheme, useWorkspace } from "../hooks/workspace";
 import type { AnyObj } from "../types/api";
@@ -111,7 +111,7 @@ function RegimeResult({ id }: { id: number }) {
               <Card title="Empirical transition matrix" sub="P(regime tomorrow | regime today)">
                 <Plot height={260} data={[{ type: "heatmap", z: a.transition_matrix.matrix, x: order, y: order, zmin: 0, zmax: 1, colorscale: sequential(theme),
                   text: a.transition_matrix.matrix.map((row: number[]) => row.map((v) => v.toFixed(3))), texttemplate: "%{text}", hovertemplate: "from %{y}<br>to %{x}: %{z:.3f}<extra></extra>", xgap: 2, ygap: 2, colorbar: { thickness: 10 } }]}
-                  layout={{ hovermode: "closest", yaxis: { autorange: "reversed", tickfont: { size: 9.5 } }, xaxis: { tickfont: { size: 9.5 } }, margin: { l: 190, r: 10, t: 8, b: 110 } }} />
+                  layout={{ hovermode: "closest", yaxis: { autorange: "reversed", tickfont: { size: fs(9.5) } }, xaxis: { tickfont: { size: fs(9.5) } }, margin: { l: phone() ? 12 : 190, r: 10, t: 8, b: phone() ? 40 : 110 } }} />
               </Card>
             </div>
             <Card title="Feature distributions by regime">
@@ -121,7 +121,7 @@ function RegimeResult({ id }: { id: number }) {
                     <div className="small text2 mono">{feat}</div>
                     <Plot height={260} data={order.map((r) => ({ type: "box", name: r.split(" · ").map((w: string) => w.split(" ")[0]).join("/"), y: a.feature_series[feat].filter((_: number, i: number) => t.regime[i] === r),
                       marker: { color: color(r), size: 2 }, line: { width: 1.5 }, boxpoints: false, hovertemplate: `${r}<br>%{y:.4f}<extra></extra>` }) as Data)}
-                      layout={{ showlegend: false, hovermode: "closest", margin: { l: 44, r: 8, t: 6, b: 50 }, xaxis: { tickfont: { size: 9 } } }} />
+                      layout={{ showlegend: false, hovermode: "closest", margin: { l: 44, r: 8, t: 6, b: 50 }, xaxis: { tickfont: { size: fs(9) } } }} />
                   </div>
                 ))}
               </div>

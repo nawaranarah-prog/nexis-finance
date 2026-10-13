@@ -4,7 +4,7 @@ import Plot from "../components/Plot";
 import DataTable from "../components/DataTable";
 import { Card, download, ErrorState, Field, InfoTip, Kpi, Loading, PageHead, QueryView, Tabs } from "../components/ui";
 import { AssetChecklist, DateRange, PortfolioSelect } from "../components/pickers";
-import { dateAxis, diverging, INK, seriesColor, STATUS } from "../components/charts";
+import { dateAxis, diverging, INK, seriesColor, STATUS, fs } from "../components/charts";
 import { line } from "../components/metrics";
 import { useAssets, usePortfolios } from "../hooks/queries";
 import { useResolvedTheme, useWorkspace } from "../hooks/workspace";
@@ -105,7 +105,7 @@ function VarPanel({ pid }: { pid: number }) {
               }]} layout={{
                 hovermode: "closest", bargap: 0.04, showlegend: false, xaxis: { tickformat: ".1%" },
                 shapes: res.estimates.map((e: AnyObj, i: number) => ({ type: "line", x0: -e.historical.var, x1: -e.historical.var, yref: "paper", y0: 0, y1: 1, line: { color: i ? STATUS.critical : STATUS.serious, width: 2, dash: "dot" } })),
-                annotations: res.estimates.map((e: AnyObj) => ({ x: -e.historical.var, yref: "paper", y: 1, text: `VaR ${pct(e.confidence, 0)}`, showarrow: false, yanchor: "bottom", font: { size: 10, color: INK[theme].text2 } })),
+                annotations: res.estimates.map((e: AnyObj) => ({ x: -e.historical.var, yref: "paper", y: 1, text: `VaR ${pct(e.confidence, 0)}`, showarrow: false, yanchor: "bottom", font: { size: fs(10), color: INK[theme].text2 } })),
               }} />
             </Card>
             <VarBacktest bt={res.var_backtest} theme={theme} />

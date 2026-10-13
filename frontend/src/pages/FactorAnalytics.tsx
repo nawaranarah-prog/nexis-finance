@@ -4,7 +4,7 @@ import Plot from "../components/Plot";
 import DataTable from "../components/DataTable";
 import { Card, Kpi, PageHead, QueryView } from "../components/ui";
 import { DateRange, PortfolioSelect } from "../components/pickers";
-import { dateAxis, diverging, seriesColor } from "../components/charts";
+import { dateAxis, diverging, seriesColor, fs } from "../components/charts";
 import { line, PCT_AXIS } from "../components/metrics";
 import { usePortfolios } from "../hooks/queries";
 import { useResolvedTheme, useWorkspace } from "../hooks/workspace";
@@ -58,7 +58,7 @@ export default function FactorAnalytics() {
                 <Card title="Factor return correlation">
                   <Plot height={300} data={[{
                     type: "heatmap", z: d.correlation.matrix, x: d.correlation.factors, y: d.correlation.factors, zmin: -1, zmax: 1, colorscale: diverging(theme),
-                    text: d.correlation.matrix.map((row: number[]) => row.map((v) => v.toFixed(2))), texttemplate: "%{text}", hovertemplate: "%{y} × %{x}: %{z:.3f}<extra></extra>",
+                    text: d.correlation.matrix.map((row: number[]) => row.map((v) => v.toFixed(2))), texttemplate: "%{text}", textfont: { size: fs(11) }, hovertemplate: "%{y} × %{x}: %{z:.3f}<extra></extra>",
                     colorbar: { thickness: 10 }, xgap: 2, ygap: 2,
                   }]} layout={{ hovermode: "closest", yaxis: { autorange: "reversed" }, margin: { l: 80, r: 10, t: 8, b: 40 } }} />
                 </Card>

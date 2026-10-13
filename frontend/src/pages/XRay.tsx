@@ -6,7 +6,7 @@ import DataTable from "../components/DataTable";
 import { Card, InfoTip, Kpi, PageHead, QueryView, Tabs } from "../components/ui";
 import { DataClassBadge, MethodSelect, ScopeSelect, Warnings } from "../components/connect";
 import { DateRange } from "../components/pickers";
-import { INK, seriesColor } from "../components/charts";
+import { INK, seriesColor, fs, phone } from "../components/charts";
 import { useResolvedTheme } from "../hooks/workspace";
 import { api } from "../services/api";
 import type { AnyObj } from "../types/api";
@@ -41,7 +41,7 @@ function Bars({ rows, title, sub }: { rows: AnyObj[]; title: string; sub?: strin
         type: "bar", orientation: "h", y: rows.map((r) => r.label), x: rows.map((r) => r.weight),
         marker: { color: rows.map((r) => (String(r.label).startsWith("Unclassified") ? INK[theme].neutral : seriesColor(theme, 0))) },
         customdata: rows.map((r) => r.market_value), hovertemplate: "%{y}: %{x:.1%} (%{customdata:$,.0f})<extra></extra>",
-      }]} layout={{ hovermode: "closest", xaxis: { tickformat: ".0%" }, yaxis: { autorange: "reversed", tickfont: { size: 10 } }, margin: { l: 210, r: 10, t: 6, b: 28 } }} />
+      }]} layout={{ hovermode: "closest", xaxis: { tickformat: ".0%" }, yaxis: { autorange: "reversed", tickfont: { size: fs(10) } }, margin: { l: phone() ? 12 : 210, r: 10, t: 6, b: 28 } }} />
     </Card>
   );
 }

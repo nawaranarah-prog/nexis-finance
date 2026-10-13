@@ -29,22 +29,25 @@ export default function QuantStrategies() {
                 return (
                   <Card key={s.key} title={s.name} sub={<code>{s.key}</code>} actions={<Link className="btn sm primary" to={`/backtesting?strategy=${s.key}`}>Configure backtest</Link>}>
                     <p className="text2" style={{ marginTop: 0 }}>{s.description}</p>
-                    <table className="dt">
+                    <div className="table-wrap" tabIndex={0} role="region" aria-label={`${s.name} parameters`}>
+                    <table className="dt params-table">
                       <thead><tr><th>Parameter</th><th>Default</th><th>Range / choices</th><th>Description</th></tr></thead>
                       <tbody>
                         {s.params.map((p) => (
                           <tr key={p.name}>
-                            <td className="mono">{p.name}</td><td className="mono">{String(p.default)}</td>
-                            <td className="small">{p.choices ? p.choices.join(" | ") : p.minimum != null ? `${p.minimum} – ${p.maximum}` : p.type}</td>
+                            <td className="mono">{p.name}</td><td className="mono" data-label="Default">{String(p.default)}</td>
+                            <td className="small" data-label="Range">{p.choices ? p.choices.join(" | ") : p.minimum != null ? `${p.minimum} – ${p.maximum}` : p.type}</td>
                             <td className="wrap small text2">{p.description}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    </div>
                     {runs.length > 0 && (
                       <>
                         <div className="divider" />
                         <div className="small text2" style={{ marginBottom: 4 }}>Recent backtests</div>
+                        <div className="table-wrap" tabIndex={0} role="region" aria-label={`${s.name}: recent backtests`}>
                         <table className="dt"><tbody>
                           {runs.map((b) => (
                             <tr key={b.id}>
@@ -54,6 +57,7 @@ export default function QuantStrategies() {
                             </tr>
                           ))}
                         </tbody></table>
+                        </div>
                       </>
                     )}
                   </Card>

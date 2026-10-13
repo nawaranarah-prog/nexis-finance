@@ -45,7 +45,9 @@ export function sectorColor(theme: "light" | "dark", sector: string | null | und
 }
 
 /** Chart text follows the same rule as page text: never under 14px on phones. */
-export const fs = (n: number) => (typeof window !== "undefined" && window.matchMedia("(max-width: 480px)").matches ? Math.max(n, 14) : n);
+/** Phones (≤ 480px): chart text is at least 14px there, and wide fixed margins give way to automargin. */
+export const phone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 480px)").matches;
+export const fs = (n: number) => (phone() ? Math.max(n, 14) : n);
 
 export function baseLayout(theme: "light" | "dark", overrides: Partial<Layout> = {}): Partial<Layout> {
   const c = INK[theme];
