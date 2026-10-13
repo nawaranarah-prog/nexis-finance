@@ -2,10 +2,18 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMe } from "../components/market";
-import { annualText, bestAnnualSaving, priceText, startCheckout, tierOf, useBilling, usePlans, type PlanKey } from "../components/pro";
+import { annualText, bestAnnualSaving, money, priceText, startCheckout, tierOf, useBilling, usePlans, type PlanKey } from "../components/pro";
 import { Seg } from "../components/ui";
 import { api } from "../services/api";
 import type { AnyObj } from "../types/api";
+
+/** What checkout charges for a price and when it renews. */
+function chargeText(p: AnyObj): string {
+  const amount = money(p.amount, p.currency);
+  return p.interval === "year"
+    ? `Charged today: ${amount} for 12 months. Renews every year at ${amount} until you cancel.`
+    : `Charged today: ${amount}. Renews every month at ${amount} until you cancel.`;
+}
 
 /** The pricing page. Every price, limit and capability comes from GET /api/billing/plans (backend/app/core/plans.py). */
 export default function Pro() {
@@ -74,6 +82,7 @@ export default function Pro() {
             <div className="pro-amount">{t.id === "free" ? "AED 0" : priceText(priceOf(t))}</div>
             {t.id !== "free" && interval === "year" && priceOf(t).annual && <p className="pro-annual small">{annualText(priceOf(t))}</p>}
             {t.id !== "free" && interval === "month" && t.prices?.year?.annual && <p className="pro-annual xs muted">Or {priceText({ ...t.prices.year, interval: "year" })} billed annually upfront.</p>}
+            {t.id !== "free" && <p className="pro-terms xs" data-testid={`terms-${t.id}`}>{chargeText(priceOf(t))}</p>}
             <ul className="pro-list">{items.map((x) => <li key={x}>{x}</li>)}</ul>
             {action(t)}
           </section>
@@ -95,9 +104,9 @@ export default function Pro() {
         <h2 className="np-h">Good to know</h2>
         <dl>
           <dt>How do I pay?</dt><dd>{yearly ? "Monthly, or annually as one upfront payment for 12 months," : "Monthly,"} through Stripe's secure checkout: {p.payment_methods.join(", ")}. Prices are in UAE dirhams (AED). Nexis never sees or stores your card details.</dd>
-          <dt>Can I switch plans or billing period?</dt><dd>Yes, in Settings → Billing, which shows exactly what happens before you confirm. Upgrading charges the difference for the rest of your current period; moving down credits the unused part to your next invoice (credits aren't refunded). Moving to annual billing charges the annual price today, minus a credit for the unused part of your current period, and your plan then renews a year from today.</dd>
+          <dt>Can I switch plans or billing period?</dt><dd>Yes, in Settings → Billing. Before anything changes you see Stripe's figures: what's charged today, any credit, and the renewal amount and date. A change that costs something starts only once that payment succeeds; until then your plan stays as it is. Upgrading charges the difference for the rest of your current period; moving down credits the unused part to your next invoice (credits aren't refunded). Moving to annual billing charges the annual price today, minus a credit for the unused part of your current period, and your plan then renews a year from today.</dd>
           <dt>What happens if I cancel?</dt><dd>{p.cancellation}</dd>
-          <dt>What if a payment fails?</dt><dd>Stripe retries it and we'll tell you. You keep your plan while it's being retried; update your card in Manage billing.</dd>
+          <dt>What if a payment fails?</dt><dd>Stripe retries it and we'll tell you. You keep your plan for up to 14 days while it's being retried; update your card in Manage billing. After that the account moves to Free until the payment succeeds.</dd>
         </dl>
         <p className="xs muted">Nexis Finance provides information, not investment advice. See the <Link to="/terms">Terms of Use</Link> and <Link to="/disclaimer">Disclaimer</Link>.</p>
       </section>
@@ -109,10 +118,12 @@ export default function Pro() {
 export function ProWelcome() {
   const [sp] = useSearchParams();
   const qc = useQueryClient();
-  const [state, setState] = useState<"activating" | "paid" | "waiting">("activating");
+  // checking: asking Stripe (via the server) · paid: the plan is active · processing: paid but not confirmed yet ·
+  // incomplete: the checkout wasn't finished · failed: the payment didn't go through · waiting: still no answer
+  const [state, setState] = useState<"checking" | "paid" | "processing" | "incomplete" | "failed" | "waiting">("checking");
   const [name, setName] = useState("your plan");
   const [billing, setBilling] = useState<string | null>(null);
-  const fromCheckout = !!sp.get("session_id");
+  const [test, setTest] = useState(false);
   useEffect(() => {
     const sid = sp.get("session_id");
     let tries = 0;
@@ -123,15 +134,27 @@ export function ProWelcome() {
       try {
         const s: AnyObj = sid ? await api.post("/billing/confirm", { session_id: sid }) : await api.get("/billing/status");
         if (s.paid) {
-          setName(s.plan_name); setBilling(s.billing ? `${s.billing}${s.interval === "year" ? ", billed annually upfront" : ""}` : null); setState("paid"); qc.setQueryData(["billing-status"], s); qc.invalidateQueries({ queryKey: ["advisor-status"] });
+          setName(s.plan_name); setBilling(s.billing ? `${s.billing}${s.interval === "year" ? ", billed annually upfront" : ""}` : null); setTest(!!s.test_subscription);
+          setState("paid"); qc.setQueryData(["billing-status"], s); qc.invalidateQueries({ queryKey: ["advisor-status"] });
           return;
         }
+        const c: AnyObj | null = s.checkout ?? null;
+        if (c?.status === "open") { setState("incomplete"); return; }  // the member came back without paying
+        if (c?.subscription_status === "incomplete_expired" || c?.status === "expired") { setState("failed"); return; }
+        if (c?.status === "complete") setState("processing");  // paid or processing at Stripe; waiting for confirmation
       } catch { /* the webhook may still be on its way */ }
       if (tries < 20) window.setTimeout(check, 2000); else setState("waiting");
     };
     void check();
     return () => { stop = true; };
   }, [sp, qc]);
+  const head: Record<string, [string, string]> = {
+    checking: ["Checking your payment with Stripe…", "This usually takes a few seconds."],
+    processing: ["Your payment is being confirmed.", "Stripe is still processing it. Your plan starts as soon as Stripe confirms the payment — this page updates on its own."],
+    incomplete: ["Checkout wasn't completed.", "Nothing was charged and your plan hasn't changed. You can start again whenever you like."],
+    failed: ["The payment didn't go through.", "Nothing was charged and your plan hasn't changed. Try again with another card."],
+    waiting: ["We haven't heard back from Stripe yet.", "Your plan updates on its own once Stripe confirms the payment. Check Settings → Billing shortly. You won't be charged twice."],
+  };
   return (
     <div className="np pro-page">
       <header className="np-head">
@@ -139,13 +162,14 @@ export function ProWelcome() {
         {state === "paid" ? (
           <>
             <h1>Welcome to {name}.</h1>
-            <p className="np-lede">Your new limits are active now.{billing && <> Billing: <b>{billing}</b>.</>} Stripe has emailed your receipt.</p>
+            <p className="np-lede">Your new limits are active now.{billing && <> Billing: <b>{billing}</b>.</>} {test ? "This was a Stripe test-mode (Sandbox) payment: no real money was charged." : "Stripe has emailed your receipt."}</p>
             <div className="np-head-actions"><Link className="btn primary" to="/my-nexis/investments">My Nexis</Link><Link className="btn" to="/advisor">Ask the AI Advisor</Link><Link className="btn ghost" to="/settings#plan">Billing</Link></div>
           </>
         ) : (
           <>
-            <h1>{fromCheckout ? "Your payment was received. We're activating your plan now." : "Checking your plan…"}</h1>
-            <p className="np-lede" role="status">{state === "activating" ? "This usually takes a few seconds." : "It's taking longer than usual — your plan will update on its own. Check Settings → Billing shortly. You won't be charged twice."}</p>
+            <h1>{head[state][0]}</h1>
+            <p className="np-lede" role="status">{head[state][1]}</p>
+            {(state === "incomplete" || state === "failed") && <div className="np-head-actions"><Link className="btn primary" to="/pricing">Back to plans</Link></div>}
           </>
         )}
       </header>

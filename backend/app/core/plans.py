@@ -139,12 +139,16 @@ def allows(tier: str, capability: str) -> bool:
     return tier in CAPABILITIES[capability]["tiers"]
 
 
+def money_text(amount: float) -> str:
+    """An AED amount as members see it: "AED 29", "AED 40.17"."""
+    return f"AED {amount:,.2f}" if round(amount, 2) % 1 else f"AED {amount:,.0f}"
+
+
 def price_label(price_key: str | None) -> str | None:
     p = PRICES.get(price_key or "")
     if not p:
         return "Your existing price (unchanged)" if (price_key or "").endswith("_legacy") else None
-    amount = p["amount_cents"] / 100
-    return f"AED {amount:,.2f}/{p['interval']}" if amount % 1 else f"AED {amount:,.0f}/{p['interval']}"
+    return f"{money_text(p['amount_cents'] / 100)}/{p['interval']}"
 
 
 def public() -> dict[str, Any]:

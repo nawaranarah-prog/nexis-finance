@@ -27,9 +27,17 @@ class CheckoutIn(_Base):
     plan: str = Field(pattern=PLAN_PATTERN)
 
 
+class PreviewIn(_Base):
+    plan: str = Field(pattern=PLAN_PATTERN)
+
+
 class ChangePlanIn(_Base):
     plan: str = Field(pattern=PLAN_PATTERN)
     keep: list[str] | None = Field(default=None, max_length=20)
+    # From the preview the member confirmed: the amount due today (fils) and Stripe's proration timestamp. The server
+    # recalculates both with Stripe; they only make sure nothing is charged that the member didn't see.
+    expected_amount: int | None = Field(default=None, ge=0, le=10_000_000)
+    proration_date: int | None = Field(default=None, ge=0)
 
 
 class ConfirmIn(_Base):
@@ -52,11 +60,33 @@ def checkout(req: CheckoutIn, request: Request, user: User = Depends(auth.requir
     return billing.checkout(db, user, req.plan)
 
 
+@router.post("/billing/change-plan/preview")
+def preview_change(req: PreviewIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """What a plan change costs today and when it takes effect (Stripe's calculation). Changes nothing."""
+    ratelimit.hit(db, f"billing-preview:{user.id}", 30)
+    return billing.preview_change(db, user, req.plan)
+
+
 @router.post("/billing/change-plan")
 def change_plan(req: ChangePlanIn, user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Switch between Plus and Pro on the same subscription (prorated by Stripe)."""
+    """Apply a reviewed change (tier or billing period) on the same subscription. The new plan starts once Stripe has
+    the payment; if the member's action is needed, the response carries Stripe's hosted payment page."""
     ratelimit.hit(db, f"billing-change:{user.id}", 10)
-    return billing.change_plan(db, user, req.plan, req.keep)
+    return billing.change_plan(db, user, req.plan, req.keep, req.expected_amount, req.proration_date)
+
+
+@router.post("/billing/pending/pay")
+def pay_pending(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, str]:
+    """Stripe's hosted page to pay for a plan change that's waiting for payment."""
+    ratelimit.hit(db, f"billing-change:{user.id}", 10)
+    return billing.pending_payment_url(db, user)
+
+
+@router.post("/billing/pending/cancel")
+def cancel_pending(user: User = Depends(auth.require_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Drop a plan change that's waiting for payment; the current plan continues."""
+    ratelimit.hit(db, f"billing-change:{user.id}", 10)
+    return billing.cancel_pending_change(db, user)
 
 
 @router.post("/billing/confirm")

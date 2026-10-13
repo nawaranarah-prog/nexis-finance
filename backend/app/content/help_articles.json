@@ -375,7 +375,7 @@
         "card",
         "apple pay"
       ],
-      "body": "**Subscribe:** open the pricing page, choose Plus or Pro, and pay on Stripe's secure checkout. Your plan updates once Stripe confirms the payment.\n\n**Switch between Plus and Pro:** go to **Settings → Billing → Change plan**. Upgrading charges the difference for the rest of the month now; if that payment fails, your plan doesn't change. Moving to Plus credits the unused part to your next invoice. If you have more active investments than Plus allows, you choose which to keep first.\n\nPayment methods available are shown on the pricing page.",
+      "body": "**Subscribe:** open the pricing page, choose Plus or Pro, and pay on Stripe's secure checkout. Your plan updates once Stripe confirms the payment.\n\n**Switch plan or billing period:** go to **Settings → Billing → Change plan** and pick a plan. Before anything changes, Nexis shows Stripe's figures: what you'll be charged today, any credit, and the renewal amount and date. Confirm to go ahead.\n\n- **Moving up** (Plus → Pro, or monthly → annual): you pay the amount shown, and the new plan starts as soon as that payment succeeds. If your card is declined or your bank asks you to confirm, you finish the payment on Stripe's secure page; until then nothing changes. You can also cancel a change that's waiting for payment.\n- **Moving down** (Pro → Plus, or annual → monthly): nothing to pay today; the change happens immediately and the unused part of your current plan becomes a credit used on your next invoices (not refunded). If you have more active investments than the new plan allows, you choose which to keep first.\n\nPayment methods available are shown on the pricing page.",
       "links": [
         {
           "label": "Compare plans",
@@ -426,7 +426,7 @@
         "payment method",
         "billing problem"
       ],
-      "body": "If a renewal payment fails, you keep your plan while Stripe retries, and Nexis shows *Your payment needs attention*.\n\n1. Open **Settings → Billing → Manage billing**.\n2. Update your payment method in Stripe's billing portal.\n\nIf the retries all fail, the subscription ends and the account moves to Free. Your data isn't deleted.",
+      "body": "If a renewal payment fails, you keep your plan for up to 14 days while Stripe retries, and Nexis shows *Your payment needs attention*. After 14 days without a successful payment, the account moves to Free until the payment goes through.\n\n1. Open **Settings → Billing → Manage billing**.\n2. Update your payment method in Stripe's billing portal.\n\nIf the retries all fail, the subscription ends and the account moves to Free. Your data isn't deleted.",
       "links": [
         {
           "label": "Open Billing settings",

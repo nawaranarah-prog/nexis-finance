@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signUp } from "../support/account";
 import { mockApi } from "../support/mockApi";
+import type { AnyObj } from "../../src/types/api";
 
 /* Prices come from the server (backend/app/core/plans.py). Annual plans appear only when the server lists them; they
    are always described as one upfront payment for 12 months, with the real saving against 12 monthly payments. */
@@ -52,46 +53,110 @@ test("annual billing: upfront price, monthly equivalent and real saving; checkou
   await expect.poll(() => sent).toEqual({ plan: "plus_yearly" });
 });
 
-test("a yearly subscriber's plan change offers every plan on sale with its own price and honest terms", async ({ page }) => {
-  await signUp(page, "yrs");
-  await withAnnual(page);
+async function asSubscriber(page: Page, extra: AnyObj) {
   await page.route("**/api/billing/status", async (route) => {
     const r = await route.fetch();
-    await route.fulfill({ response: r, json: { ...(await r.json()), paid: true, plan: "plus", plan_name: "Nexis Plus", billing: "AED 229/year", interval: "year",
-      price_key: "plus_yearly", can_change_plan: true, can_manage: true, renews_at: "2027-10-11T00:00:00Z" } });
+    await route.fulfill({ response: r, json: { ...(await r.json()), paid: true, can_change_plan: true, can_manage: true, ...extra } });
   });
-  let sent: unknown = null;
-  await page.route("**/api/billing/change-plan", async (route) => { sent = route.request().postDataJSON(); await route.fulfill({ status: 503, json: { error: { message: "mock" } } }); });
+}
+
+// Stripe's figures for each target plan, as POST /api/billing/change-plan/preview returns them (billing_stripe._describe).
+const QUOTES: Record<string, AnyObj> = {
+  pro_yearly: { plan: "pro_yearly", plan_name: "Nexis Pro", billing: "AED 599/year", amount_due: 370, amount_due_minor: 37000, credit: 0, currency: "AED",
+    effective: "after_payment", renews_at: "2027-10-11T00:00:00Z", proration_date: 1791900000,
+    summary: "You'll pay AED 370 now. Nexis Pro (AED 599/year) starts as soon as that payment succeeds; until then your current plan stays exactly as it is." },
+  plus_monthly: { plan: "plus_monthly", plan_name: "Nexis Plus", billing: "AED 29/month", amount_due: 0, amount_due_minor: 0, credit: 160.5, currency: "AED",
+    effective: "immediately", renews_at: "2026-11-13T00:00:00Z", proration_date: 1791900000,
+    summary: "Nothing to pay today. Nexis Plus (AED 29/month) starts immediately. The unused part of your current plan becomes a credit of AED 160.50, used on your next invoices (not refunded). Your billing period changes to monthly." },
+};
+
+async function withQuotes(page: Page, onChange: (body: AnyObj) => AnyObj | Promise<AnyObj>) {
+  await page.route("**/api/billing/change-plan/preview", async (route) => {
+    const plan = route.request().postDataJSON().plan;
+    await route.fulfill({ json: QUOTES[plan] ?? { ...QUOTES.pro_yearly, plan } });
+  });
+  await page.route("**/api/billing/change-plan", async (route) => { await route.fulfill({ json: await onChange(route.request().postDataJSON()) }); });
+}
+
+test("changing plan shows Stripe's figures and confirms that exact amount", async ({ page }) => {
+  await signUp(page, "yrs");
+  await withAnnual(page);
+  await asSubscriber(page, { plan: "plus", plan_name: "Nexis Plus", billing: "AED 229/year", interval: "year", price_key: "plus_yearly", status: "active",
+    renews_at: "2027-10-11T00:00:00Z" });
+  const sent: AnyObj[] = [];
+  await withQuotes(page, (b) => { sent.push(b); return { plan: "plus", plan_name: "Nexis Plus", paid: true, change: { result: "changed", message: "You're now on Nexis Plus (AED 29/month)." } }; });
   await page.goto("/settings#plan");
   await expect(page.locator("#plan")).toContainText("AED 229/year · billed annually upfront");
+  await expect(page.locator("#plan")).toContainText("Active");
   await page.getByRole("button", { name: "Change plan" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("You're on Nexis Plus (AED 229/year)");
   await expect(dialog.getByRole("radio")).toHaveCount(3);  // Pro annual, Plus monthly, Pro monthly
-  await expect(dialog.getByRole("radio").first()).toBeChecked();
-  await expect(dialog).toContainText("Nexis Pro, billed annually · AED 599/year");
-  await expect(dialog.getByTestId("cp-terms")).toContainText("Your renewal date stays");  // same period: date unchanged
+  const terms = dialog.getByTestId("cp-terms");
+  await expect(terms).toContainText("Charged todayAED 370");
+  await expect(terms).toContainText("As soon as the payment succeeds");
+  await expect(dialog.getByRole("button", { name: "Pay AED 370 and switch" })).toBeEnabled();
   await dialog.getByLabel(/Nexis Plus · AED 29\/month/).check();
-  await expect(dialog.getByTestId("cp-terms")).toContainText("renewal date changes to today");
-  await expect(dialog.getByTestId("cp-terms")).toContainText("it isn't refunded");
+  await expect(terms).toContainText("Charged todayNothing");
+  await expect(terms).toContainText("credit AED 160.50 for the unused part of your current plan");
+  await expect(terms).toContainText("Immediately");
   await dialog.getByRole("button", { name: /Switch to Nexis Plus, billed monthly/ }).click();
-  await expect.poll(() => sent).toEqual({ plan: "plus_monthly" });
+  await expect.poll(() => sent[0]).toEqual({ plan: "plus_monthly", expected_amount: 0, proration_date: 1791900000 });
 });
 
-test("a monthly subscriber moving to annual is told what is charged today", async ({ page }) => {
-  await signUp(page, "mtoy");
+test("a change that needs payment goes to Stripe's page, and the pending change can be paid or cancelled", async ({ page }) => {
+  await signUp(page, "pend");
   await withAnnual(page);
-  await page.route("**/api/billing/status", async (route) => {
-    const r = await route.fetch();
-    await route.fulfill({ response: r, json: { ...(await r.json()), paid: true, plan: "pro", plan_name: "Nexis Pro", billing: "AED 69/month", interval: "month",
-      price_key: "pro_monthly", can_change_plan: true, can_manage: true, renews_at: "2026-11-11T00:00:00Z" } });
+  await asSubscriber(page, { plan: "plus", plan_name: "Nexis Plus", billing: "AED 229/year", interval: "year", price_key: "plus_yearly", status: "active",
+    test_subscription: true, renews_at: "2027-10-11T00:00:00Z" });
+  await withQuotes(page, () => ({ plan: "plus", plan_name: "Nexis Plus", paid: true,
+    change: { result: "payment_required", pay_url: "/pricing?paid=stripe", message: "Your payment of AED 370 needs your attention." } }));
+  await page.goto("/settings#plan");
+  await expect(page.getByTestId("test-subscription")).toContainText("No real money was charged");
+  await page.getByRole("button", { name: "Change plan" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Pay AED 370 and switch" }).click();
+  await expect(page).toHaveURL(/paid=stripe/);  // handed to Stripe's hosted invoice page
+
+  await page.unroute("**/api/billing/status");
+  await asSubscriber(page, { plan: "plus", plan_name: "Nexis Plus", billing: "AED 229/year", interval: "year", price_key: "plus_yearly", status: "active",
+    can_change_plan: false, pending_change: { plan: "pro_yearly", plan_name: "Nexis Pro", billing: "AED 599/year", expires_at: "2026-10-14T18:00:00Z" } });
+  let cancelled = false;
+  await page.route("**/api/billing/pending/cancel", async (route) => {
+    cancelled = true;
+    await route.fulfill({ json: { plan: "plus", plan_name: "Nexis Plus", paid: true, pending_change: null, usage: {} } });
   });
   await page.goto("/settings#plan");
-  await page.getByRole("button", { name: "Change plan" }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel(/Nexis Pro · AED 599\/year/).check();
-  await expect(dialog.getByTestId("cp-terms")).toContainText("You'll be charged AED 599 today for 12 months");
-  await expect(dialog.getByTestId("cp-terms")).toContainText("renews one year from today");
+  const note = page.getByTestId("pending-change");
+  await expect(note).toContainText("Your change to Nexis Pro (AED 599/year) is waiting for payment.");
+  await expect(note).toContainText("Until it's paid you stay on Nexis Plus");
+  await expect(page.getByRole("button", { name: "Change plan" })).toHaveCount(0);
+  await note.getByRole("button", { name: "Cancel the change" }).click();
+  await expect.poll(() => cancelled).toBe(true);
+  await expect(page.getByTestId("pending-change")).toHaveCount(0);
+});
+
+test("the pricing cards say what is charged today and how it renews", async ({ page }) => {
+  await withAnnual(page);
+  await page.goto("/pricing");
+  await expect(page.getByTestId("terms-plus")).toHaveText("Charged today: AED 29. Renews every month at AED 29 until you cancel.");
+  await page.getByRole("radio", { name: /Annual/ }).click();
+  await expect(page.getByTestId("terms-pro")).toHaveText("Charged today: AED 599 for 12 months. Renews every year at AED 599 until you cancel.");
+});
+
+test("coming back from checkout: the page reflects what Stripe says, never the URL", async ({ page }) => {
+  await signUp(page, "back");
+  let answer: AnyObj = { plan: "free", paid: false, checkout: { status: "open", payment_status: "unpaid", subscription_status: null } };
+  await page.route("**/api/billing/confirm", async (route) => { await route.fulfill({ json: answer }); });
+  await page.goto("/pro/welcome?session_id=cs_test_abandoned");
+  await expect(page.locator("h1")).toHaveText("Checkout wasn't completed.");
+  await expect(page.getByText("Nothing was charged and your plan hasn't changed.")).toBeVisible();
+  answer = { plan: "free", paid: false, checkout: { status: "complete", payment_status: "unpaid", subscription_status: "incomplete" } };
+  await page.goto("/pro/welcome?session_id=cs_test_processing");
+  await expect(page.locator("h1")).toHaveText("Your payment is being confirmed.");
+  answer = { plan: "pro", plan_name: "Nexis Pro", paid: true, billing: "AED 69/month", interval: "month", test_subscription: true,
+    checkout: { status: "complete", payment_status: "paid" } };
+  await expect(page.locator("h1")).toHaveText("Welcome to Nexis Pro.", { timeout: 15000 });
+  await expect(page.getByText("This was a Stripe test-mode (Sandbox) payment: no real money was charged.")).toBeVisible();
 });
 
 for (const [w, h] of [[375, 812], [1440, 900]] as const) {

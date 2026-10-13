@@ -15,13 +15,19 @@ Limits, prices and capabilities come from ``app/core/plans.py``. Paid access fol
 status                 paid access  why
 =====================  ===========  ========================================================================
 active, trialing       yes          paid
-past_due               yes          a renewal failed and Stripe is retrying; the member is asked to fix it
+past_due               14 days      a renewal failed and Stripe is retrying; the member is asked to fix it.
+                                    After ``PAST_DUE_GRACE`` from the failure, access drops to Free even if
+                                    Stripe leaves the subscription past_due
 canceled, unpaid       no           the subscription ended / retries were exhausted
 incomplete(_expired)   no           the first payment never completed
 paused                 no           no payment is being collected
 =====================  ===========  ========================================================================
 
 A subscription still marked active whose paid period ended more than ``GRACE`` ago (a missed webhook) is not paid.
+
+Test mode (Stripe Sandbox) never becomes real paid access: a test subscription counts only while the API runs a test
+key, and on production only for an authorised test account (``is_billing_tester``). Once a live key is set, test
+subscriptions count for nobody. A plan change waiting for payment changes nothing until Stripe applies it.
 Cancelling "at period end" keeps the plan until ``current_period_end``. Monthly allowances reset on the 1st of each
 calendar month (UTC) for every plan.
 """
@@ -37,12 +43,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import plans
+from app.core.config import get_settings
 from app.core.errors import NexisError
 from app.db.base import utcnow
 from app.models import Subscription, UsageEvent, User
 
 PAID_STATUSES = frozenset({"active", "trialing", "past_due"})
 GRACE = timedelta(days=2)
+PAST_DUE_GRACE = timedelta(days=14)
 MONTHLY = tuple(k for k, f in plans.FEATURES.items() if f["monthly"])
 WARN_AT = 0.9
 
@@ -71,31 +79,68 @@ def subscription(db: Session, user: User | None) -> Subscription | None:
     return db.scalars(select(Subscription).where(Subscription.user_id == user.id)).first()
 
 
-def sub_is_paid(sub: Subscription | None, now: datetime | None = None) -> bool:
-    if sub is None or sub.status not in PAID_STATUSES:
+def live_key() -> bool:
+    return (get_settings().stripe_secret_key or "").startswith(("sk_live_", "rk_live_"))
+
+
+def is_billing_tester(user: User | None) -> bool:
+    """An authorised Sandbox tester: listed in NEXIS_BILLING_TEST_EMAILS *and* holding that address for real (a verified
+    email, or the admin role). The list alone isn't enough: anyone could register a listed address nobody uses yet."""
+    if user is None or not user.email:
+        return False
+    emails = {e.strip().lower() for e in get_settings().billing_test_emails.split(",") if e.strip()}
+    return user.email.lower() in emails and (user.email_verified_at is not None or user.role == "admin")
+
+
+def mode_counts(sub: Subscription | None, user: User | None) -> bool:
+    """Whether this subscription's Stripe mode may grant paid access here. Live subscriptions always may; a test
+    (Sandbox) one — or one recorded before the mode was stored — never once a live key is set, and on production only
+    for an authorised tester."""
+    if sub is None:
+        return False
+    if sub.livemode is True:
+        return True
+    if live_key():
+        return False
+    return get_settings().env != "production" or is_billing_tester(user)
+
+
+def sub_is_paid(sub: Subscription | None, now: datetime | None = None, user: User | None = None) -> bool:
+    if sub is None or sub.status not in PAID_STATUSES or not mode_counts(sub, user):
         return False
     now = now or utcnow()
-    return not (sub.current_period_end is not None and sub.current_period_end + GRACE < now)
+    if sub.current_period_end is not None and sub.current_period_end + GRACE < now:
+        return False
+    if sub.status == "past_due":  # Stripe is retrying a failed renewal: a bounded grace, never an open-ended free plan
+        since = sub.payment_failed_at or sub.current_period_start
+        if since is None or since + PAST_DUE_GRACE < now:
+            return False
+    return True
 
 
-def sub_tier(sub: Subscription | None, now: datetime | None = None) -> str:
-    if not sub_is_paid(sub, now):
+def sub_tier(sub: Subscription | None, now: datetime | None = None, user: User | None = None) -> str:
+    if not sub_is_paid(sub, now, user):
         return "free"
     return plans.tier_of(sub.plan if sub else None) or "pro"  # a live subscription Nexis can't map was sold as Pro
 
 
-def sub_is_pro(sub: Subscription | None, now: datetime | None = None) -> bool:
-    return sub_tier(sub, now) == "pro"
+def sub_is_pro(sub: Subscription | None, now: datetime | None = None, user: User | None = None) -> bool:
+    return sub_tier(sub, now, user) == "pro"
 
 
 def get_subscription_status(db: Session, user: User | None) -> dict[str, Any]:
     sub = subscription(db, user)
-    return {"subscription": sub, "tier": sub_tier(sub), "paid": sub_is_paid(sub), "status": sub.status if sub else None}
+    return {
+        "subscription": sub,
+        "tier": sub_tier(sub, user=user),
+        "paid": sub_is_paid(sub, user=user),
+        "status": sub.status if sub else None,
+    }
 
 
 def tier_of(db: Session, user: User | None) -> str:
     """The single plan check. Nothing the browser sends is ever consulted."""
-    return sub_tier(subscription(db, user))
+    return sub_tier(subscription(db, user), user=user)
 
 
 def plan_of(db: Session, user: User | None) -> str:

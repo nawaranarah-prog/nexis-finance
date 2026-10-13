@@ -30,8 +30,11 @@ from app.services import billing
 log = get_logger(__name__)
 PRICES_KEY = "billing:stripe-prices"
 HANDLED = {
-    "checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
-    "invoice.paid", "invoice.payment_failed",
+    "checkout.session.completed", "checkout.session.expired", "checkout.session.async_payment_failed",
+    "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
+    "customer.subscription.pending_update_applied", "customer.subscription.pending_update_expired",
+    "invoice.paid", "invoice.payment_failed", "invoice.payment_action_required",
+    "charge.refunded", "charge.dispute.created", "charge.dispute.closed",
 }  # fmt: skip
 
 
@@ -132,9 +135,18 @@ def _row(db: Session, user: User) -> Subscription:
 
 def _customer(db: Session, user: User) -> str:
     sub = _row(db, user)
+    if sub.customer_id and live_mode() and sub.livemode is not True:
+        # Live payments started: Sandbox ids don't exist in live mode and a test subscription never carries over.
+        log.info("account %s: starting live billing; Sandbox customer and subscription are not reused", user.id)
+        sub.customer_id = sub.subscription_id = sub.price_id = sub.plan = sub.status = None
+        sub.current_period_start = sub.current_period_end = sub.canceled_at = sub.payment_failed_at = None
+        sub.pending_plan = sub.pending_invoice_id = sub.pending_expires_at = None
+        sub.cancel_at_period_end, sub.livemode = False, None
+        db.flush()
     if not sub.customer_id:
+        mode = "live" if live_mode() else "test"
         c = stripe.Customer.create(api_key=_key(), email=user.email or None, metadata={"nexis_user_id": str(user.id)},
-                                   idempotency_key=f"nexis-customer-{user.id}")  # fmt: skip
+                                   idempotency_key=f"nexis-customer-{mode}-{user.id}")  # fmt: skip
         sub.customer_id = c["id"]
         db.commit()
     return sub.customer_id
@@ -227,38 +239,145 @@ def set_cancel_at_period_end(db: Session, sub: Subscription, cancel: bool) -> No
             investments.remind_before_downgrade(db, user)
 
 
-def change_plan(db: Session, sub: Subscription, plan: str) -> None:
-    """Move a live subscription between Plus and Pro (same subscription, new price).
+def _money(minor: int) -> str:
+    return plans.money_text(minor / 100)
 
-    Upgrades are charged now for the rest of the period (Stripe proration, invoiced immediately) and refused if that
-    payment fails, so nobody gets Pro for a payment that didn't go through. Downgrades take effect now with the unused
-    part credited to the next invoice. Stripe's answer is what's saved.
+
+def _preview_invoice(sub: Subscription, item_id: str, price: str, proration_date: int) -> Any:
+    """Stripe's own calculation of what the change invoices today (the same parameters the change itself uses)."""
+    return stripe.Invoice.create_preview(
+        api_key=_key(), customer=sub.customer_id, subscription=sub.subscription_id,
+        subscription_details={"items": [{"id": item_id, "price": price}], "proration_behavior": "always_invoice",
+                              "proration_date": proration_date},
+    )  # fmt: skip
+
+
+def _item(sub: Subscription) -> Any:
+    current = _retrieve(sub.subscription_id)
+    item = (_get(current, "items", "data") or [None])[0]
+    if item is None:
+        raise billing.BillingUnavailable("We couldn't read your subscription. Please try again.")
+    return current, item
+
+
+def _describe(sub: Subscription, plan: str, inv: Any, proration_date: int) -> dict[str, Any]:
+    want = plans.PRICES[plan]
+    due, total = int(_get(inv, "amount_due") or 0), int(_get(inv, "total") or 0)
+    credit = max(0, -total)
+    ends = [int(e) for e in (_get(ln, "period", "end") for ln in _get(inv, "lines", "data") or []) if e]
+    renews = _ts(max(ends)) if ends else sub.current_period_end
+    cur_tier, new_tier = plans.tier_of(sub.plan) or "pro", want["tier"]
+    interval_change = want["interval"] != billing.interval_of(sub.plan)
+    kind = "upgrade" if plans.rank(new_tier) > plans.rank(cur_tier) else "downgrade" if plans.rank(new_tier) < plans.rank(cur_tier) else "billing_period"
+    name = plans.NAMES[new_tier]
+    when = f"{renews.day} {renews:%B %Y}" if renews else None
+    if due > 0:
+        summary = (f"You'll pay {_money(due)} now. {name} ({plans.price_label(plan)}) starts as soon as that payment succeeds; "
+                   "until then your current plan stays exactly as it is.")
+    else:
+        summary = f"Nothing to pay today. {name} ({plans.price_label(plan)}) starts immediately."
+    if credit:
+        summary += f" The unused part of your current plan becomes a credit of {_money(credit)}, used on your next invoices (not refunded)."
+    summary += f" Then {plans.price_label(plan)}, renewing on {when}." if when else ""
+    if interval_change:
+        summary += f" Your billing period changes to {'yearly (one upfront payment for 12 months)' if want['interval'] == 'year' else 'monthly'}."
+    return {
+        "plan": plan, "plan_name": name, "billing": plans.price_label(plan), "from_billing": plans.price_label(sub.plan),
+        "kind": kind, "interval_change": interval_change, "currency": want["currency"].upper(),
+        "amount_due": due / 100, "amount_due_minor": due, "credit": credit / 100,
+        "renewal_amount": want["amount_cents"] / 100, "renews_at": renews.isoformat() + "Z" if renews else None,
+        "effective": "after_payment" if due > 0 else "immediately",
+        "proration_date": proration_date, "summary": summary,
+    }  # fmt: skip
+
+
+def preview_change(db: Session, sub: Subscription, plan: str) -> dict[str, Any]:
+    """What this plan change costs and means, as Stripe calculates it. Changes nothing."""
+    price = billing.price_ids()[plan]
+    pd = int(utcnow().replace(tzinfo=UTC).timestamp())
+    try:
+        _, item = _item(sub)
+        inv = _preview_invoice(sub, _get(item, "id"), price, pd)
+    except stripe.StripeError as exc:
+        log.warning("stripe change preview failed: %s", exc.__class__.__name__)
+        raise billing.BillingUnavailable("We couldn't work out the cost of this change. Please try again in a moment.") from exc
+    return _describe(sub, plan, inv, pd)
+
+
+def change_plan(db: Session, sub: Subscription, plan: str, expected_amount: int, proration_date: int) -> dict[str, Any]:
+    """Apply a plan change the member reviewed, as a Stripe *pending update*.
+
+    The amount due today is recalculated by Stripe with the same proration date; if it differs from what the member
+    confirmed, nothing changes. ``payment_behavior="pending_if_incomplete"`` means Stripe switches the price only once
+    the invoice is paid: a declined card or a 3-D Secure check leaves the current plan untouched, and the member pays
+    on Stripe's hosted invoice page. Nothing here grants anything: the plan is read back from Stripe (``sync``).
     """
     price = billing.price_ids()[plan]
+    now = int(utcnow().replace(tzinfo=UTC).timestamp())
+    if not 0 <= now - int(proration_date) <= 30 * 60:
+        raise billing.ChangeNeedsReview("This quote has expired. Please review the change again.")
     try:
-        current = _retrieve(sub.subscription_id)
-        item = (_get(current, "items", "data") or [None])[0]
-        if item is None:
-            raise billing.BillingUnavailable("We couldn't read your subscription. Please try again.")
-        cur_tier, new_tier = plans.tier_of(sub.plan) or "pro", plans.PRICES[plan]["tier"]
-        to_yearly = plans.PRICES[plan]["interval"] == "year" and billing.interval_of(sub.plan) != "year"
-        # charged now (and refused if the payment fails): a higher tier, or moving to yearly billing
-        upgrade = plans.rank(new_tier) > plans.rank(cur_tier) or (to_yearly and plans.rank(new_tier) >= plans.rank(cur_tier))
+        _, item = _item(sub)
+        fresh = _describe(sub, plan, _preview_invoice(sub, _get(item, "id"), price, int(proration_date)), int(proration_date))
+    except stripe.StripeError as exc:
+        log.warning("stripe change preview failed: %s", exc.__class__.__name__)
+        raise billing.BillingUnavailable("We couldn't change your plan. Please try again in a moment.") from exc
+    if fresh["amount_due_minor"] != int(expected_amount):
+        raise billing.ChangeNeedsReview("The amount for this change has changed. Please review it again.", details={"preview": fresh})
+    try:
         updated = stripe.Subscription.modify(
             sub.subscription_id, api_key=_key(), items=[{"id": _get(item, "id"), "price": price}],
-            proration_behavior="always_invoice" if upgrade else "create_prorations",
-            payment_behavior="error_if_incomplete" if upgrade else "allow_incomplete",
-            cancel_at_period_end=False, metadata={"nexis_user_id": str(sub.user_id), "nexis_plan": plan},
-            idempotency_key=f"nexis-plan-{sub.subscription_id}-{plan}-{int(utcnow().timestamp() // 60)}",
+            proration_behavior="always_invoice", proration_date=int(proration_date), payment_behavior="pending_if_incomplete",
+            expand=["latest_invoice"], idempotency_key=f"nexis-plan-{sub.subscription_id}-{plan}-{int(proration_date)}",
         )  # fmt: skip
     except stripe.CardError as exc:
         raise billing.PaymentFailed("Your card was declined, so your plan wasn't changed. Update your payment method and try again.") from exc
     except stripe.StripeError as exc:
         log.warning("stripe plan change failed: %s", exc.__class__.__name__)
         raise billing.BillingUnavailable("We couldn't change your plan. Please try again in a moment.") from exc
+    if _get(updated, "pending_update"):
+        inv = _get(updated, "latest_invoice")
+        url = _get(inv, "hosted_invoice_url") if not isinstance(inv, str) else None
+        sync(db, updated, sub.user_id)
+        db.commit()
+        return {"result": "payment_required", "pay_url": url,
+                "message": f"Your payment of {_money(fresh['amount_due_minor'])} needs your attention. {fresh['plan_name']} starts once it's "
+                           "paid; until then your current plan stays as it is."}  # fmt: skip
+    try:
+        updated = stripe.Subscription.modify(sub.subscription_id, api_key=_key(), metadata={"nexis_user_id": str(sub.user_id), "nexis_plan": plan})
+    except stripe.StripeError as exc:  # the plan already changed and was paid; only the bookkeeping failed
+        log.error("plan changed but follow-up update failed for %s: %s", sub.subscription_id, exc.__class__.__name__)
     sync(db, updated, sub.user_id)
     db.commit()
     reconcile_quietly(db, sub.user_id)
+    return {"result": "changed", "message": f"You're now on {fresh['plan_name']} ({fresh['billing']})."}
+
+
+def pending_invoice_url(sub: Subscription) -> str:
+    """Stripe's hosted page for the invoice a pending plan change waits on."""
+    try:
+        inv = stripe.Invoice.retrieve(sub.pending_invoice_id, api_key=_key())
+    except stripe.StripeError as exc:
+        raise billing.BillingUnavailable("We couldn't open the payment page. Please try again in a moment.") from exc
+    if _get(inv, "status") != "open" or not _get(inv, "hosted_invoice_url"):
+        raise ValidationFailed("This payment is no longer open. Refresh the page to see your current plan.")
+    return _get(inv, "hosted_invoice_url")
+
+
+def cancel_pending(db: Session, sub: Subscription) -> None:
+    """Void the unpaid invoice of a pending plan change, so it can never be paid and the change never applies. The
+    current plan continues unchanged; nothing is charged."""
+    inv_id = sub.pending_invoice_id
+    try:
+        stripe.Invoice.void_invoice(inv_id, api_key=_key())
+    except stripe.InvalidRequestError:
+        inv = stripe.Invoice.retrieve(inv_id, api_key=_key())
+        if _get(inv, "status") == "paid":
+            raise ValidationFailed("That payment already went through, so the change has been applied.") from None
+    except stripe.StripeError as exc:
+        raise billing.BillingUnavailable("We couldn't cancel the change. Please try again in a moment.") from exc
+    sub.pending_plan, sub.pending_expires_at, sub.pending_invoice_id = None, None, f"void:{inv_id}"
+    db.commit()
 
 
 def reconcile_quietly(db: Session, user_id: int | None) -> None:
@@ -354,6 +473,23 @@ def sync(db: Session, obj: Any, user_id: int | None = None) -> Subscription | No
     row.current_period_end = _ts(_get(obj, "current_period_end") or _get(item, "current_period_end"))
     row.cancel_at_period_end = bool(_get(obj, "cancel_at_period_end")) or bool(_get(obj, "cancel_at"))
     row.canceled_at = _ts(_get(obj, "canceled_at"))
+    if _get(obj, "livemode") is not None:
+        row.livemode = bool(_get(obj, "livemode"))
+    # A plan change waiting for payment: recorded so the member can pay or cancel it; it grants nothing (the price
+    # above is still the current one until Stripe applies the update).
+    pu = _get(obj, "pending_update")
+    if pu:
+        pitem = (_get(pu, "subscription_items") or [None])[0]
+        pprice = _get(pitem, "price")
+        pprice = pprice if isinstance(pprice, str) else _get(pprice, "id")
+        inv = _get(obj, "latest_invoice")
+        inv_id = inv if isinstance(inv, str) or inv is None else _get(inv, "id")
+        if row.pending_invoice_id != f"void:{inv_id}":  # a change the member canceled stays canceled
+            row.pending_plan, row.pending_invoice_id, row.pending_expires_at = _plan_for(pprice), inv_id, _ts(_get(pu, "expires_at"))
+    else:
+        row.pending_plan, row.pending_expires_at = None, None
+        if not (row.pending_invoice_id or "").startswith("void:"):
+            row.pending_invoice_id = None
     if status == "active":
         row.payment_failed_at = None
     return row
@@ -425,8 +561,9 @@ def _retrieve(sub_id: str) -> Any:
     return stripe.Subscription.retrieve(sub_id, api_key=_key())
 
 
-def confirm_session(db: Session, user: User, session_id: str) -> None:
-    """Fetch the Checkout Session from Stripe and, if it belongs to this member, sync its subscription."""
+def confirm_session(db: Session, user: User, session_id: str) -> dict[str, Any]:
+    """Fetch the Checkout Session from Stripe and, if it belongs to this member, sync its subscription. Returns what
+    Stripe says about the checkout, so the page can tell "paid", "processing" and "not completed" apart."""
     if not session_id.startswith("cs_"):
         raise ValidationFailed("unknown checkout session")
     try:
@@ -436,9 +573,13 @@ def confirm_session(db: Session, user: User, session_id: str) -> None:
     if str(_get(s, "client_reference_id")) != str(user.id):
         raise ValidationFailed("unknown checkout session")  # someone else's session looks exactly like a missing one
     sub_id = _get(s, "subscription")
+    sub_status = None
     if sub_id:
-        sync(db, _retrieve(sub_id if isinstance(sub_id, str) else _get(sub_id, "id")), user.id)
+        latest = _retrieve(sub_id if isinstance(sub_id, str) else _get(sub_id, "id"))
+        sub_status = _get(latest, "status")
+        sync(db, latest, user.id)
         db.commit()
+    return {"status": _get(s, "status"), "payment_status": _get(s, "payment_status"), "subscription_status": sub_status}
 
 
 # ------------------------------------------------------------------ webhooks
@@ -475,7 +616,35 @@ def handle_webhook(db: Session, payload: bytes, signature: str | None) -> dict[s
         return {"received": True, "duplicate": True}
     obj = event["data"]["object"]
     row: Subscription | None = None
-    if etype == "checkout.session.completed":
+    extra: dict[str, Any] = {}
+    if bool(_get(event, "livemode")) != live_mode():
+        # A test event at a live endpoint (or the reverse): it never touches a member's plan.
+        log.error("stripe %s event %s ignored: its mode doesn't match the API key", "live" if _get(event, "livemode") else "test", eid)
+        db.add(BillingEvent(provider="stripe", event_id=eid, event_type=etype, received_at=utcnow(), status="ignored",
+                            details={"object": _get(obj, "id"), "reason": "mode_mismatch"}))  # fmt: skip
+        with contextlib.suppress(IntegrityError):
+            db.commit()
+        return {"received": True, "handled": False}
+    if etype in ("checkout.session.expired", "checkout.session.async_payment_failed"):
+        uid = _get(obj, "client_reference_id")
+        if uid and str(uid).isdigit():
+            row = db.scalars(select(Subscription).where(Subscription.user_id == int(uid))).first()
+            pending = db.get(MarketCache, f"billing:checkout:{uid}")
+            if pending is not None and pending.payload.get("id") == _get(obj, "id"):
+                db.delete(pending)  # an abandoned checkout is never reused; nothing was granted
+    elif etype.startswith("charge."):
+        # Refunds and disputes don't change a plan by themselves: access follows the subscription. The owner decides
+        # in Stripe (cancelling the subscription there moves the member to Free through customer.subscription.deleted).
+        charge = obj if etype == "charge.refunded" else None
+        cust = _get(obj, "customer")
+        if cust is None and charge is None and _get(obj, "charge"):
+            with contextlib.suppress(stripe.StripeError):
+                cust = _get(stripe.Charge.retrieve(_get(obj, "charge"), api_key=_key()), "customer")
+        cust = cust if isinstance(cust, str) else _get(cust, "id")
+        row = db.scalars(select(Subscription).where(Subscription.customer_id == cust)).first() if cust else None
+        extra = {"amount": _get(obj, "amount"), "amount_refunded": _get(obj, "amount_refunded"), "status": _get(obj, "status")}
+        log.warning("stripe %s for account %s (customer %s): review it in the Stripe Dashboard", etype, row.user_id if row else None, cust)
+    elif etype == "checkout.session.completed":
         uid = _get(obj, "client_reference_id")
         sub_id = _get(obj, "subscription")
         if _get(obj, "mode") == "subscription" and sub_id and uid and str(uid).isdigit():
@@ -486,12 +655,16 @@ def handle_webhook(db: Session, payload: bytes, signature: str | None) -> dict[s
         except stripe.InvalidRequestError:
             latest = obj
         row = sync(db, latest)
-    elif etype in ("invoice.paid", "invoice.payment_failed"):
+    elif etype in ("invoice.paid", "invoice.payment_failed", "invoice.payment_action_required"):
         sid = _invoice_subscription(obj)
         if sid:
             row = sync(db, _retrieve(sid))
             if row is not None and row.subscription_id != sid:
                 pass  # an invoice of a superseded or duplicate subscription says nothing about the member's current one
+            elif row is not None and etype == "invoice.payment_action_required":
+                _notify_failed(db, row, _get(obj, "id") or eid)
+            elif row is not None and _get(obj, "billing_reason") == "subscription_update" and etype == "invoice.payment_failed":
+                pass  # a plan change's payment failed: the change simply doesn't happen (pending update); the plan is fine
             elif row is not None and etype == "invoice.payment_failed":
                 row.payment_failed_at = utcnow()
                 db.flush()
@@ -499,7 +672,7 @@ def handle_webhook(db: Session, payload: bytes, signature: str | None) -> dict[s
             elif row is not None:
                 row.payment_failed_at = None
     details = {"object": _get(obj, "id"), "customer": _get(obj, "customer") if isinstance(_get(obj, "customer"), str) else None,
-               "subscription": row.subscription_id if row else None}  # fmt: skip
+               "subscription": row.subscription_id if row else None, **{k: v for k, v in extra.items() if v is not None}}  # fmt: skip
     db.add(BillingEvent(provider="stripe", event_id=eid, event_type=etype, user_id=row.user_id if row else None, received_at=utcnow(),
                         status="processed" if (etype in HANDLED and row is not None) else "ignored", details=details))  # fmt: skip
     try:

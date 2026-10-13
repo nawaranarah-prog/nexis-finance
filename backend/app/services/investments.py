@@ -59,7 +59,7 @@ def _sub(db: Session, user: User) -> Subscription | None:
 def target_tier(db: Session, user: User) -> str:
     """The plan the account is heading to: Free once a scheduled cancellation ends, otherwise the current plan."""
     sub = _sub(db, user)
-    tier = entitlements.sub_tier(sub)
+    tier = entitlements.sub_tier(sub, user=user)
     if sub is not None and tier != "free" and sub.cancel_at_period_end:
         return "free"
     return tier

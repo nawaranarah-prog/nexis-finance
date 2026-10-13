@@ -25,6 +25,8 @@ from tests.helpers import TERMS
 
 SECRET = "whsec_test_secret"
 PLUS, PRO = "price_test_plus", "price_test_pro"
+# Stripe price id -> (amount in fils, interval), for the mocked invoice previews
+PRICE_AMOUNT = {PLUS: (2900, "month"), PRO: (6900, "month"), "price_plus_y": (22900, "year"), "price_pro_y": (59900, "year")}
 
 
 @pytest.fixture
@@ -62,7 +64,7 @@ def stripe_on(monkeypatch, db):  # type: ignore[no-untyped-def]
         db.delete(row)
     db.commit()
     world: dict[str, Any] = {"subs": {}, "created": [], "canceled": [], "modified": [], "sessions": {}, "prices": {}, "expired": [],
-                             "invoices": {}, "refunds": []}  # fmt: skip
+                             "invoices": {}, "refunds": [], "previews": [], "voided": []}  # fmt: skip
     monkeypatch.setattr(stripe.Customer, "create", lambda **kw: {"id": f"cus_{kw['metadata']['nexis_user_id']}"})
 
     def session_create(**kw):  # type: ignore[no-untyped-def]
@@ -73,13 +75,38 @@ def stripe_on(monkeypatch, db):  # type: ignore[no-untyped-def]
         return world["sessions"][sid]
 
     def modify(sid, **kw):  # type: ignore[no-untyped-def]
-        if kw.get("items") and world.get("decline"):
+        if kw.get("items") and world.get("decline") == "raise":
             raise stripe.CardError("Your card was declined.", None, "card_declined")
         world["modified"].append((sid, kw))
-        world["subs"][sid]["cancel_at_period_end"] = kw["cancel_at_period_end"]
+        sub = world["subs"][sid]
+        if "cancel_at_period_end" in kw:
+            sub["cancel_at_period_end"] = kw["cancel_at_period_end"]
         if kw.get("items"):
-            world["subs"][sid]["items"]["data"][0]["price"]["id"] = kw["items"][0]["price"]
-        return world["subs"][sid]
+            new = kw["items"][0]["price"]
+            if kw.get("payment_behavior") == "pending_if_incomplete" and world.get("decline"):
+                # Stripe keeps the current price and records a pending update until the invoice is paid
+                inv = f"in_pending_{len(world['modified'])}"
+                world["invoices"][inv] = {"id": inv, "status": "open", "hosted_invoice_url": f"https://invoice.stripe.com/i/{inv}",
+                                          "amount_paid": 0, "billing_reason": "subscription_update"}  # fmt: skip
+                sub["pending_update"] = {"subscription_items": [{"price": {"id": new}}], "expires_at": int(time.time()) + 82800}
+                sub["latest_invoice"] = world["invoices"][inv]
+            else:
+                sub["items"]["data"][0]["price"]["id"] = new
+                sub["pending_update"] = None
+        return sub
+
+    def create_preview(**kw):  # type: ignore[no-untyped-def]
+        world["previews"].append(kw)
+        sub = world["subs"][kw["subscription"]]
+        old, new = sub["items"]["data"][0]["price"]["id"], kw["subscription_details"]["items"][0]["price"]
+        (oa, oi), (na, ni) = PRICE_AMOUNT[old], PRICE_AMOUNT[new]
+        total = na - oa if oi == ni else na - (oa // 2)  # same period: the difference; new period: new price minus a credit
+        end = sub["items"]["data"][0]["current_period_end"] if oi == ni else int(time.time()) + (365 if ni == "year" else 30) * 86400
+        return {"amount_due": max(0, total) + world.get("drift", 0), "total": total, "lines": {"data": [{"period": {"end": end}}]}}
+
+    def void_invoice(iid, **kw):  # type: ignore[no-untyped-def]
+        world["voided"].append(iid)
+        world["invoices"][iid]["status"] = "void"
 
     monkeypatch.setattr(stripe.checkout.Session, "create", session_create)
     monkeypatch.setattr(stripe.checkout.Session, "retrieve", lambda sid, **kw: world["sessions"][sid])
@@ -100,6 +127,8 @@ def stripe_on(monkeypatch, db):  # type: ignore[no-untyped-def]
     monkeypatch.setattr(stripe.checkout.Session, "list", lambda **kw: {"data": [x for x in world["sessions"].values() if x["status"] == kw.get("status")]})
     monkeypatch.setattr(stripe.checkout.Session, "expire", expire)
     monkeypatch.setattr(stripe.Invoice, "retrieve", lambda iid, **kw: world["invoices"][iid])
+    monkeypatch.setattr(stripe.Invoice, "create_preview", create_preview)
+    monkeypatch.setattr(stripe.Invoice, "void_invoice", void_invoice)
     monkeypatch.setattr(stripe.InvoicePayment, "list", lambda **kw: {"data": [{"status": "paid", "payment": {"payment_intent": f"pi_{kw['invoice']}"}}]})
     monkeypatch.setattr(stripe.Refund, "create", lambda **kw: world["refunds"].append(kw) or {"id": "re_1"})
     monkeypatch.setattr(stripe.Price, "retrieve", lambda pid, **kw: world["prices"].get(pid) or _stripe_price(pid))
@@ -120,7 +149,7 @@ def _signup(client, tag: str) -> dict[str, Any]:  # type: ignore[no-untyped-def]
 
 def _sub(sid: str, uid: int, status: str = "active", days: int = 30, cancel: bool = False, price: str = PRO) -> dict[str, Any]:
     now = int(time.time())
-    return {"id": sid, "object": "subscription", "customer": f"cus_{uid}", "status": status, "cancel_at_period_end": cancel,
+    return {"id": sid, "object": "subscription", "customer": f"cus_{uid}", "status": status, "cancel_at_period_end": cancel, "livemode": False,
             "metadata": {"nexis_user_id": str(uid)}, "canceled_at": now if status == "canceled" else None,
             "items": {"data": [{"id": f"si_{sid}", "price": {"id": price}, "current_period_start": now - 86400, "current_period_end": now + days * 86400}]}}  # fmt: skip
 
@@ -469,31 +498,116 @@ def test_expiry_without_a_choice_never_picks_for_the_member(client, db, stripe_o
     _out(client)
 
 
+def _review(client, plan: str) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+    r = client.post("/api/billing/change-plan/preview", json={"plan": plan})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _change(client, plan: str, **extra: Any):  # type: ignore[no-untyped-def]
+    q = _review(client, plan)
+    return client.post("/api/billing/change-plan", json={"plan": plan, "expected_amount": q["amount_due_minor"],
+                                                         "proration_date": q["proration_date"], **extra})  # fmt: skip
+
+
+def test_plan_changes_need_a_reviewed_amount(client, db, stripe_on):
+    """The cause of the earlier "free" switches: Change plan modified the subscription straight away. Now the member
+    first sees Stripe's own figure for today, confirms it, and a changed figure stops the change."""
+    u = _signup(client, "review")
+    _go_pro(client, stripe_on, u, price=PLUS)
+    r = client.post("/api/billing/change-plan", json={"plan": "pro_monthly"})  # no reviewed amount: refused
+    assert r.status_code == 422 and "Review the change first" in r.json()["error"]["message"]
+    assert stripe_on["modified"] == []
+    q = _review(client, "pro_monthly")
+    assert (q["amount_due"], q["amount_due_minor"], q["effective"], q["kind"]) == (40.0, 4000, "after_payment", "upgrade")
+    assert q["summary"].startswith("You'll pay AED 40 now. Nexis Pro (AED 69/month) starts as soon as that payment succeeds")
+    assert stripe_on["previews"][-1]["subscription_details"]["proration_behavior"] == "always_invoice" and stripe_on["modified"] == []
+    r = client.post("/api/billing/change-plan", json={"plan": "pro_monthly", "expected_amount": 1, "proration_date": q["proration_date"]})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "change_needs_review" and stripe_on["modified"] == []  # forged amount
+    r = client.post("/api/billing/change-plan", json={"plan": "pro_monthly", "expected_amount": 4000, "proration_date": q["proration_date"] - 3600})
+    assert r.status_code == 409 and stripe_on["modified"] == []  # a stale quote
+    stripe_on["drift"] = 150  # e.g. a day passed: Stripe would now charge something else
+    r = client.post("/api/billing/change-plan", json={"plan": "pro_monthly", "expected_amount": 4000, "proration_date": q["proration_date"]})
+    assert r.status_code == 409 and stripe_on["modified"] == [] and client.get("/api/billing/status").json()["plan"] == "plus"
+    _out(client)
+
+
 def test_upgrade_plus_to_pro_and_downgrade_pro_to_plus(client, db, stripe_on):
     u = _signup(client, "changer")
     sid = _go_pro(client, stripe_on, u, price=PLUS)
-    assert client.post("/api/billing/change-plan", json={"plan": "plus_monthly"}).status_code == 422  # already Plus
-    st = client.post("/api/billing/change-plan", json={"plan": "pro_monthly"}).json()
-    sid_, kw = stripe_on["modified"][-1]
-    assert sid_ == sid and kw["items"][0]["price"] == PRO and kw["proration_behavior"] == "always_invoice" and kw["payment_behavior"] == "error_if_incomplete"
-    assert (st["plan"], st["billing"]) == ("pro", "AED 69/month")
+    assert client.post("/api/billing/change-plan/preview", json={"plan": "plus_monthly"}).status_code == 422  # already Plus
+    st = _change(client, "pro_monthly").json()
+    sid_, kw = stripe_on["modified"][0]
+    assert sid_ == sid and kw["items"][0]["price"] == PRO and kw["proration_behavior"] == "always_invoice"
+    assert kw["payment_behavior"] == "pending_if_incomplete" and "metadata" not in kw  # Stripe applies it only once paid
+    assert (st["plan"], st["billing"], st["change"]["result"]) == ("pro", "AED 69/month", "changed")
     _hold(client, *SYMS[:12])
-    r = client.post("/api/billing/change-plan", json={"plan": "plus_monthly"})
+    q = _review(client, "plus_monthly")
+    assert (q["amount_due"], q["credit"], q["effective"], q["kind"]) == (0.0, 40.0, "immediately", "downgrade")
+    assert "credit of AED 40, used on your next invoices (not refunded)" in q["summary"]
+    r = client.post("/api/billing/change-plan", json={"plan": "plus_monthly", "expected_amount": 0, "proration_date": q["proration_date"]})
     assert r.status_code == 409 and r.json()["error"]["code"] == "investment_selection_required"  # choose first, never silently
-    assert client.post("/api/billing/change-plan", json={"plan": "plus_monthly", "keep": SYMS[:11]}).status_code == 422  # Plus keeps 10
-    st = client.post("/api/billing/change-plan", json={"plan": "plus_monthly", "keep": SYMS[2:12]}).json()
-    assert stripe_on["modified"][-1][1]["proration_behavior"] == "create_prorations"
+    assert client.post("/api/billing/change-plan", json={"plan": "plus_monthly", "keep": SYMS[:11], "expected_amount": 0,
+                                                         "proration_date": q["proration_date"]}).status_code == 422  # Plus keeps 10
+    st = client.post("/api/billing/change-plan", json={"plan": "plus_monthly", "keep": SYMS[2:12], "expected_amount": 0,
+                                                       "proration_date": q["proration_date"]}).json()  # fmt: skip
     assert st["plan"] == "plus" and st["investments"]["active"] == 10 and sorted(st["investments"]["archived"]) == ["T00", "T01"]
+    _out(client)
+
+
+def test_an_upgrade_waiting_for_payment_grants_nothing_until_paid(client, db, stripe_on):
+    """Plus -> Pro when the saved card is declined (or needs 3-D Secure): the plan stays Plus, the member gets Stripe's
+    hosted invoice page, and Pro starts only when Stripe reports the update applied."""
+    u = _signup(client, "pending")
+    sid = _go_pro(client, stripe_on, u, price=PLUS)
+    stripe_on["decline"] = True
+    st = _change(client, "pro_monthly").json()
+    assert st["change"]["result"] == "payment_required" and st["change"]["pay_url"].startswith("https://invoice.stripe.com/")
+    assert st["plan"] == "plus" and st["pending_change"]["plan"] == "pro_monthly" and not st["can_change_plan"]
+    assert client.get("/api/me/portfolio/risk").status_code == 402  # still no Pro features
+    assert client.post("/api/billing/change-plan/preview", json={"plan": "pro_yearly"}).status_code == 422  # one change at a time
+    assert client.post("/api/billing/pending/pay").json()["url"].startswith("https://invoice.stripe.com/")
+    # the member pays on Stripe's page: Stripe applies the update and tells us
+    stripe_on["subs"][sid]["items"]["data"][0]["price"]["id"] = PRO
+    stripe_on["subs"][sid]["pending_update"] = None
+    _send(client, _event("customer.subscription.pending_update_applied", stripe_on["subs"][sid]))
+    st = client.get("/api/billing/status").json()
+    assert st["plan"] == "pro" and st["pending_change"] is None
+    _out(client)
+
+
+def test_a_pending_change_can_be_cancelled_and_never_applies(client, db, stripe_on):
+    u = _signup(client, "pendcancel")
+    sid = _go_pro(client, stripe_on, u, price=PLUS)
+    stripe_on["decline"] = True
+    _change(client, "pro_monthly")
+    inv = db.scalars(select(Subscription).where(Subscription.user_id == u["id"])).one().pending_invoice_id
+    st = client.post("/api/billing/pending/cancel").json()
+    assert stripe_on["voided"] == [inv] and st["pending_change"] is None and st["plan"] == "plus"
+    _send(client, _event("customer.subscription.updated", stripe_on["subs"][sid]))  # Stripe still lists it until it expires
+    assert client.get("/api/billing/status").json()["pending_change"] is None
+    assert client.post("/api/billing/pending/pay").status_code == 422
     _out(client)
 
 
 def test_a_declined_upgrade_changes_nothing(client, db, stripe_on):
     u = _signup(client, "declined")
     _go_pro(client, stripe_on, u, price=PLUS)
-    stripe_on["decline"] = True
-    r = client.post("/api/billing/change-plan", json={"plan": "pro_monthly"})
+    stripe_on["decline"] = "raise"
+    r = _change(client, "pro_monthly")
     assert r.status_code == 402 and r.json()["error"]["code"] == "payment_failed"
     assert client.get("/api/billing/status").json()["plan"] == "plus"
+    _out(client)
+
+
+def test_a_failed_plan_change_payment_doesnt_mark_the_plan_unpaid(client, db, stripe_on):
+    u = _signup(client, "changefail")
+    sid = _go_pro(client, stripe_on, u, price=PLUS)
+    stripe_on["decline"] = True
+    _change(client, "pro_monthly")
+    _send(client, _event("invoice.payment_failed", {"id": "in_up", "object": "invoice", "subscription": sid, "billing_reason": "subscription_update"}))
+    st = client.get("/api/billing/status").json()
+    assert st["plan"] == "plus" and not st["payment_issue"] and st["pending_change"]["plan"] == "pro_monthly"
     _out(client)
 
 
@@ -577,7 +691,13 @@ def test_expired_or_inactive_subscriptions_are_not_paid():
     for status in ("incomplete", "incomplete_expired", "unpaid", "canceled", "paused"):
         assert entitlements.sub_tier(Subscription(user_id=1, status=status, plan="pro_monthly", current_period_end=utcnow() + timedelta(days=5))) == "free"
     for status in ("active", "trialing", "past_due"):
-        assert entitlements.sub_tier(Subscription(user_id=1, status=status, plan="plus_monthly", current_period_end=utcnow() + timedelta(days=5))) == "plus"
+        sub = Subscription(user_id=1, status=status, plan="plus_monthly", current_period_end=utcnow() + timedelta(days=5),
+                           current_period_start=utcnow() - timedelta(days=25), payment_failed_at=utcnow() - timedelta(days=3))  # fmt: skip
+        assert entitlements.sub_tier(sub) == "plus"
+    # past_due is a bounded grace while Stripe retries, never an open-ended plan (e.g. a whole unpaid year)
+    late = Subscription(user_id=1, status="past_due", plan="pro_yearly", current_period_end=utcnow() + timedelta(days=300),
+                        current_period_start=utcnow() - timedelta(days=65), payment_failed_at=utcnow() - timedelta(days=15))  # fmt: skip
+    assert entitlements.sub_tier(late) == "free"
 
 
 # ------------------------------------------------------------------ usage limits
@@ -703,19 +823,25 @@ def test_deleting_an_account_cancels_its_subscription(client, stripe_on):
     client.cookies.clear()
 
 
-def test_test_keys_in_production_sell_only_to_testers(client, stripe_on, monkeypatch):
+def test_test_keys_in_production_sell_only_to_testers(client, db, stripe_on, monkeypatch):
     s = get_settings()
     tester = _signup(client, "tester")  # accounts made before switching to production (Secure cookies need HTTPS)
     monkeypatch.setattr(s, "env", "production")
     assert client.get("/api/billing/plans").json()["available"] is False  # signed in, but not a named tester
     assert client.post("/api/billing/checkout", json={"plan": "plus_monthly"}).status_code == 503
     monkeypatch.setattr(s, "billing_test_emails", f"someone@else.com, {tester['identifier'].upper()}")
+    # listed, but the address isn't verified: anyone could have registered it, so the list alone is not enough
+    assert client.get("/api/billing/plans").json()["available"] is False
+    db.get(User, tester["id"]).email_verified_at = utcnow()
+    db.commit()
     p = client.get("/api/billing/plans").json()
     assert p["available"] is True and p["test_mode"] is True
     assert client.post("/api/billing/checkout", json={"plan": "plus_monthly"}).status_code == 200
     _out(client)
     assert client.get("/api/billing/plans").json()["available"] is False  # visitors: not with test keys
     monkeypatch.setattr(s, "stripe_secret_key", "sk_live_x")
+    assert client.get("/api/billing/plans").json()["available"] is False  # a live key alone sells nothing
+    monkeypatch.setattr(s, "billing_live_enabled", True)  # the owner's explicit live launch
     assert client.get("/api/billing/plans").json()["available"] is True  # live keys: on sale to everyone
 
 
@@ -780,14 +906,20 @@ def test_yearly_checkout_status_and_switching(client, db, stripe_on, monkeypatch
     st = client.get("/api/billing/status").json()
     assert (st["plan"], st["billing"], st["interval"], st["price_key"]) == ("plus", "AED 229/year", "year", "plus_yearly")
 
-    assert client.post("/api/billing/change-plan", json={"plan": "plus_yearly"}).status_code == 422  # already on it
-    st = client.post("/api/billing/change-plan", json={"plan": "pro_yearly"}).json()  # tier up, stays yearly
-    kw = stripe_on["modified"][-1][1]
+    assert client.post("/api/billing/change-plan/preview", json={"plan": "plus_yearly"}).status_code == 422  # already on it
+    q = _review(client, "pro_yearly")  # tier up, stays yearly: the difference now, same renewal date
+    assert (q["amount_due"], q["interval_change"], q["kind"]) == (370.0, False, "upgrade")
+    st = _change(client, "pro_yearly").json()
+    kw = [m for m in stripe_on["modified"] if m[1].get("items")][-1][1]
     assert st["billing"] == "AED 599/year" and kw["items"][0]["price"] == "price_pro_y" and kw["proration_behavior"] == "always_invoice"
-    st = client.post("/api/billing/change-plan", json={"plan": "pro_monthly"}).json()  # yearly -> monthly: credited, not charged
-    assert st["billing"] == "AED 69/month" and stripe_on["modified"][-1][1]["proration_behavior"] == "create_prorations"
-    client.post("/api/billing/change-plan", json={"plan": "pro_yearly"})  # monthly -> yearly: charged now
-    assert stripe_on["modified"][-1][1]["proration_behavior"] == "always_invoice" and sid
+    q = _review(client, "pro_monthly")  # yearly -> monthly: nothing today, the unused year becomes a credit
+    assert (q["amount_due"], q["interval_change"], q["kind"], q["effective"]) == (0.0, True, "billing_period", "immediately")
+    assert "Your billing period changes to monthly." in q["summary"] and q["credit"] > 0
+    st = _change(client, "pro_monthly").json()
+    assert st["billing"] == "AED 69/month"
+    q = _review(client, "pro_yearly")  # monthly -> yearly: one upfront payment now, after confirmation
+    assert q["amount_due"] > 0 and q["effective"] == "after_payment" and "yearly (one upfront payment for 12 months)" in q["summary"]
+    assert _change(client, "pro_yearly").json()["billing"] == "AED 599/year" and sid
     _out(client)
 
 
@@ -852,3 +984,165 @@ def test_help_prices_come_from_the_single_configuration():
         assert f"AED {v['amount_cents'] // 100}/{v['interval']}" in text
     for old in ("AED 290", "AED 990"):
         assert old not in text and old not in facts
+
+
+# ------------------------------------------------------------------ checkout for every paid plan, and what can't be forged
+
+
+@pytest.mark.parametrize(("plan", "price"), [("plus_monthly", PLUS), ("plus_yearly", "price_plus_y"), ("pro_monthly", PRO), ("pro_yearly", "price_pro_y")])
+def test_checkout_session_for_each_paid_plan_grants_nothing_until_stripe_confirms(client, db, stripe_on, monkeypatch, plan, price):
+    _yearly_on(monkeypatch, stripe_on)
+    _fresh_price_check(db)
+    u = _signup(client, f"buy{plan}")
+    assert client.post("/api/billing/checkout", json={"plan": plan}).status_code == 200
+    kw = stripe_on["created"][-1]
+    assert kw["line_items"] == [{"price": price, "quantity": 1}] and kw["mode"] == "subscription"  # price chosen by the server
+    assert kw["client_reference_id"] == str(u["id"]) and kw["subscription_data"]["metadata"] == {"nexis_user_id": str(u["id"]), "nexis_plan": plan}
+    assert client.get("/api/billing/status").json()["plan"] == "free"  # an opened checkout grants nothing
+    sid = f"sub_{plan}_{u['id']}"
+    stripe_on["subs"][sid] = _sub(sid, u["id"], status="incomplete", price=price)  # left the payment page before paying
+    _send(client, _event("checkout.session.completed", {"id": "cs_p", "object": "checkout.session", "mode": "subscription",
+                                                         "client_reference_id": str(u["id"]), "subscription": sid}))  # fmt: skip
+    assert client.get("/api/billing/status").json()["plan"] == "free"
+    stripe_on["subs"][sid]["status"] = "active"  # Stripe confirms the payment
+    _send(client, _event("invoice.paid", {"id": f"in_{sid}", "object": "invoice", "subscription": sid}))
+    st = client.get("/api/billing/status").json()
+    assert (st["plan"], st["price_key"], st["interval"]) == (plans.PRICES[plan]["tier"], plan, plans.PRICES[plan]["interval"])
+    _out(client)
+
+
+def test_forged_requests_never_change_a_plan(client, db, stripe_on):
+    owner = _signup(client, "victim")
+    sid = _go_pro(client, stripe_on, owner, price=PLUS)
+    attacker = _signup(client, "attacker")
+    for body in ({"plan": "pro_monthly", "price": PRO}, {"plan": "pro_monthly", "user_id": owner["id"]}, {"plan": "pro_monthly", "tier": "pro"},
+                 {"plan": "pro_monthly", "amount": 0}, {"plan": "pro_monthly", "customer": f"cus_{owner['id']}"}):  # fmt: skip
+        assert client.post("/api/billing/checkout", json=body).status_code == 422
+        assert client.post("/api/billing/change-plan", json={**body, "expected_amount": 0, "proration_date": int(time.time())}).status_code == 422
+    assert client.post("/api/billing/change-plan/preview", json={"plan": "pro_monthly"}).status_code == 422  # nothing to change
+    assert client.post("/api/billing/pending/pay").status_code == 422 and client.post("/api/billing/pending/cancel").status_code == 422
+    # a webhook "from" the attacker, signed with a guessed secret
+    ev = _event("customer.subscription.updated", _sub("sub_fake", attacker["id"], price=PRO))
+    assert _send(client, ev, secret="whsec_guess").status_code == 400
+    assert client.get("/api/billing/status").json()["plan"] == "free"
+    # someone else's checkout session can't be claimed
+    stripe_on["sessions"]["cs_owner_session"] = {"client_reference_id": str(owner["id"]), "subscription": sid, "status": "complete"}
+    assert client.post("/api/billing/confirm", json={"session_id": "cs_owner_session"}).status_code == 422
+    assert client.get("/api/billing/status").json()["plan"] == "free" and stripe_on["modified"] == []
+    _out(client)
+
+
+def test_checkout_return_page_reports_paid_processing_or_not_completed(client, stripe_on):
+    u = _signup(client, "returning")
+    sid = f"sub_ret_{u['id']}"
+    stripe_on["subs"][sid] = _sub(sid, u["id"], status="incomplete", price=PLUS)
+    stripe_on["sessions"]["cs_ret_session"] = {"client_reference_id": str(u["id"]), "subscription": sid, "status": "complete",
+                                               "payment_status": "unpaid"}  # fmt: skip
+    r = client.post("/api/billing/confirm", json={"session_id": "cs_ret_session"}).json()
+    assert r["plan"] == "free" and r["checkout"] == {"status": "complete", "payment_status": "unpaid", "subscription_status": "incomplete"}
+    stripe_on["subs"][sid]["status"] = "active"
+    stripe_on["sessions"]["cs_ret_session"]["payment_status"] = "paid"
+    r = client.post("/api/billing/confirm", json={"session_id": "cs_ret_session"}).json()
+    assert r["paid"] and r["checkout"]["payment_status"] == "paid"
+    _out(client)
+
+
+def test_an_abandoned_checkout_is_never_reused_or_granted(client, db, stripe_on):
+    u = _signup(client, "abandon")
+    client.post("/api/billing/checkout", json={"plan": "plus_monthly"})
+    cs = list(stripe_on["sessions"])[-1]
+    assert db.get(MarketCache, f"billing:checkout:{u['id']}") is not None
+    stripe_on["sessions"][cs]["status"] = "expired"
+    _send(client, _event("checkout.session.expired", {"id": cs, "object": "checkout.session", "client_reference_id": str(u["id"])}))
+    db.expire_all()
+    assert db.get(MarketCache, f"billing:checkout:{u['id']}") is None and client.get("/api/billing/status").json()["plan"] == "free"
+    assert client.post("/api/billing/checkout", json={"plan": "plus_monthly"}).json()["url"] != stripe_on["sessions"][cs]["url"]
+    _out(client)
+
+
+# ------------------------------------------------------------------ test mode vs live mode
+
+
+def test_webhook_events_from_the_other_stripe_mode_are_ignored(client, db, stripe_on):
+    u = _signup(client, "modemix")
+    sid = f"sub_live_{u['id']}"
+    stripe_on["subs"][sid] = _sub(sid, u["id"], price=PRO)
+    ev = _event("checkout.session.completed", {"id": "cs_l", "object": "checkout.session", "mode": "subscription",
+                                               "client_reference_id": str(u["id"]), "subscription": sid}) | {"livemode": True}  # fmt: skip
+    assert _send(client, ev).json() == {"received": True, "handled": False}  # a live event at a test-key API
+    assert db.scalars(select(BillingEvent).where(BillingEvent.event_id == ev["id"])).one().details["reason"] == "mode_mismatch"
+    assert client.get("/api/billing/status").json()["plan"] == "free"
+    _out(client)
+
+
+def test_test_subscriptions_never_become_real_paid_access(client, db, stripe_on, monkeypatch):
+    s = get_settings()
+    u = _signup(client, "sandboxed")
+    sid = _go_pro(client, stripe_on, u)
+    row = db.scalars(select(Subscription).where(Subscription.user_id == u["id"])).one()
+    assert row.livemode is False and client.get("/api/billing/status").json()["test_subscription"] is True
+    monkeypatch.setattr(s, "env", "production")
+    user = db.get(User, u["id"])
+    assert entitlements.tier_of(db, user) == "free"  # production, not an authorised tester: the Sandbox plan counts for nothing
+    monkeypatch.setattr(s, "billing_test_emails", u["identifier"])
+    user.email_verified_at = utcnow()
+    db.commit()
+    assert entitlements.tier_of(db, user) == "pro"  # an authorised tester sees what they bought in the Sandbox
+    monkeypatch.setattr(s, "stripe_secret_key", "sk_live_x")
+    assert entitlements.tier_of(db, user) == "free"  # once live, a Sandbox subscription never counts
+    monkeypatch.setattr(s, "billing_live_enabled", True)
+    assert entitlements.tier_of(db, user) == "free" and sid
+    _out(client)
+
+
+def test_a_live_key_takes_no_payments_until_the_owner_enables_live_billing(client, db, stripe_on, monkeypatch):
+    s = get_settings()
+    u = _signup(client, "golive")
+    _go_pro(client, stripe_on, u, price=PLUS)  # a Sandbox subscription from testing
+    monkeypatch.setattr(s, "stripe_secret_key", "sk_live_x")
+    monkeypatch.setattr(stripe.Customer, "create", lambda **kw: {"id": f"cus_live_{kw['metadata']['nexis_user_id']}"})  # live mode: new ids
+    for pid in (PLUS, PRO):
+        stripe_on["prices"][pid] = _stripe_price(pid) | {"livemode": True}
+    _fresh_price_check(db)
+    assert client.get("/api/billing/plans").json()["available"] is False
+    assert client.post("/api/billing/checkout", json={"plan": "pro_monthly"}).status_code == 503
+    monkeypatch.setattr(s, "billing_live_enabled", True)
+    assert client.get("/api/billing/status").json()["plan"] == "free"  # the Sandbox plan doesn't carry over
+    assert client.post("/api/billing/checkout", json={"plan": "pro_monthly"}).status_code == 200
+    row = db.scalars(select(Subscription).where(Subscription.user_id == u["id"])).one()
+    db.refresh(row)
+    assert row.subscription_id is None and row.customer_id == f"cus_live_{u['id']}"  # a fresh live customer; no test ids reused
+    _out(client)
+
+
+# ------------------------------------------------------------------ refunds and disputes
+
+
+def test_refunds_and_disputes_are_recorded_and_access_follows_the_subscription(client, db, stripe_on):
+    u = _signup(client, "refund")
+    sid = _go_pro(client, stripe_on, u)
+    ev = _event("charge.refunded", {"id": "ch_1", "object": "charge", "customer": f"cus_{u['id']}", "amount": 6900,
+                                    "amount_refunded": 6900, "refunded": True})  # fmt: skip
+    assert _send(client, ev).json() == {"received": True, "handled": True}
+    be = db.scalars(select(BillingEvent).where(BillingEvent.event_id == ev["id"])).one()
+    assert be.user_id == u["id"] and be.status == "processed" and be.details["amount_refunded"] == 6900
+    assert client.get("/api/billing/status").json()["plan"] == "pro"  # a refund alone doesn't end the subscription
+    dv = _event("charge.dispute.created", {"id": "dp_1", "object": "dispute", "customer": f"cus_{u['id']}", "amount": 6900,
+                                           "status": "needs_response"})  # fmt: skip
+    assert _send(client, dv).json()["handled"] is True
+    stripe_on["subs"][sid] = _sub(sid, u["id"], status="canceled")  # the owner cancels it in Stripe
+    _send(client, _event("customer.subscription.deleted", stripe_on["subs"][sid]))
+    assert client.get("/api/billing/status").json()["plan"] == "free"
+    _out(client)
+
+
+def test_a_scheduled_cancellation_is_never_undone_by_a_plan_change(client, db, stripe_on):
+    u = _signup(client, "cancelfirst")
+    _go_pro(client, stripe_on, u, price=PLUS)
+    st = client.post("/api/billing/cancel").json()
+    assert st["cancel_at_period_end"] and not st["can_change_plan"]
+    r = client.post("/api/billing/change-plan/preview", json={"plan": "pro_monthly"})
+    assert r.status_code == 422 and "Keep my subscription" in r.json()["error"]["message"]
+    assert client.post("/api/billing/resume").json()["can_change_plan"] is True
+    assert _change(client, "pro_monthly").json()["plan"] == "pro"
+    _out(client)

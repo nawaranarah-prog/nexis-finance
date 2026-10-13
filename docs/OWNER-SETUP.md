@@ -78,10 +78,12 @@ Then **Deployments** → the latest production deployment → **Redeploy** (vari
 
 ### C. Check before calling it done
 
-1. https://nexis-finance-api.vercel.app/api/billing/plans must show `"intervals":["month","year"]`, with Plus
-   `"amount":229.0` and Pro `"amount":599.0` under `"year"`. If it still shows only `"month"`, the server rejected
-   a price: run `--check` (above) and it names the mismatch (amount, currency, interval or test/live mode).
-2. Sign in with an address listed in `NEXIS_BILLING_TEST_EMAILS`, open **/pricing**, choose **Annual**, and buy
+1. Sign in on the site with an address listed in `NEXIS_BILLING_TEST_EMAILS` and open **/pricing**. It must show a
+   **Monthly / Annual** switch, with Plus AED 229/year and Pro AED 599/year. (With a test key, visitors and other
+   accounts only ever see monthly prices, so check while signed in as a tester.) If there's no Annual option, the
+   server rejected a price: run `--check` (above), or look in Vercel → Logs for "nexis pro is not sellable", which
+   names the mismatch (not found, amount, currency, interval, archived, or test/live mode).
+2. Still signed in as that tester, choose **Annual**, and buy
    Nexis Plus with the test card `4242 4242 4242 4242` (any future date, any CVC). Stripe's page must show
    **AED 229.00 per year**.
 3. After returning to Nexis, Settings → Plan must show Nexis Plus, "billed annually upfront". In Stripe (test mode)
@@ -90,9 +92,31 @@ Then **Deployments** → the latest production deployment → **Redeploy** (vari
 
 Only after step 3 passes are the annual plans purchasable (in test mode). Live payments are a separate step (§3).
 
+## 2b. Sandbox testing rules (test mode)
+
+* **Who can test on the live site:** an account whose email is in `NEXIS_BILLING_TEST_EMAILS` **and** is verified
+  (or has the admin role). The list alone isn't enough, so nobody can register a listed address and get Pro with
+  Stripe's public test card. Test subscriptions give paid access on the live site only to these accounts, and to
+  nobody once live payments are on.
+* **If your account's email isn't verified** (verification emails need the Gmail setup in §1), make it an admin once,
+  from `backend` in your own terminal, with the Neon connection string (Neon → your project → Connect; never paste it
+  in a chat): `$env:NEXIS_DATABASE_URL="postgresql://…"; .venv\Scripts\python -m app.cli.set_role <your email> admin`.
+* **Webhook events** (Stripe Dashboard, test mode): Developers → Webhooks → the `nexis-finance-api.vercel.app/api/billing/webhook`
+  endpoint → ⋯ → **Update details** → **Select events** → make sure these are ticked, then **Update endpoint**:
+  `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_failed`,
+  `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`,
+  `customer.subscription.pending_update_applied`, `customer.subscription.pending_update_expired`, `invoice.paid`,
+  `invoice.payment_failed`, `invoice.payment_action_required`, `charge.refunded`, `charge.dispute.created`,
+  `charge.dispute.closed`. (Your endpoint already has `checkout.session.completed`, the three `customer.subscription.created|updated|deleted`, `invoice.paid` and `invoice.payment_failed`; the others add refund/dispute records, abandoned-checkout
+  cleanup and payment-action notices.) `--check` lists any that are missing.
+* **Customer portal:** Settings → Billing → Customer portal → **Subscriptions** → "Customers can switch plans" must be
+  **off** (plan changes go through Nexis, which shows the price first and charges before switching). "Cancel
+  subscriptions" on, at the end of the billing period.
+
 ## 3. Live payments
 
-**Not started.** Payments stay in Stripe test mode. Two things are open:
+**Not started, and switched off in code.** With a live key, Nexis sells, changes and charges nothing until
+`NEXIS_BILLING_LIVE_ENABLED=true` is set, which is only done after your explicit approval. Two things are open:
 * **Hosting terms.** Vercel's Hobby plan forbids "any method of requesting or processing payment". You decided not
   to use Vercel Pro (2026-10-11), so live payments wait until you choose another way.
 * **Stripe account activation** (business details, bank account): done in the Stripe dashboard.
@@ -100,9 +124,11 @@ Only after step 3 passes are the annual plans purchasable (in test mode). Live p
 Then:
 1. `$env:STRIPE_SECRET_KEY="sk_live_…"; .venv\Scripts\python -m app.cli.stripe_setup --live --webhook https://nexis-finance-api.vercel.app/api/billing/webhook`
 2. In Vercel **Production**, replace `STRIPE_SECRET_KEY`, the four `STRIPE_*_AED_PRICE_ID` values and
-   `STRIPE_WEBHOOK_SECRET` with the live values printed. Redeploy.
-3. Run `--check` with the live key: everything must be OK.
-4. Make one real purchase with your own card, then refund it in the Stripe dashboard.
+   `STRIPE_WEBHOOK_SECRET` with the live values printed. Redeploy. Nothing is on sale yet: the live switch is off.
+3. Only when you approve the live launch: add `NEXIS_BILLING_LIVE_ENABLED` = `true` (Production) and redeploy.
+   Sandbox subscriptions stop counting at that moment (testers move to Free; their data stays).
+4. Run `--check` with the live key: everything must be OK.
+5. Make one real purchase with your own card, then refund it in the Stripe dashboard.
 
 ## 4. Decisions still open
 
