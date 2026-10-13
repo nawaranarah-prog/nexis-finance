@@ -25,9 +25,14 @@ prices are configured. Subscribers on an earlier price keep it. See
   `require(capability)`, `get_user_entitlements`, `consume_usage` (+ `refund`), `check_capacity`. Usage rows are
   written first and the total checked after, so parallel requests can't exceed a limit. Adding an investment locks the
   account row and re-counts before committing.
-* Paid access by Stripe status: `active`, `trialing`, `past_due` (Stripe retrying; the member is asked to update the
-  card) → the subscribed tier. `canceled`, `unpaid`, `incomplete(_expired)`, `paused` → Free. A period that ended more
-  than 2 days ago without renewal → Free. Subscriptions on the earlier USD prices are recognised as Nexis Pro.
+* Paid access by Stripe status: `active`, `trialing` → the subscribed tier. `past_due` (Stripe retrying; the member is
+  asked to update the card) → the subscribed tier for at most 14 days from the failure, then Free. `canceled`,
+  `unpaid`, `incomplete(_expired)`, `paused` → Free. A period that ended more than 2 days ago without renewal → Free.
+  Subscriptions on the earlier USD prices are recognised as Nexis Pro.
+* Test mode never becomes real access: each subscription stores Stripe's `livemode`. A test (Sandbox) subscription
+  counts only while the API has a test key, and on production only for an authorised tester (listed in
+  `NEXIS_BILLING_TEST_EMAILS` **and** with a verified email or the admin role). Once a live key is set, test
+  subscriptions count for nobody, and the first live checkout creates a new live Stripe customer.
 * `investments.py` — downgrades never delete. Before a cancellation ends (or a move to a smaller plan) the member picks
   which investments stay active (`POST /api/me/investments/keep`). When Stripe confirms the lower plan, the rest are
   archived (read-only, not counted). No choice on file → nothing is archived; adding/editing waits until they choose
@@ -37,15 +42,27 @@ prices are configured. Subscribers on an earlier price keep it. See
   Checkout sells only the two configured price ids, and only after confirming in Stripe that they are exactly
   AED 29/month and AED 69/month and in the same mode (test/live) as the key. One live subscription per account:
   a second checkout is refused; a second paid subscription (two tabs) is cancelled and refunded automatically.
-* Plan changes (`POST /api/billing/change-plan`): same subscription, new price. Upgrades are invoiced immediately
-  for the rest of the period and refused if that payment fails; downgrades credit the unused part. Plan changes are
-  disabled in the Stripe portal so they always go through Nexis (which asks which investments to keep).
-* Webhooks: signature verified; each event id stored once; every event re-reads the subscription from Stripe so
-  late/out-of-order events can't downgrade; failures return 500 so Stripe retries; after each event the member's
-  investments are reconciled with the confirmed plan.
+* Plan changes (tier or billing period), same subscription:
+  1. `POST /api/billing/change-plan/preview {plan}` asks Stripe (`Invoice.create_preview`, `always_invoice`) what the
+     change charges today, the credit, the renewal amount and date. Nothing changes.
+  2. The member confirms that amount. `POST /api/billing/change-plan {plan, expected_amount, proration_date, keep?}`
+     recalculates with Stripe; a different amount or a quote older than 30 minutes → 409 `change_needs_review`.
+  3. Stripe applies it with `payment_behavior=pending_if_incomplete`: the price switches **only when the invoice is
+     paid**. Declined card or 3-D Secure → the plan stays as it is, the response carries Stripe's hosted invoice page,
+     and Settings shows the pending change (`/api/billing/pending/pay`, `/api/billing/pending/cancel` voids the invoice).
+  Moving down costs nothing today; the unused part becomes a Stripe credit. Plan switching is off in the Stripe portal,
+  so every change goes through this flow (which also asks which investments to keep).
+* Webhooks: signature verified; events from the other Stripe mode ignored; each event id stored once; every event
+  re-reads the subscription from Stripe so late/out-of-order events can't downgrade; failures return 500 so Stripe
+  retries; after each event the member's investments are reconciled with the confirmed plan. Refunds and disputes
+  (`charge.refunded`, `charge.dispute.*`) are recorded against the account and logged; access follows the
+  subscription, so to end access cancel the subscription in Stripe. An expired checkout is never reused.
+* Live payments need two things: a live key **and** `NEXIS_BILLING_LIVE_ENABLED=true`. A live key alone sells,
+  changes and charges nothing.
 
 Endpoints: `GET /api/billing/plans`, `GET /api/billing/status`, `POST /api/billing/checkout {plan}`,
-`POST /api/billing/change-plan {plan, keep?}`, `POST /api/billing/confirm {session_id}`, `POST /api/billing/cancel`,
+`POST /api/billing/change-plan/preview {plan}`, `POST /api/billing/change-plan {plan, expected_amount, proration_date, keep?}`,
+`POST /api/billing/pending/pay`, `POST /api/billing/pending/cancel`, `POST /api/billing/confirm {session_id}`, `POST /api/billing/cancel`,
 `POST /api/billing/resume`, `POST /api/billing/portal`, `POST /api/billing/webhook` (Stripe only);
 `GET /api/me/investments`, `POST /api/me/investments/keep`, `POST /api/me/investments/{symbol}/archive|restore`.
 
@@ -64,7 +81,8 @@ Endpoints: `GET /api/billing/plans`, `GET /api/billing/status`, `POST /api/billi
    identify earlier subscriptions); redeploy. Until the new variables are set, paid plans show as unavailable.
 3. Test cards only: `4242 4242 4242 4242` (success), `4000 0000 0000 0002` (declined), `4000 0027 6000 3184` (3-D
    Secure). Test clocks for renewal, failed renewal (`pm_card_chargeCustomerFail`) and expiry.
-4. While the key is a test key, production checkout is limited to `NEXIS_BILLING_TEST_EMAILS`.
+4. While the key is a test key, production checkout — and paid access from test subscriptions — is limited to
+   accounts in `NEXIS_BILLING_TEST_EMAILS` whose email is verified (or that have the admin role).
 
 ## LIVE environment (only when the founder says so)
 
@@ -80,9 +98,8 @@ STRIPE_SECRET_KEY=<key> python -m app.cli.stripe_setup --check
    ```
    STRIPE_SECRET_KEY=sk_live_... python -m app.cli.stripe_setup --live --webhook https://nexis-finance-api.vercel.app/api/billing/webhook
    ```
-   It creates the `nexis_plus` / `nexis_pro` products, the AED 29 and AED 69 monthly prices, the webhook endpoint
-   with the six events (`checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`,
-   `invoice.payment_failed`) and the Customer Portal (update card, invoices, cancel at period end, plan switching off).
+   It creates the `nexis_plus` / `nexis_pro` products, the AED prices (monthly and annual), the webhook endpoint with
+   every event Nexis handles (`HANDLED` in `billing_stripe.py`) and the Customer Portal (update card, invoices, cancel at period end, plan switching off).
    It prints the two price ids and the webhook signing secret once. If the live account already has a default portal
    configuration, set the same options in Dashboard → Settings → Billing → Customer portal.
 3. **Vercel → nexis-finance-api → Settings → Environment Variables → Production only** (never Preview/Development):

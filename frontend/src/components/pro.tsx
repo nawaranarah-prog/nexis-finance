@@ -232,6 +232,7 @@ export function UpgradeNudge({ feature }: { feature: "investments" | "advisor" }
 }
 
 const ORDER = ["investments", "advisor", "watchlist"];
+const STATUS: Record<string, string> = { active: "Active", trialing: "Active (trial)", past_due: "Payment overdue — Stripe is retrying" };
 const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 
 /** Every plan on sale except the member's current one: the other tier on the same billing period first, then the
@@ -247,6 +248,9 @@ function planChoices(catalog: AnyObj | undefined, s: AnyObj): { key: PlanKey; ti
   return out.filter((c) => c.tier.id !== "free").sort((x, y) => Number(x.interval !== cur) - Number(y.interval !== cur) || Number(x.tier.id === s.plan) - Number(y.tier.id === s.plan));
 }
 
+/** Change plan: pick a plan, see Stripe's own figures for it (charged today, credit, renewal, when it takes effect),
+    then confirm that exact amount. The server applies it as a Stripe pending update: the new plan starts only once the
+    payment succeeds, and if Stripe needs the member (declined card, 3-D Secure) they pay on Stripe's page. */
 function ChangePlan({ s, onClose }: { s: AnyObj; onClose: () => void }) {
   const qc = useQueryClient();
   const plans = usePlans();
@@ -259,24 +263,33 @@ function ChangePlan({ s, onClose }: { s: AnyObj; onClose: () => void }) {
   const [keep, setKeep] = useState<string[]>(symbols.slice(0, cap));
   const [keepFor, setKeepFor] = useState(c?.key);
   if (c && keepFor !== c.key) { setKeepFor(c.key); setKeep(symbols.slice(0, cap)); }  // a different plan, a different allowance
+  const quote = useQuery({
+    queryKey: ["billing-preview", c?.key], enabled: !!c, staleTime: 0, gcTime: 0, retry: false,
+    queryFn: () => api.post<AnyObj>("/billing/change-plan/preview", { plan: c!.key }),
+  });
   const [busy, setBusy] = useState(false);
   if (!c) return null;
-  const rank = (id: string) => ["free", "plus", "pro"].indexOf(id);
-  const toYearly = c.interval === "year" && s.interval !== "year";
-  const chargedNow = rank(c.tier.id) > rank(s.plan) || (toYearly && rank(c.tier.id) >= rank(s.plan));
+  const q = quote.data;
   const label = `${c.tier.name}, billed ${c.interval === "year" ? "annually" : "monthly"}`;
-  const intervalChange = c.interval !== (s.interval ?? "month");
-  const renews = s.renews_at ? date(s.renews_at) : "your next renewal";
+  const pay = q && q.amount_due_minor > 0;
   const go = async () => {
+    if (!q) return;
     setBusy(true);
     try {
-      const r = await api.post<AnyObj>("/billing/change-plan", { plan: c.key, ...(needKeep ? { keep } : {}) });
+      const r = await api.post<AnyObj>("/billing/change-plan", {
+        plan: c.key, expected_amount: q.amount_due_minor, proration_date: q.proration_date, ...(needKeep ? { keep } : {}),
+      });
       qc.setQueryData(["billing-status"], r);
       qc.invalidateQueries({ queryKey: ["portfolio"] });
-      toast("success", `You're now on ${label}`);
+      if (r.change?.result === "payment_required") {
+        toast("info", "Payment needed", r.change.message);
+        if (r.change.pay_url) { window.location.assign(r.change.pay_url); return; }
+      } else toast("success", r.change?.message ?? `You're now on ${label}`);
       onClose();
-    } catch (e) { if (!handlePlanError(e)) toast("error", "Couldn't change your plan", errorMessage(e)); }
-    finally { setBusy(false); }
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "change_needs_review") { toast("info", "Please review again", errorMessage(e)); void quote.refetch(); }
+      else if (!handlePlanError(e)) toast("error", "Couldn't change your plan", errorMessage(e));
+    } finally { setBusy(false); }
   };
   return <Shell onClose={onClose} label="cp-title">
     <h2 id="cp-title">Change plan</h2>
@@ -292,22 +305,56 @@ function ChangePlan({ s, onClose }: { s: AnyObj; onClose: () => void }) {
       </fieldset>
     )}
     <p><b>{label} · {priceText(c.price)}</b> · {c.tier.limits.investments} active investments · {c.tier.limits.advisor} AI Advisor messages a month.</p>
-    <p className="small" data-testid="cp-terms">{intervalChange
-      ? (c.interval === "year"
-        ? `You'll be charged ${priceText(c.price).replace("/year", "")} today for 12 months, minus a credit for the unused part of your current period. Your plan then renews one year from today. If the payment doesn't go through, your plan stays the same.`
-        : "A new monthly billing period starts today and your renewal date changes to today. The unused part of your annual payment becomes a credit used toward your monthly invoices — it isn't refunded.")
-      : chargedNow
-        ? `You'll be charged now for the difference for the rest of your current billing period. Your renewal date stays ${renews}. If the payment doesn't go through, your plan stays the same.`
-        : `The change happens now; the unused part of your current billing period is credited to your next invoice (not refunded). Your renewal date stays ${renews}.`}</p>
+    {quote.isLoading && <div className="wire-skel" aria-label="Calculating the cost with Stripe"><span className="skel w70" /><span className="skel w50" /></div>}
+    {quote.isError && <p className="banner error small" role="alert">{errorMessage(quote.error)}</p>}
+    {q && (
+      <div className="cp-quote" data-testid="cp-terms">
+        <dl className="pro-kv">
+          <dt>Charged today</dt><dd><b>{q.amount_due > 0 ? money(q.amount_due, q.currency) : "Nothing"}</b>{q.credit > 0 && <span className="muted"> · credit {money(q.credit, q.currency)} for the unused part of your current plan</span>}</dd>
+          <dt>Takes effect</dt><dd>{q.effective === "after_payment" ? "As soon as the payment succeeds" : "Immediately"}</dd>
+          <dt>Then</dt><dd>{q.billing}{q.renews_at ? `, renewing on ${date(q.renews_at)}` : ""}</dd>
+        </dl>
+        <p className="small">{q.summary}</p>
+      </div>
+    )}
     {needKeep && <>
       <p className="small">{c.tier.name} includes {cap} active investments and you have {symbols.length}. The others are archived — kept, read-only, and restored if you move up again.</p>
       <KeepPicker symbols={symbols} limit={cap} value={keep} onChange={setKeep} />
     </>}
     <div className="np-modal-foot">
       <button type="button" className="btn sm ghost" onClick={onClose}>Cancel</button>
-      <button type="button" className="btn primary sm" disabled={busy || (needKeep && keep.length === 0)} onClick={go}>{busy ? "…" : `Switch to ${label}`}</button>
+      <button type="button" className="btn primary sm" disabled={busy || !q || (needKeep && keep.length === 0)} onClick={go}>
+        {busy ? "…" : !q ? "Checking the price…" : pay ? `Pay ${money(q.amount_due, q.currency)} and switch` : `Switch to ${label}`}
+      </button>
     </div>
   </Shell>;
+}
+
+/** A plan change waiting for its payment: pay it on Stripe's page, or drop it (the current plan continues). */
+function PendingChange({ s }: { s: AnyObj }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const p = s.pending_change;
+  if (!p) return null;
+  const payNow = async () => {
+    setBusy(true);
+    try { window.location.assign((await api.post<{ url: string }>("/billing/pending/pay")).url); }
+    catch (e) { toast("error", "Couldn't open the payment page", errorMessage(e)); setBusy(false); }
+  };
+  const drop = async () => {
+    setBusy(true);
+    try { qc.setQueryData(["billing-status"], await api.post<AnyObj>("/billing/pending/cancel")); toast("success", "Change cancelled — nothing was charged"); }
+    catch (e) { toast("error", "Couldn't cancel the change", errorMessage(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="np-note" role="status" data-testid="pending-change">
+      <p><b>Your change to {p.plan_name} ({p.billing}) is waiting for payment.</b> Until it's paid you stay on {s.plan_name}{p.expires_at ? `; the offer lapses on ${date(p.expires_at)}` : ""}.</p>
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn primary sm" disabled={busy} onClick={payNow}>Complete payment</button>
+        <button type="button" className="btn sm ghost" disabled={busy} onClick={drop}>Cancel the change</button>
+      </div>
+    </div>
+  );
 }
 
 /** Settings → Billing. */
@@ -332,9 +379,12 @@ export function BillingSection() {
     <section className="pro-plan" id="plan" aria-labelledby="plan-h">
       <h2 id="plan-h">Billing</h2>
       {s.payment_issue && <p className="banner error small" role="alert">{s.payment_message}</p>}
+      {s.test_subscription && <p className="np-note small" data-testid="test-subscription">Stripe test mode (Sandbox): this subscription was paid with a test card. No real money was charged, and it never counts once real payments are switched on.</p>}
+      <PendingChange s={s} />
       <dl className="pro-kv">
         <dt>Current plan</dt><dd>{s.plan_name}</dd>
-        {s.billing && <><dt>Billing</dt><dd>{s.billing}{s.interval === "year" && " · billed annually upfront"}</dd></>}
+        {s.paid && s.status && <><dt>Status</dt><dd>{STATUS[s.status] ?? s.status}</dd></>}
+        {s.billing && <><dt>Billing</dt><dd>{s.billing}{s.interval === "year" ? " · billed annually upfront" : s.interval === "month" ? " · billed monthly" : ""}</dd></>}
         {s.renews_at && <><dt>Renews</dt><dd>{date(s.renews_at)}</dd></>}
         {s.access_until && <><dt>Plan ends</dt><dd>{date(s.access_until)} <span className="muted">· cancellation scheduled; it won't renew</span></dd></>}
       </dl>

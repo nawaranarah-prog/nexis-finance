@@ -171,8 +171,14 @@ class Settings(BaseSettings):
     # enabled in the Stripe Dashboard and verified at checkout; cards are always shown.
     billing_wallets: str = ""
     # While production uses Stripe TEST keys, only these accounts (comma-separated emails) may check out — anyone else
-    # could otherwise get Pro with Stripe's public test card. Ignored once live keys (sk_live_...) are set.
+    # could otherwise get Pro with Stripe's public test card. An address only counts for an account whose email is
+    # verified (or an admin), so registering a listed address that isn't taken yet gives nothing. Test-mode
+    # subscriptions grant paid access on production only to these accounts. Ignored once live keys are set.
     billing_test_emails: str = ""
+    # Real-money payments. With a LIVE Stripe key (sk_live_...) nothing is sold, changed or charged unless this is true:
+    # deploying a live key by mistake can't take payments. Set NEXIS_BILLING_LIVE_ENABLED=true only when the owner
+    # approves the live launch (docs/OWNER-SETUP.md, "Live payments").
+    billing_live_enabled: bool = False
     # Plan prices and limits live in app/core/plans.py (one source), not here.
     # The public site, used for canonical URLs, sitemaps and the cross-site request check.
     public_site_url: str = "https://nexis-finance-five.vercel.app"

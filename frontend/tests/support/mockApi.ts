@@ -19,7 +19,7 @@ export const REPLAY = [/^\/api\/markets\//, /^\/api\/pulse\/(feed|discussions\/[
   /^\/api\/help\/articles/, /^\/api\/billing\/plans/];
 /** Read-only computations the pages run with POST (valuation, comparison); replayed by path. */
 export const POST_REPLAY = [/^\/api\/valuation\/[^/]+$/, /^\/api\/markets\/compare$/];
-const NEVER = [/^\/api\/auth\//, /^\/api\/me\//, /^\/api\/billing\/(status|checkout|portal|cancel|resume|confirm|change-plan|webhook)/, /^\/api\/legal\//];
+const NEVER = [/^\/api\/auth\//, /^\/api\/me\//, /^\/api\/billing\/(status|checkout|portal|cancel|resume|confirm|change-plan|pending|webhook)/, /^\/api\/legal\//];
 
 export function keyFor(url: URL): string {
   const q = [...url.searchParams.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join("&");

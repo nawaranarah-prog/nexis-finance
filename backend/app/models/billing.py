@@ -41,6 +41,13 @@ class Subscription(Base, TimestampMixin):
     # The investments (symbols) the member chose to keep active when their plan's allowance shrinks (cancellation or
     # a move to a smaller plan). Applied only once the provider confirms the change; never chosen by Nexis.
     downgrade_keep: Mapped[list | None] = mapped_column(JSON)
+    # Stripe's livemode for this subscription (False = Sandbox/test mode). A test subscription never grants paid
+    # access once live payments are on, and on production only to authorised test accounts (entitlements).
+    livemode: Mapped[bool | None] = mapped_column(Boolean)
+    # A plan change waiting for its payment (Stripe "pending update"): nothing changes until the invoice is paid.
+    pending_plan: Mapped[str | None] = mapped_column(String(16))
+    pending_invoice_id: Mapped[str | None] = mapped_column(String(80))
+    pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
 

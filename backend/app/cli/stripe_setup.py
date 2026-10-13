@@ -106,7 +106,7 @@ def check(mode: str, url: str) -> int:
         missing = sorted(set(HANDLED) - set(w.enabled_events)) if "*" not in w.enabled_events else []
         line(
             w.status == "enabled" and not missing,
-            f"webhook {w.id} {w.status}" + (f", missing events: {', '.join(missing)}" if missing else ", all 6 events"),
+            f"webhook {w.id} {w.status}" + (f", missing events: {', '.join(missing)}" if missing else f", all {len(HANDLED)} events"),
         )
     cfgs = [c for c in stripe.billing_portal.Configuration.list(limit=10, active=True).data if c.is_default]
     if not cfgs:
