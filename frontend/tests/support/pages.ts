@@ -28,8 +28,20 @@ export const PAGES: TestPage[] = [
   { name: "about", path: "/about", ready: "main h1" },
   { name: "disclaimer", path: "/disclaimer", ready: "main h1" },
   { name: "terms", path: "/terms", ready: "main h1" },
+  { name: "privacy", path: "/privacy", ready: "main h1" },
+  { name: "guidelines", path: "/community-guidelines", ready: "main h1" },
+  { name: "ai-disclosure", path: "/ai-disclosure", ready: "main h1" },
+  { name: "pricing", path: "/pricing", ready: "main h1" },
+  { name: "pulse-latest", path: "/pulse/latest", ready: "main h1" },
+  { name: "not-found", path: "/no-such-page", ready: "main h1" },
 ];
 
 export const VIEWPORTS: [number, number][] = [
   [320, 568], [375, 812], [390, 844], [412, 915], [768, 1024], [1024, 768], [1280, 800], [1440, 900], [1920, 1080],
+];
+
+/** The launch brief's widths: small iPhone, Android, iPhone, iPhone Pro, Pro Max, iPad portrait, iPad Air portrait,
+    iPad landscape / small laptop, laptop, large laptop, desktop. Heights match a common device of that width. */
+export const LAUNCH_WIDTHS: [number, number][] = [
+  [320, 568], [360, 740], [375, 812], [390, 844], [430, 932], [768, 1024], [820, 1180], [1024, 768], [1280, 800], [1440, 900], [1920, 1080],
 ];
