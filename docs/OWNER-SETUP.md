@@ -78,10 +78,12 @@ Then **Deployments** → the latest production deployment → **Redeploy** (vari
 
 ### C. Check before calling it done
 
-1. https://nexis-finance-api.vercel.app/api/billing/plans must show `"intervals":["month","year"]`, with Plus
-   `"amount":229.0` and Pro `"amount":599.0` under `"year"`. If it still shows only `"month"`, the server rejected
-   a price: run `--check` (above) and it names the mismatch (amount, currency, interval or test/live mode).
-2. Sign in with an address listed in `NEXIS_BILLING_TEST_EMAILS`, open **/pricing**, choose **Annual**, and buy
+1. Sign in on the site with an address listed in `NEXIS_BILLING_TEST_EMAILS` and open **/pricing**. It must show a
+   **Monthly / Annual** switch, with Plus AED 229/year and Pro AED 599/year. (With a test key, visitors and other
+   accounts only ever see monthly prices, so check while signed in as a tester.) If there's no Annual option, the
+   server rejected a price: run `--check` (above), or look in Vercel → Logs for "nexis pro is not sellable", which
+   names the mismatch (not found, amount, currency, interval, archived, or test/live mode).
+2. Still signed in as that tester, choose **Annual**, and buy
    Nexis Plus with the test card `4242 4242 4242 4242` (any future date, any CVC). Stripe's page must show
    **AED 229.00 per year**.
 3. After returning to Nexis, Settings → Plan must show Nexis Plus, "billed annually upfront". In Stripe (test mode)
