@@ -5,7 +5,7 @@ import Plot from "../components/Plot";
 import DataTable from "../components/DataTable";
 import { Card, download, Field, InfoTip, JobStatus, Kpi, PageHead, QueryView, StatusBadge } from "../components/ui";
 import { AssetChecklist } from "../components/pickers";
-import { dateAxis, INK, seriesColor } from "../components/charts";
+import { dateAxis, INK, seriesColor, fs, phone } from "../components/charts";
 import { line, PCT_AXIS } from "../components/metrics";
 import { useAssets, useExperiment, useExperiments, useJobRunner } from "../hooks/queries";
 import { useResolvedTheme, useWorkspace } from "../hooks/workspace";
@@ -181,14 +181,14 @@ function VolResult({ id }: { id: number }) {
                 <Plot height={Math.max(240, pimRows.length * 18 + 40)} data={[{
                   type: "bar", orientation: "h", y: pimRows.map((r) => r[0]), x: pimRows.map((r) => r[1].mean), error_x: { type: "data", array: pimRows.map((r) => r[1].std), color: INK[theme].muted, thickness: 1 },
                   marker: { color: seriesColor(theme, 0) }, hovertemplate: "%{y}: %{x:.5f}<extra></extra>",
-                }]} layout={{ hovermode: "closest", yaxis: { autorange: "reversed", tickfont: { size: 10 } }, margin: { l: 110, r: 10, t: 8, b: 30 } }} />
+                }]} layout={{ hovermode: "closest", yaxis: { autorange: "reversed", tickfont: { size: fs(10) } }, margin: { l: phone() ? 12 : 110, r: 10, t: 8, b: 30 } }} />
               </Card>
               {imp ? (
                 <Card title={`Impurity importance — ${impModel}`} sub="training-set split gain (biased toward high-cardinality features)">
                   <Plot height={Math.max(240, pimRows.length * 18 + 40)} data={[{
                     type: "bar", orientation: "h", y: Object.entries(imp as Record<string, number>).sort((x, y) => y[1] - x[1]).map((r) => r[0]),
                     x: Object.entries(imp as Record<string, number>).sort((x, y) => y[1] - x[1]).map((r) => r[1]), marker: { color: seriesColor(theme, 2) }, hovertemplate: "%{y}: %{x:.3f}<extra></extra>",
-                  }]} layout={{ hovermode: "closest", yaxis: { autorange: "reversed", tickfont: { size: 10 } }, margin: { l: 110, r: 10, t: 8, b: 30 } }} />
+                  }]} layout={{ hovermode: "closest", yaxis: { autorange: "reversed", tickfont: { size: fs(10) } }, margin: { l: phone() ? 12 : 110, r: 10, t: 8, b: 30 } }} />
                 </Card>
               ) : <Card title="Impurity importance"><div className="state">Only available for random-forest models (histogram gradient boosting does not expose impurity importance).</div></Card>}
             </div>

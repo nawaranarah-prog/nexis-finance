@@ -158,6 +158,36 @@ function SideNav() {
   );
 }
 
+/** Popovers (account menu, notifications): close on a tap or click outside (pointer events cover touch) and on Escape,
+    which returns focus to the button that opened it. */
+function useDismiss(ref: React.RefObject<HTMLElement | null>, open: boolean, setOpen: (v: boolean) => void) {
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      ref.current?.querySelector<HTMLElement>("button")?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", key); };
+  }, [ref, open, setOpen]);
+}
+
+/** Whether a media query matches now, kept up to date (e.g. the drawer layout below 980px). */
+function useMedia(query: string): boolean {
+  const [hit, setHit] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setHit(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [query]);
+  return hit;
+}
+
 function Account() {
   const me = useMe();
   const qc = useQueryClient();
@@ -166,11 +196,7 @@ function Account() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const plan: string | undefined = useBilling(!!me.data?.user).data?.plan;
-  useEffect(() => {
-    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
+  useDismiss(ref, open, setOpen);
   const u = me.data?.user;
   if (!u) return <button className="btn primary sm" onClick={() => nav(`/login?next=${encodeURIComponent(window.location.pathname)}`)}>{t("Sign in")}</button>;
   const logout = async () => {
@@ -181,7 +207,7 @@ function Account() {
   };
   return (
     <div className="account" ref={ref} style={{ position: "relative" }}>
-      <button className="icon-btn" aria-label="Account menu" onClick={() => setOpen(!open)} style={{ width: 34, height: 34 }}><Avatar user={u} size={28} /></button>
+      <button className="icon-btn" aria-label="Account menu" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} style={{ width: 34, height: 34 }}><Avatar user={u} size={28} /></button>
       {open && (
         <div className="share-menu popover-in" role="menu" style={{ right: 0, left: "auto", transformOrigin: "top right" }}>
           <div className="small" style={{ padding: "8px 10px" }}><b>{u.display_name}</b><div className="xs muted">@{u.username}{u.email ? ` · ${u.email}` : ""}</div></div>
@@ -239,11 +265,7 @@ function PersonalBell() {
   const nav = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
   const q = useQuery({ queryKey: ["my-unread"], queryFn: () => api.get<AnyObj>("/me/notifications", { }), refetchInterval: 60_000 });
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+  useDismiss(ref, open, setOpen);
   const unread = q.data?.unread ?? 0;
   const items: AnyObj[] = (q.data?.items ?? []).slice(0, 6);
   const markAll = async () => { await api.post("/me/notifications/read", {}); qc.invalidateQueries({ queryKey: ["my-unread"] }); qc.invalidateQueries({ queryKey: ["my-notifications"] }); };
@@ -290,11 +312,7 @@ function SystemBell() {
   const nav = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
   const q = useQuery({ queryKey: ["notifications"], queryFn: () => api.get<{ items: Notification[]; unread: number }>("/notifications", { limit: 30 }), refetchInterval: 20_000 });
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+  useDismiss(ref, open, setOpen);
   const markAll = async () => { await api.post("/notifications/read", { ids: null }); qc.invalidateQueries({ queryKey: ["notifications"] }); };
   const unread = q.data?.unread ?? 0;
   const icon: Record<string, string> = { error: "✕", warning: "!", success: "✓", info: "•" };
@@ -339,6 +357,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [drawerPath, setDrawerPath] = useState(location.pathname);
   if (drawerPath !== location.pathname) { setDrawerPath(location.pathname); setDrawer(false); }  // navigating closes the drawer
+  // Below 980px the navigation is an off-canvas drawer. Closed, it's inert (its hidden links leave the tab order);
+  // open, focus moves into it, the page behind doesn't scroll, and Escape closes it and returns focus to the menu button.
+  const narrow = useMedia("(max-width: 980px)");
+  const sidebar = useRef<HTMLElement>(null);
+  const menuBtn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!drawer || !narrow) return;
+    sidebar.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setDrawer(false); menuBtn.current?.focus(); } };
+    document.addEventListener("keydown", key);
+    return () => { document.body.style.overflow = prev; document.removeEventListener("keydown", key); };
+  }, [drawer, narrow]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); }
@@ -407,7 +439,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="app">
       <div className={`scrim ${drawer ? "open" : ""}`} onClick={() => setDrawer(false)} aria-hidden />
-      <aside className={`sidebar ${drawer ? "open" : ""}`} aria-label="Navigation">
+      <aside ref={sidebar} id="app-nav" className={`sidebar ${drawer ? "open" : ""}`} aria-label="Navigation" inert={narrow && !drawer}>
         <Link to="/" className="brand" aria-label="Nexis Finance home">
           <img src="/favicon.svg" alt="" width={22} height={22} />
           <span className="brand-name" dir="ltr">Nexis <span>Finance</span></span>
@@ -422,17 +454,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <div className="main">
-        <header className="topbar">
-          <button className="btn ghost menu-btn" aria-label="Open navigation" onClick={() => setDrawer(true)}>☰</button>
+        <header className={`topbar ${researchPage ? "with-dataset" : ""}`}>
+          <button ref={menuBtn} className="btn ghost menu-btn" aria-label="Open navigation" aria-expanded={narrow && drawer} aria-controls="app-nav" onClick={() => setDrawer(true)}>☰</button>
           {researchPage && (
             <>
-          <span className="xs muted hide-sm">Research dataset</span>
-          <select className="input hide-sm" style={{ width: 230 }} value={dataset?.id ?? ""} onChange={(e) => setDatasetId(Number(e.target.value))} aria-label="Research dataset">
+          <span className="xs muted hide-sm hide-md">Research dataset</span>
+          <select className="input hide-sm dataset-select" value={dataset?.id ?? ""} onChange={(e) => setDatasetId(Number(e.target.value))} aria-label="Research dataset">
             {datasets.map((d) => <option key={d.id} value={d.id}>{d.code} · v{d.version}</option>)}
           </select>
           {dataset && (dataset.is_synthetic
-            ? <span className="badge synthetic hide-sm" title="The selected research dataset is artificially generated">DEMO / SYNTHETIC DATA MODE</span>
-            : <span className="badge info hide-sm">LIVE PUBLIC DATA · {dataset.source}</span>)}
+            ? <span className="badge synthetic hide-sm" title="DEMO / SYNTHETIC DATA MODE: the selected research dataset is artificially generated"><span className="hide-md">DEMO / SYNTHETIC DATA MODE</span><span className="show-md">DEMO DATA</span></span>
+            : <span className="badge info hide-sm" title={`LIVE PUBLIC DATA · ${dataset.source}`}><span className="hide-md">LIVE PUBLIC DATA · {dataset.source}</span><span className="show-md">LIVE DATA</span></span>)}
             </>
           )}
           <span className="spacer hide-sm" />

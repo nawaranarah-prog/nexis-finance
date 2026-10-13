@@ -6,7 +6,7 @@ import Plot from "../components/Plot";
 import DataTable from "../components/DataTable";
 import { Card, Disclaimer, download, Field, InfoTip, JobStatus, PageHead, QueryView, StatusBadge, Tabs } from "../components/ui";
 import { AssetChecklist, AssetSelect, defaultBenchmark } from "../components/pickers";
-import { dateAxis, diverging, INK, seriesColor } from "../components/charts";
+import { dateAxis, diverging, INK, seriesColor, phone } from "../components/charts";
 import { label, line, MetricCompare, MetricStrip, PCT_AXIS } from "../components/metrics";
 import { useAssets, useExperiments, useJobRunner, useStrategies } from "../hooks/queries";
 import { useResolvedTheme, useWorkspace } from "../hooks/workspace";
@@ -268,7 +268,7 @@ function Result({ id }: { id: number }) {
               <Card title="Drawdown (net)"><Plot height={230} data={[line(s.dates, s.drawdown, "Drawdown", seriesColor(theme, 7), { fill: "tozeroy", fillcolor: "rgba(227,73,72,0.14)" })]} layout={{ xaxis: dateAxis(theme, false), yaxis: PCT_AXIS, showlegend: false, shapes }} /></Card>
               <Card title="Monthly net returns">
                 <Plot height={230} data={[{ type: "heatmap", z, x: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], y: years.map(String), zmin: -lim, zmax: lim, colorscale: diverging(theme), reversescale: true,
-                  text: z.map((r) => r.map((v) => (v == null ? "" : (v * 100).toFixed(1)))) as never, texttemplate: "%{text}", textfont: { size: 9 }, hovertemplate: "%{y} %{x}: %{z:.2%}<extra></extra>", xgap: 2, ygap: 2, colorbar: { thickness: 10, tickformat: ".0%" } }]}
+                  text: z.map((r) => r.map((v) => (v == null ? "" : (v * 100).toFixed(1)))) as never, texttemplate: phone() ? "" : "%{text}", textfont: { size: 9 }, hovertemplate: "%{y} %{x}: %{z:.2%}<extra></extra>", xgap: 2, ygap: 2, colorbar: { thickness: 10, tickformat: ".0%" } }]}
                   layout={{ hovermode: "closest", yaxis: { autorange: "reversed", type: "category" }, margin: { l: 44, r: 10, t: 8, b: 30 } }} />
               </Card>
               <Card title="Rolling 126-day Sharpe (net)"><Plot height={220} data={[line(s.dates, s.rolling_sharpe_126, "Sharpe", seriesColor(theme, 0))]} layout={{ xaxis: dateAxis(theme, false), yaxis: { hoverformat: ".2f" }, showlegend: false, shapes }} /></Card>

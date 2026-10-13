@@ -5,7 +5,7 @@ import type { Data } from "plotly.js";
 import Plot from "../components/Plot";
 import { Card, PageHead, QueryView } from "../components/ui";
 import { DataClassBadge, ScopeSelect } from "../components/connect";
-import { INK, seriesColor } from "../components/charts";
+import { INK, seriesColor, fs } from "../components/charts";
 import { useResolvedTheme } from "../hooks/workspace";
 import { api } from "../services/api";
 import type { AnyObj } from "../types/api";
@@ -65,7 +65,7 @@ function GraphView({ g, theme, selected, onSelect }: { g: AnyObj; theme: "light"
       if (!ns.length) continue;
       traces.push({
         type: "scatter", mode: "text+markers", name: layer, x: ns.map((n) => pos[n.id][0]), y: ns.map((n) => pos[n.id][1]),
-        text: ns.map((n) => n.label), textposition: "middle right", textfont: { size: 9.5, color: INK[theme].text2 },
+        text: ns.map((n) => n.label), textposition: "middle right", textfont: { size: fs(9.5), color: INK[theme].text2 },
         customdata: ns.map((n) => n.id), hovertemplate: "%{text}<extra>" + layer + "</extra>",
         marker: { size: ns.map((n) => (n.id === selected ? 16 : neighbours.has(n.id) ? 12 : 9)), color: seriesColor(theme, LAYER_COLOR[layer] ?? 0),
           line: { width: 1.5, color: INK[theme].surface }, opacity: ns.map((n) => (!selected || n.id === selected || neighbours.has(n.id) ? 1 : 0.35)) },

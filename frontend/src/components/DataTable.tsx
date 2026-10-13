@@ -131,10 +131,10 @@ export default function DataTable<T>({
         <div className="dt-foot">
           <span>Page {p + 1} of {pages}</span>
           <span className="row">
-            <button className="btn sm" disabled={p === 0} onClick={() => setPage(0)}>«</button>
+            <button className="btn sm" aria-label="First page" disabled={p === 0} onClick={() => setPage(0)}>«</button>
             <button className="btn sm" disabled={p === 0} onClick={() => setPage(p - 1)}>Prev</button>
             <button className="btn sm" disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>Next</button>
-            <button className="btn sm" disabled={p >= pages - 1} onClick={() => setPage(pages - 1)}>»</button>
+            <button className="btn sm" aria-label="Last page" disabled={p >= pages - 1} onClick={() => setPage(pages - 1)}>»</button>
           </span>
         </div>
       )}

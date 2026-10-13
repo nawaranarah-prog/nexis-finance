@@ -116,6 +116,8 @@ a { color: var(--accent-ink); text-decoration: none; }
 a:hover { text-decoration: underline; }
 h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 code, .mono { font-family: var(--mono); font-size: max(12px, var(--fs-floor)); }
+/* long inline code (API paths, ids) wraps instead of pushing the page sideways on phones */
+code { overflow-wrap: anywhere; }
 .num { font-variant-numeric: tabular-nums; }
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
@@ -415,6 +417,31 @@ kbd { font-family: var(--mono); font-size: max(10.5px, var(--fs-floor)); padding
 .chip:hover { background: var(--surface-2); color: var(--text); }
 .chip:active { transform: scale(0.97); }
 
+/* ---------- Top bar between the drawer layout and wide screens (iPad landscape, laptops up to 1439px) ----------
+   Next to the sidebar the research pages' dataset picker and data badge leave too little room: compact them. */
+.topbar select.dataset-select { width: 230px; flex: 0 1 230px; min-width: 150px; }
+.show-md { display: none; }
+@media (min-width: 981px) and (max-width: 1439px) {
+  .topbar .hide-md { display: none; }
+  .topbar .show-md { display: inline; }
+  .topbar select.dataset-select { width: 190px; }
+  .search-trigger { width: auto; flex: 1 1 180px; min-width: 140px; }
+  /* the sidebar is visible here and already holds Pulse, My Nexis and the AI Advisor */
+  .topbar.with-dataset .top-link { display: none; }
+}
+
+/* Parameter tables on phones: one compact card per row (name, default and range on a line, description below)
+   instead of a squeezed four-column table; the column names stay readable as small labels. */
+@media (max-width: 560px) {
+  table.dt.params-table, table.dt.params-table tbody { display: block; width: 100%; }
+  table.dt.params-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  table.dt.params-table tr { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: baseline; gap: 4px 14px; padding: 10px 0;
+    border-bottom: 1px solid var(--border); }
+  table.dt.params-table td { display: block; min-width: 0; padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; }
+  table.dt.params-table td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--font); font-size: max(11px, var(--fs-floor)); }
+  table.dt.params-table td:last-child { grid-column: 1 / -1; }
+}
+
 /* ---------- Mobile navigation drawer ---------- */
 .menu-btn { display: none; }
 .scrim { display: none; }
@@ -456,9 +483,10 @@ kbd { font-family: var(--mono); font-size: max(10.5px, var(--fs-floor)); padding
   :root { --fs-floor: 14px; }
 }
 
-/* Phones and tablets: every tap target is at least 44×44 (Apple HIG / WCAG 2.5.5). min-height wins over a component's
-   fixed height, so compact desktop controls simply grow on touch screens. Links inside sentences stay inline. */
-@media (max-width: 768px) {
+/* Phones, tablets and any touch screen (an iPad in landscape is 1024–1366px wide but still a finger): every tap target
+   is at least 44×44 (Apple HIG / WCAG 2.5.5). min-height wins over a component's fixed height, so compact desktop
+   controls simply grow on touch screens. Links inside sentences stay inline. */
+@media (max-width: 768px), (pointer: coarse) {
   button, select, textarea, summary, [role="button"], [role="tab"], [role="radio"],
   input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]) { min-height: 44px; }
   a[href] { min-height: 44px; }
@@ -466,13 +494,13 @@ kbd { font-family: var(--mono); font-size: max(10.5px, var(--fs-floor)); padding
      and let labelled items shrink below their text and overlap */
   :is(.icon-btn, .chip-x, .menu-btn, .help-icon-btn, button[aria-label], a[aria-label]) { min-width: 44px; }
   /* short-label controls: 44px wide too, and they never shrink (their labels are shorter than 44px anyway) */
-  :is(.seg button, .tabs button, .np-tabs button, .chip:not(.chat-sugg .chip), .chip > a[href], .np-sym, .np-topic, .link-btn, .touch-link, :is(td, th) > a[href]) {
+  :is(.seg button, .tabs button, .np-tabs button, [role="tab"], .btn.sm, .chip:not(.chat-sugg .chip), .chip > a[href], .np-sym, .np-topic, .link-btn, .touch-link, :is(td, th, dd) > a[href]) {
     min-width: 44px; flex-shrink: 0; justify-content: center; }
   .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   :is(td, th, dd, nav, header, footer, .row, .chips) > a[href]:only-child { display: inline-flex; align-items: center; }
   label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
   /* links that stand on their own (table cells, list items, headings) are inline elements, which ignore min-height */
-  :is(td, th) > a[href] { display: inline-flex; align-items: center; }
+  :is(td, th, dd) > a[href] { display: inline-flex; align-items: center; }
   :is(li, h1, h2, h3, h4, dt) > a[href]:only-child { display: inline-block; }
 }
 

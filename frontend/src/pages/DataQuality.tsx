@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Plot from "../components/Plot";
 import DataTable from "../components/DataTable";
 import { Card, InfoTip, Kpi, PageHead, QueryView, Seg, StatusBadge } from "../components/ui";
-import { INK, sequential, seriesColor } from "../components/charts";
+import { INK, sequential, seriesColor, fs } from "../components/charts";
 import { useResolvedTheme, useWorkspace } from "../hooks/workspace";
 import { api, errorMessage } from "../services/api";
 import type { AnyObj } from "../types/api";
@@ -47,7 +47,7 @@ export default function DataQuality() {
               <div className="kpis">
                 <Kpi label="Overall score" value={pct(l.overall_score)} metric="data_quality_score" note={<StatusBadge status={l.status} />} />
                 {comps.map(([k, v]) => <Kpi key={k} label={k} value={pct(v)} tone={v < 0.98 ? "neg" : ""} />)}
-                <Kpi label="Assessed" value={<span style={{ fontSize: 13 }}>{dt(l.created_at)}</span>} note={l.dataset_version} />
+                <Kpi label="Assessed" value={<span style={{ fontSize: "max(13px, var(--fs-floor))" }}>{dt(l.created_at)}</span>} note={l.dataset_version} />
               </div>
               <div className="grid g2">
                 <Card title="Checks" flush>
@@ -108,7 +108,7 @@ export default function DataQuality() {
               <Plot height={Math.max(300, c.symbols.length * 13 + 60)} data={[{
                 type: "heatmap", z: c.coverage, x: c.months, y: c.symbols, zmin: 0, zmax: 1, colorscale: sequential(theme),
                 hovertemplate: "%{y} %{x}: %{z:.0%}<extra></extra>", colorbar: { thickness: 10, tickformat: ".0%" }, xgap: 1, ygap: 1,
-              }]} layout={{ hovermode: "closest", margin: { l: 60, r: 10, t: 8, b: 40 }, yaxis: { autorange: "reversed", tickfont: { size: 9, color: INK[theme].muted } } }} />
+              }]} layout={{ hovermode: "closest", margin: { l: 60, r: 10, t: 8, b: 40 }, yaxis: { autorange: "reversed", tickfont: { size: fs(9), color: INK[theme].muted } } }} />
             )}
           </QueryView>
         </Card>

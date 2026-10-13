@@ -506,7 +506,7 @@
 /* ---------------------------------------------------------------- touch screens: component overrides
    (this file loads last, so these win over component rules of the same specificity; base rules are in styles.css) */
 .touch-link { display: inline-flex; align-items: center; }
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) {
   .chip, .chat-sugg .chip { min-height: 44px; }
   .touch-link { min-height: 44px; }
   .post-headline > a { display: inline-block; min-height: 44px; }

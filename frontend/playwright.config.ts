@@ -26,6 +26,9 @@ export default defineConfig({
     { name: "firefox", testMatch: /e2e\/.*\.spec\.ts/, use: { ...devices["Desktop Firefox"] } },
     { name: "webkit", testMatch: /e2e\/.*\.spec\.ts/, use: { ...devices["Desktop Safari"] } },
     { name: "responsive", testMatch: /responsive\/.*\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    // Every route (signed out, signed in, research tools with a seeded dataset) × the 11 launch widths. ~15 minutes,
+    // so it's opt-in: npx playwright test --project=audit. Each run also writes test-results/responsive-audit*.jsonl.
+    { name: "audit", testMatch: /responsive\/.*\.audit\.ts/, use: { ...devices["Desktop Chrome"] } },
     { name: "a11y", testMatch: /a11y\/.*\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
     // real device profiles: touch, mobile user agent, device pixel ratio and each device's own viewport
     { name: "iphone", testMatch: /devices\/.*\.spec\.ts/, use: { ...devices["iPhone 14"] } },
