@@ -341,6 +341,34 @@ function Movers() {
   );
 }
 
+/** The public-launch announcement. No date, counts or claims: the product is already usable, and the band says so.
+    Visitors can dismiss it (remembered in this browser only). */
+const LAUNCH_KEY = "nexis-launch-note-v1";
+function LaunchNote() {
+  const { t } = useT();
+  const me = useMe();
+  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(LAUNCH_KEY) === "hidden"; } catch { return false; } });
+  if (hidden) return null;
+  const hide = () => { setHidden(true); try { localStorage.setItem(LAUNCH_KEY, "hidden"); } catch { /* private mode: hidden for this visit */ } };
+  return (
+    <section className="hm-launch" aria-labelledby="launch-h">
+      <div className="hm-launch-text">
+        <span className="launch-tag"><i aria-hidden />{t("Launching soon")}</span>
+        <h2 id="launch-h">{t("A new perspective on your financial world.")}</h2>
+        <p>{t("Nexis Finance is getting ready to bring market insights, investor conversations, and financial research together in one place. We're getting closer. Stay tuned.")}</p>
+        <p className="hm-launch-now">{t("Markets, Nexis Pulse and the research tools are already open — explore them now.")}</p>
+      </div>
+      {!me.isLoading && !me.data?.user && (
+        <div className="hm-launch-cta">
+          <Link className="btn primary sm" to="/login?mode=signup&next=/">{t("Create a free account")}</Link>
+          <Link className="touch-link xs" to="/pulse">{t("Browse Nexis Pulse")}</Link>
+        </div>
+      )}
+      <button type="button" className="hm-launch-x" aria-label={t("Dismiss the launch announcement")} title={t("Dismiss")} onClick={hide}>×</button>
+    </section>
+  );
+}
+
 // ------------------------------------------------------------------ page
 
 export default function Home() {
@@ -364,6 +392,7 @@ export default function Home() {
   const s = status.data;
   return (
     <div className="hm">
+      <LaunchNote />
       <header className="hm-head">
         <div className="hm-eyebrow">
           <span>{today}</span>
