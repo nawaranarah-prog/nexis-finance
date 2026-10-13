@@ -22,7 +22,13 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import IsolationForest
+# scikit-learn is optional: the hosted API leaves it out to stay within the serverless install size.
+try:
+    from sklearn.ensemble import IsolationForest
+
+    SKLEARN = True
+except ImportError:  # pragma: no cover - depends on the deployment
+    SKLEARN = False
 
 from app.core.errors import ConfigurationError, InsufficientDataError
 from app.ml.features import ANOMALY_FEATURES, anomaly_features
@@ -56,6 +62,11 @@ def run_anomaly_experiment(
     dq_keys: set[tuple[str, str]] | None = None,
     injected: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    if not SKLEARN:
+        raise ConfigurationError(
+            "The machine-learning experiments aren't available on this server (scikit-learn isn't installed). "
+            "Run Nexis locally or with Docker to use them."
+        )
     seed = int(config.get("seed", 42))
     contamination = float(config.get("contamination", 0.002))
     z_threshold = float(config.get("z_threshold", 6.0))

@@ -1,6 +1,6 @@
 import { requireAccount, takePending } from "../components/account";
 import { useMe } from "../components/market";
-import { handlePlanErrorBody, UsageNote, usePlans } from "../components/pro";
+import { handlePlanErrorBody, UpgradeNudge, UsageNote, usePlans } from "../components/pro";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -257,6 +257,7 @@ export default function Advisor() {
           <button className="btn primary" disabled={busy || q.trim().length < 2}>{busy ? "…" : tr("Send")}</button>
         </form>
         {s?.usage && <div className="chat-usage"><UsageNote usage={s.usage} plan={s.plan} /></div>}
+        {s?.usage && <UpgradeNudge feature="advisor" />}
       </div>
     </>
   );

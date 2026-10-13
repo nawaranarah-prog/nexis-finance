@@ -62,8 +62,9 @@ No publishable key is needed: hosted Checkout redirects to Stripe, and nothing S
 2. **Create the annual prices** (AED 229 and AED 599), test mode first. Inspect with `--check` first; see STRIPE-SETUP.md: in your own terminal, from `backend`, run
    `$env:STRIPE_SECRET_KEY="sk_test_…"; .venv\Scripts\python -m app.cli.stripe_setup`. Then add the two printed
    price ids to Vercel and redeploy.
-3. **Before going live:** activate the Stripe account, and move Vercel to **Pro** (Hobby forbids taking payments;
-   $20/user/month, your decision). Then follow "Live payments" in [docs/OWNER-SETUP.md](docs/OWNER-SETUP.md).
+3. **Before going live:** activate the Stripe account. Vercel's Hobby plan doesn't allow taking payments, and the
+   owner decided not to use Vercel Pro, so live payments stay off until that's resolved. See "Live payments" in
+   [docs/OWNER-SETUP.md](docs/OWNER-SETUP.md).
 4. **Tax:** `automatic_tax` is off. Decide on UAE VAT handling with your accountant before charging customers (listed
    in [docs/LEGAL-REVIEW.md](docs/LEGAL-REVIEW.md)).
 

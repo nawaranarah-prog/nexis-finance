@@ -106,3 +106,43 @@ for (const [w, h] of [[375, 812], [1440, 900]] as const) {
     await page.screenshot({ path: `test-results/pricing-annual-${w}.png`, fullPage: true });
   });
 }
+
+async function asPlan(page: Page, plan: string, name: string) {
+  await page.route("**/api/billing/status", async (route) => {
+    const r = await route.fetch();
+    await route.fulfill({ response: r, json: { ...(await r.json()), paid: plan !== "free", plan, plan_name: name } });
+  });
+}
+
+test("upgrade prompts: Free members see what Plus and Pro add where the limits apply", async ({ page }) => {
+  await signUp(page, "nudge");
+  await withAnnual(page);
+  await page.goto("/my-nexis/investments");
+  const n = page.getByTestId("upgrade-nudge-investments");
+  await expect(n).toContainText("Want to track more investments? Your plan includes 1.");
+  await expect(n).toContainText("Nexis Plus: 10 active investments (AED 29/month) · Nexis Pro: 20 active investments (AED 69/month).");
+  await expect(n).toContainText("Save up to 34% with annual billing.");
+  await expect(n.getByRole("link", { name: "Upgrade to Plus or Pro" })).toHaveAttribute("href", "/pricing");
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Upgrade to Plus or Pro" }).click();
+  await expect(page).toHaveURL(/\/(pricing|pro)$/);  // /pricing shows the plans page at /pro
+});
+
+test("upgrade prompts: Plus members are offered Pro only; Pro members see none", async ({ page }) => {
+  await signUp(page, "nudge2");
+  await withAnnual(page);
+  await asPlan(page, "plus", "Nexis Plus");
+  await page.goto("/my-nexis/investments");
+  const n = page.getByTestId("upgrade-nudge-investments");
+  await expect(n).toContainText("Your plan includes 10. Nexis Pro: 20 active investments (AED 69/month).");
+  await expect(n).not.toContainText("Nexis Plus:");
+  await expect(n.getByRole("link", { name: "Upgrade to Pro" })).toHaveAttribute("href", "/settings#plan");
+  await page.unroute("**/api/billing/status");
+  await asPlan(page, "pro", "Nexis Pro");
+  await page.reload();
+  await expect(page.locator("main h1")).toBeVisible();
+  await expect(page.locator("#plan-allowance")).toBeVisible();
+  await expect(page.getByTestId("upgrade-nudge-investments")).toHaveCount(0);
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await expect(page.getByRole("menuitem", { name: /Upgrade/ })).toHaveCount(0);
+});

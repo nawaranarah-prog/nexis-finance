@@ -512,3 +512,15 @@ choice.**
   * live payments (Vercel Pro and Stripe activation);
   * subscription terms in the Terms of Use (LEGAL-REVIEW #13);
   * the VAT decision.
+
+## 2026-10-11 — outage fix, upgrade prompts
+
+* **Outage (after PR #19):** the hosted API's runtime dependency install ran out of disk ("No space left on device"),
+  so every request failed. statsmodels and scikit-learn are no longer installed on Vercel: the factor regression
+  (Newey-West HAC) and Ledoit-Wolf covariance are now numpy/scipy, identical to the libraries to ~1e-12. The Quant ML
+  experiments say they aren't available on the hosted site (they still run locally and in Docker). PR #20.
+* **Upgrade prompts:** My investments and the AI Advisor show Free members what Plus and Pro add (limits and monthly
+  prices from the server catalog, plus the annual saving), Plus members what Pro adds; Pro members see none. The
+  account menu has "Upgrade to Plus or Pro" / "Upgrade to Pro"; the locked portfolio analytics have an upgrade button.
+* **Vercel Pro:** the owner decided not to use it. Live payments stay in Stripe test mode; the docs no longer
+  recommend the upgrade.

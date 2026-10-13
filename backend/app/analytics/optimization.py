@@ -14,7 +14,6 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
-from sklearn.covariance import LedoitWolf
 
 from app.analytics.metrics import TRADING_DAYS, per_period_rate
 from app.core.errors import ConfigurationError, InsufficientDataError
@@ -30,6 +29,22 @@ class AllocationResult:
     diagnostics: dict[str, Any]
 
 
+def ledoit_wolf(x: np.ndarray) -> tuple[np.ndarray, float]:
+    """Ledoit-Wolf (2004) shrinkage towards a scaled identity; the same estimator as scikit-learn's LedoitWolf."""
+    n, p = x.shape
+    x = x - x.mean(axis=0)
+    emp = x.T @ x / n
+    mu = np.trace(emp) / p
+    x2 = x**2
+    beta = float(np.sum(x2.T @ x2) / n - np.sum(emp**2)) / n
+    delta = float(np.sum(emp**2) - 2 * mu * np.trace(emp) + p * mu**2) / p
+    beta = min(beta / p, delta)
+    shrinkage = 0.0 if delta == 0 else beta / delta
+    cov = (1 - shrinkage) * emp
+    cov.flat[:: p + 1] += shrinkage * mu
+    return cov, shrinkage
+
+
 def estimate_covariance(
     returns: pd.DataFrame, shrinkage: bool = True, periods_per_year: int = TRADING_DAYS
 ) -> tuple[np.ndarray, float | None]:
@@ -41,8 +56,8 @@ def estimate_covariance(
             details={"observations": len(r), "assets": r.shape[1]},
         )
     if shrinkage:
-        lw = LedoitWolf().fit(r.to_numpy())
-        return lw.covariance_ * periods_per_year, float(lw.shrinkage_)
+        cov, shrink = ledoit_wolf(r.to_numpy(dtype=float))
+        return cov * periods_per_year, float(shrink)
     return r.cov().to_numpy() * periods_per_year, None
 
 

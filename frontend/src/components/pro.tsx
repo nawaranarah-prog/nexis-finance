@@ -198,6 +198,39 @@ export function UsageNote({ usage, plan }: { usage: AnyObj | null | undefined; p
   );
 }
 
+const NUDGE: Record<string, { what: string; unit: string }> = {
+  investments: { what: "Want to track more investments?", unit: "active investments" },
+  advisor: { what: "Need more AI Advisor answers?", unit: "AI Advisor messages a month" },
+};
+
+/** A visible upgrade prompt where a plan limit applies, shown to Free and Plus members before they hit the limit.
+    Tiers, limits and prices come from the server catalog; nothing is shown that the server wouldn't sell. */
+export function UpgradeNudge({ feature }: { feature: "investments" | "advisor" }) {
+  const plans = usePlans();
+  const plan: string | undefined = useBilling().data?.plan;
+  const rank = ["free", "plus", "pro"];
+  if (!plan || !rank.includes(plan) || plan === "pro" || !plans.data) return null;
+  const n = NUDGE[feature];
+  const mine = tierOf(plans.data, plan)?.limits?.[feature];
+  const better = rank.slice(rank.indexOf(plan) + 1)
+    .map((id) => tierOf(plans.data, id)).filter((t): t is AnyObj => !!t && t.limits?.[feature] > (mine ?? 0));
+  if (!better.length) return null;
+  const offer = (t: AnyObj) => {
+    const m = t.prices?.month;
+    return <span key={t.id}><b>{t.name}</b>: {t.limits[feature]} {n.unit}{m ? ` (${priceText({ ...m, interval: "month" })})` : ""}</span>;
+  };
+  const saving = bestAnnualSaving(plans.data);
+  const target = plan === "free" ? "/pricing" : "/settings#plan";
+  return (
+    <div className="pro-nudge" data-testid={`upgrade-nudge-${feature}`}>
+      <p><b>{n.what}</b> {mine != null && <>Your plan includes {mine}. </>}
+        {better.map((t, i) => <span key={t.id}>{i > 0 && " · "}{offer(t)}</span>)}.
+        {saving > 0 && <span className="xs muted"> Save up to {saving}% with annual billing.</span>}</p>
+      <Link className="btn primary sm" to={target}>{better.length > 1 ? "Upgrade to Plus or Pro" : `Upgrade to ${better[0].name.replace(/^Nexis /, "")}`}</Link>
+    </div>
+  );
+}
+
 const ORDER = ["investments", "advisor", "watchlist"];
 const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 

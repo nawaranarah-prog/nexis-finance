@@ -15,10 +15,16 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
-from sklearn.metrics import adjusted_rand_score
-from sklearn.mixture import GaussianMixture
-from sklearn.preprocessing import StandardScaler
+# scikit-learn is optional: the hosted API leaves it out to stay within the serverless install size.
+try:
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import adjusted_rand_score
+    from sklearn.mixture import GaussianMixture
+    from sklearn.preprocessing import StandardScaler
+
+    SKLEARN = True
+except ImportError:  # pragma: no cover - depends on the deployment
+    SKLEARN = False
 
 from app.core.errors import ConfigurationError, InsufficientDataError
 from app.ml.features import REGIME_FEATURES
@@ -45,6 +51,11 @@ def _label_clusters(centers: pd.DataFrame, vol_median: float) -> dict[int, str]:
 def run_regime_experiment(
     bench_close: pd.Series, universe_returns: pd.DataFrame | None, config: dict[str, Any], true_regimes: pd.Series | None = None
 ) -> dict[str, Any]:
+    if not SKLEARN:
+        raise ConfigurationError(
+            "The machine-learning experiments aren't available on this server (scikit-learn isn't installed). "
+            "Run Nexis locally or with Docker to use them."
+        )
     from app.ml.features import regime_features
 
     seed = int(config.get("seed", 42))
