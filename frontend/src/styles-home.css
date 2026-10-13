@@ -275,3 +275,33 @@ td .skel { display: inline-block; width: 44px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .home-tile, .home-post img, .tab, .top-pill { transition: none !important; } }
 
 .pulse-n.research { color: var(--accent-ink); font-size: max(11px, var(--fs-floor)); }
+
+/* ---------------------------------------------------------------- launch announcement
+   One restrained band above the hero: hairline border, a faint wash of the accent, a slowly breathing status dot. */
+.hm-launch { position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 14px 28px; flex-wrap: wrap;
+  margin: 4px 0 18px; padding: 18px 48px 18px 20px; border: 1px solid var(--border); border-radius: 12px;
+  background: linear-gradient(115deg, color-mix(in srgb, var(--accent) 9%, var(--surface)) 0%, var(--surface) 55%);
+  animation: launch-in 520ms var(--ease-out) both; }
+.hm-launch::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: 12px 0 0 12px; background: var(--accent); opacity: 0.85; }
+.hm-launch-text { flex: 1 1 420px; min-width: 0; }
+.launch-tag { display: inline-flex; align-items: center; gap: 8px; font-size: max(11px, var(--fs-floor)); font-weight: 650; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--accent-ink); }
+.launch-tag i { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.launch-tag i::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1px solid var(--accent); opacity: 0; animation: launch-pulse 2.6s var(--ease-out) infinite; }
+.hm-launch h2 { margin: 8px 0 6px; font-size: clamp(20px, 2.3vw, 26px); line-height: 1.2; font-weight: 650; letter-spacing: -0.015em; color: var(--text); text-wrap: balance; }
+.hm-launch p { margin: 0; max-width: 68ch; font-size: max(14px, var(--fs-floor)); line-height: 1.55; color: var(--text-2); }
+.hm-launch .hm-launch-now { margin-top: 6px; font-size: max(12.5px, var(--fs-floor)); color: var(--muted); }
+.hm-launch-cta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; flex: none; max-width: 100%; }
+.hm-launch-x { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; box-shadow: none; font-size: 18px; line-height: 1; color: var(--muted); cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.hm-launch-x:hover { background: var(--surface-2); color: var(--text); }
+[dir="rtl"] .hm-launch { padding: 18px 20px 18px 48px; background: linear-gradient(245deg, color-mix(in srgb, var(--accent) 9%, var(--surface)) 0%, var(--surface) 55%); }
+[dir="rtl"] .hm-launch::before { inset: 0 0 0 auto; border-radius: 0 12px 12px 0; }
+[dir="rtl"] .hm-launch-x { right: auto; left: 10px; }
+@keyframes launch-pulse { 0% { transform: scale(0.6); opacity: 0.7; } 70%, 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes launch-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 720px) {
+  .hm-launch { padding: 16px 44px 16px 16px; margin-bottom: 14px; }
+  .hm-launch-cta { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .hm-launch, .launch-tag i::after { animation: none; } }

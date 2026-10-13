@@ -74,6 +74,13 @@ const AR: Record<string, string> = {
   "Research software · not investment advice": "برنامج أبحاث · ليس نصيحة استثمارية",
   // home
   "Understand the move before you make one.": "افهم حركة السوق قبل أن تتحرك.",
+  "Launching soon": "الإطلاق قريبًا",
+  "A new perspective on your financial world.": "نظرة جديدة إلى عالمك المالي.",
+  "Nexis Finance is getting ready to bring market insights, investor conversations, and financial research together in one place. We're getting closer. Stay tuned.": "تستعد Nexis Finance لجمع رؤى الأسواق وحوارات المستثمرين والأبحاث المالية في مكان واحد. اقترب الموعد. ترقّبونا.",
+  "Markets, Nexis Pulse and the research tools are already open — explore them now.": "الأسواق وNexis Pulse وأدوات البحث متاحة الآن — استكشفها.",
+  "Browse Nexis Pulse": "تصفّح Nexis Pulse",
+  "Dismiss the launch announcement": "إخفاء إعلان الإطلاق",
+  "Dismiss": "إخفاء",
   "Search any ADX or DFM share, UAE bond or global market — or ask a research question. The advisor checks live prices, news and valuations, and shows its working.":
     "ابحث عن أي سهم في سوق أبوظبي أو دبي، أو سند إماراتي، أو أي سوق عالمي — أو اطرح سؤالًا بحثيًا. يتحقق المستشار من الأسعار المباشرة والأخبار والتقييمات، ويعرض خطواته.",
   "Search a ticker or ask a question — e.g. Compare FAB and Emirates NBD": "ابحث عن رمز أو اطرح سؤالًا — مثلًا: قارن بين أبوظبي الأول والإمارات دبي الوطني",
