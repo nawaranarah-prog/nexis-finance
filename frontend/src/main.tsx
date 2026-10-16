@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Analytics, type BeforeSendEvent } from "@vercel/analytics/react";
 import App from "./App";
 import { WorkspaceProvider } from "./hooks/workspace";
 import { LanguageProvider } from "./i18n";
@@ -28,6 +29,15 @@ const client = new QueryClient({
   },
 });
 
+/* Vercel Web Analytics (cookieless page views, every route via the History API). URLs that carry secrets are cleaned
+   before anything is sent: password-reset / email-verification tokens and the Stripe checkout session id. */
+const SECRET_PARAMS = ["token", "session_id", "code", "state"];
+function scrub(event: BeforeSendEvent): BeforeSendEvent {
+  const url = new URL(event.url);
+  SECRET_PARAMS.forEach((p) => url.searchParams.delete(p));
+  return { ...event, url: url.toString() };
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={client}>
@@ -39,5 +49,6 @@ createRoot(document.getElementById("root")!).render(
         </WorkspaceProvider>
       </BrowserRouter>
     </QueryClientProvider>
+    <Analytics beforeSend={scrub} />
   </StrictMode>,
 );
